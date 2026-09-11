@@ -110,28 +110,33 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
 export async function verifyOtp(phone: string, otp: string, sessionId?: string): Promise<VerifyOtpResult> {
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
   const enteredOtp = otp.trim()
-  const apiKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()
+  const configuredKeys = Array.from(new Set(
+    [process.env.TWOFACTOR_API_KEY_2, process.env.TWOFACTOR_API_KEY]
+      .flatMap((value) => {
+        const trimmed = value?.trim()
+        return trimmed && !/^process\.env\./.test(trimmed) ? [trimmed] : []
+      }),
+  ))
 
   if (!sessionId) {
     return { ok: false, error: 'Session ID is missing. Please request a new OTP.' }
   }
 
   // If this is a 2Factor session (not starting with 'demo_')
-  if (!sessionId.startsWith('demo_') && apiKey) {
-    try {
-      const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/VERIFY/${encodeURIComponent(sessionId)}/${encodeURIComponent(enteredOtp)}`
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) })
-      const data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
-
-      if (data.Status === 'Success' && data.Details === 'OTP Matched') {
-        return { ok: true }
+  if (!sessionId.startsWith('demo_') && configuredKeys.length > 0) {
+    let lastError = 'Invalid verification code.'
+    for (const apiKey of configuredKeys) {
+      try {
+        const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/VERIFY/${encodeURIComponent(sessionId)}/${encodeURIComponent(enteredOtp)}`
+        const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        const data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
+        if (data.Status === 'Success') return { ok: true }
+        lastError = data.Details || lastError
+      } catch {
+        lastError = 'Unable to verify code with SMS service. Please try again.'
       }
-
-      return { ok: false, error: data.Details || 'Invalid verification code.' }
-    } catch (err) {
-      console.error('[2Factor.in] Verification error:', err)
-      return { ok: false, error: 'Unable to verify code with SMS service. Please try again.' }
     }
+    return { ok: false, error: lastError }
   }
 
   // Local demo verification
