@@ -53,23 +53,32 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
 
   cleanExpiredChallenges()
 
-  const apiKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()
+  const configuredKeys = Array.from(new Set(
+    [process.env.TWOFACTOR_API_KEY_2, process.env.TWOFACTOR_API_KEY]
+      .flatMap((value) => {
+        const trimmed = value?.trim()
+        return trimmed && !/^process\.env\./.test(trimmed) ? [trimmed] : []
+      }),
+  ))
   const isDemoNumber = DEMO_PHONE_NUMBERS.has(normalPhone)
-  const allowDemo = process.env.NODE_ENV !== 'production' && !apiKey
+  const allowDemo = process.env.NODE_ENV !== 'production' && configuredKeys.length === 0
 
-  if (apiKey) {
-    const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/${normalPhone}/AUTOGEN`
-    let data: { Status?: string; Details?: string } = {}
-    try {
-      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) })
-      data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
-    } catch {
-      throw new Error('SMS provider is unavailable. Please try again.')
+  if (configuredKeys.length > 0) {
+    let lastProviderError = 'SMS provider rejected this phone number.'
+    for (const apiKey of configuredKeys) {
+      const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/${normalPhone}/AUTOGEN`
+      try {
+        const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        const data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
+        if (data.Status === 'Success' && data.Details) {
+          return { ok: true, sessionId: data.Details, isDemo: false, message: `SMS OTP dispatched to +91 ${normalPhone} via 2Factor.` }
+        }
+        lastProviderError = data.Details || lastProviderError
+      } catch {
+        lastProviderError = 'SMS provider is unavailable. Please try again.'
+      }
     }
-    if (data.Status === 'Success' && data.Details) {
-      return { ok: true, sessionId: data.Details, isDemo: false, message: `SMS OTP dispatched to +91 ${normalPhone} via 2Factor.` }
-    }
-    throw new Error(data.Details || 'SMS provider rejected this phone number.')
+    throw new Error(lastProviderError)
   }
 
   if (!allowDemo) throw new Error('SMS OTP delivery is not configured.')
@@ -89,7 +98,7 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
     sessionId,
     isDemo: true,
     demoOtp,
-    message: apiKey
+    message: configuredKeys.length > 0
       ? `SMS delivery fallback active. Use verification code: ${demoOtp}`
       : `[Demo Mode] Verification code: ${demoOtp}`,
   }
