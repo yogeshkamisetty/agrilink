@@ -69,6 +69,7 @@ export async function POST(request: Request) {
     await db.from('identity_otp_challenges').update({ consumed_at: now }).eq('id', challenge.id)
     const { data, error } = await db.from('identity_verifications').update({ mobile_verified: true, verification_status: 'verified', verified_at: now, updated_at: now }).eq('id', verification.id).select().single()
     if (error) throw error
+    await db.from('user_profiles').update({ verification_status: 'verified', updated_at: now }).eq('id', verification.user_id)
     return NextResponse.json({ verification: safe(data) })
   } catch (error) { console.error('[identity] request failed', error); return NextResponse.json({ error: error instanceof Error ? error.message : 'Identity verification is unavailable.' }, { status: 503 }) }
 }

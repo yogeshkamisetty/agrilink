@@ -1,0 +1,9 @@
+import { NextResponse } from 'next/server'
+import { requireRole } from '@/lib/server/auth'
+import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+export async function GET(request: Request) {
+  try { await requireRole(request, 'admin'); const db = requireSupabaseAdmin(); const [profiles, activities, reviews] = await Promise.all([db.from('user_profiles').select('id,role,full_name,mobile_number,verification_status,last_login_at,last_logout_at,created_at').order('created_at', { ascending: false }), db.from('auth_activity').select().order('created_at', { ascending: false }).limit(100), db.from('buyer_purchase_requests').select().eq('review_status', 'pending').order('created_at', { ascending: true })]); if (profiles.error || activities.error || reviews.error) throw new Error(); return NextResponse.json({ profiles: profiles.data, activities: activities.data, pending_reviews: reviews.data }) } catch { return NextResponse.json({ error: 'Administrator access is required.' }, { status: 403 }) }
+}
+export async function PATCH(request: Request) {
+  try { const admin = await requireRole(request, 'admin'), body = await request.json() as { request_id?: string; decision?: 'approved' | 'rejected'; note?: string }; if (!body.request_id || !['approved', 'rejected'].includes(body.decision ?? '')) return NextResponse.json({ error: 'A request and decision are required.' }, { status: 400 }); const { data, error } = await requireSupabaseAdmin().from('buyer_purchase_requests').update({ review_status: body.decision, admin_note: body.note?.slice(0, 1000) || null, reviewed_by: admin.id, reviewed_at: new Date().toISOString() }).eq('id', body.request_id).eq('review_status', 'pending').select().single(); if (error) throw error; return NextResponse.json({ request: data }) } catch { return NextResponse.json({ error: 'Unable to review this request.' }, { status: 403 }) }
+}

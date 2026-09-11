@@ -10,6 +10,7 @@ import type { Db } from './db'
 import { acceptanceLimits } from './collection'
 import { getAdvances, getBuyer, getCommitments, getConsignment, getFarmer, getFarmersByIds, getFpo, getLots, getNotifications, getOrder, getSettlements, listBuyers, mapRow, mapRows } from './repo'
 import { commitmentTotals, matchForOrder, tick, tickAllSourcing } from './sourcing'
+import { getMandiPrice, getRetailPrice } from './prices'
 
 export type LedgerEntry = { at: string; from: string; to: string; amount: number; memo: string }
 
@@ -200,6 +201,30 @@ export async function listOrders(db: Db, filter: { buyerId?: string } = {}) {
     out.push({ order, buyer: buyers.get(order.buyerId)!, totals: { ...commitmentTotals(order, commitments), acceptedKg: round2(lots.reduce((s, l) => s + l.qtyAcceptedKg, 0)) } })
   }
   return out
+}
+
+/** Coordinator landing view: verified demand, committed supply, and the pilot metric. */
+export async function overviewView(db: Db) {
+  const [orders, metric] = await Promise.all([listOrders(db), weeklyMetric(db)])
+  return {
+    orders: orders.map(({ order, buyer, totals }) => ({
+      order,
+      buyer: { id: buyer.id, name: buyer.name, type: buyer.type, location: `${buyer.city} · ${buyer.address}` },
+      totals: { capKg: totals.capKg, primaryKg: totals.primaryKg, standbyKg: totals.standbyKg, acceptedKg: totals.acceptedKg },
+    })),
+    metrics: {
+      pilotVolumePct: metric.pct,
+      activeOrdersCount: orders.filter(({ order }) => !['SETTLED'].includes(order.status)).length,
+      totalVolumeKg: round2(orders.reduce((sum, { order }) => sum + order.qtyTargetKg, 0)),
+    },
+  }
+}
+
+/** Price screen data is always labelled with its live, cached, or seeded source tier. */
+export async function pricesView(db: Db, crop: CropId) {
+  if (!(crop in CROPS)) throw new Error('Unsupported crop.')
+  const [mandi, retail] = await Promise.all([getMandiPrice(db, crop), getRetailPrice(db, crop)])
+  return { crop: CROPS[crop], mandi, retail, fetchedAt: clock.now().toISOString() }
 }
 
 // ─── Farmer views ───────────────────────────────────────────────────────────
