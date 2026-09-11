@@ -2,7 +2,7 @@ import { createHmac } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendOtp, verifyOtp } from '@/lib/server/otp-service'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 
 export async function POST(request: Request) {
   try {
@@ -34,16 +34,20 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: verificationResult.error || 'Invalid verification code.' }, { status: 400 })
       }
 
-      // If Supabase is not configured, return a mock success for offline preview
+      // A phone-verified browser session is required outside local development.
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
       const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!supabaseAdmin || !supabaseUrl || !anonKey) {
+      if (!supabaseUrl || !anonKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        if (process.env.NODE_ENV === 'production') {
+          return NextResponse.json({ error: 'Authentication backend is not configured. Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel.' }, { status: 503 })
+        }
         return NextResponse.json({
           ok: true,
           isMock: true,
           user: { id: `mock-${phone}`, phone: `+91${phone}` },
         })
       }
+      const supabaseAdmin = requireSupabaseAdmin()
 
       // Provision user deterministically in Supabase Auth
       const email = `phone_${phone}@agrilink.internal`
@@ -75,19 +79,21 @@ export async function POST(request: Request) {
 
       // Ensure profile row exists
       if (userId) {
-        const { data: existingProfile } = await supabaseAdmin
+        const { data: existingProfile, error: profileLookupError } = await supabaseAdmin
           .from('user_profiles')
           .select('id, onboarding_complete, role, verification_status')
           .eq('id', userId)
           .maybeSingle()
+        if (profileLookupError) throw new Error(`Unable to read user profile: ${profileLookupError.message}`)
 
         if (!existingProfile) {
-          await supabaseAdmin.from('user_profiles').insert({
+          const { error: profileInsertError } = await supabaseAdmin.from('user_profiles').insert({
             id: userId,
             mobile_number: phone,
             onboarding_complete: false,
             verification_status: 'pending',
           })
+          if (profileInsertError) throw new Error(`Unable to create user profile: ${profileInsertError.message}`)
         }
       }
 
@@ -102,19 +108,14 @@ export async function POST(request: Request) {
         throw signInError || new Error('Failed to generate session for verified phone.')
       }
 
-      // Log login event
-      try {
-        if (userId) {
-          const now = new Date().toISOString()
-          await supabaseAdmin.from('auth_activity').insert({
-            user_id: userId,
-            event_type: 'login',
-            metadata: {},
-          })
-          await supabaseAdmin.from('user_profiles').update({ last_login_at: now }).eq('id', userId)
-        }
-      } catch {
-        // Non-blocking
+      if (userId) {
+        const now = new Date().toISOString()
+        const { error: activityError } = await supabaseAdmin.from('auth_activity').insert({
+          user_id: userId, event_type: 'login', metadata: {},
+        })
+        if (activityError) console.error('[auth/otp] Failed to log login:', activityError.message)
+        const { error: loginUpdateError } = await supabaseAdmin.from('user_profiles').update({ last_login_at: now }).eq('id', userId)
+        if (loginUpdateError) console.error('[auth/otp] Failed to update login time:', loginUpdateError.message)
       }
 
       // Check onboarding status
