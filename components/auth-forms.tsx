@@ -123,7 +123,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         </h1>
         <p className='mt-2 text-sm leading-6 text-muted-foreground'>
           {step === 'mobile'
-            ? 'Sign in via mobile OTP (2Factor.in SMS or free demo mode). Aadhaar verification can be completed from your workspace anytime.'
+            ? 'Demo login is enabled. Enter any valid Indian mobile number and use OTP 123456. Aadhaar verification can be completed from your workspace anytime.'
             : 'Enter the 6-digit code sent to your phone.'}
         </p>
 
@@ -149,7 +149,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
               className='w-full rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60'
             >
               {busy && <Loader2 className='mr-2 inline size-4 animate-spin' />}
-              Send OTP
+              Continue with demo OTP
             </button>
           </form>
         ) : (
