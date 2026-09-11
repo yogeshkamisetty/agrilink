@@ -53,33 +53,27 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
 
   cleanExpiredChallenges()
 
-  const apiKey = process.env.TWOFACTOR_API_KEY?.trim()
+  const apiKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()
   const isDemoNumber = DEMO_PHONE_NUMBERS.has(normalPhone)
+  const allowDemo = process.env.NODE_ENV !== 'production' && !apiKey
 
-  // Use 2Factor.in if key is provided and this is not a designated demo number
-  if (apiKey && !isDemoNumber) {
+  if (apiKey) {
+    const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/${normalPhone}/AUTOGEN`
+    let data: { Status?: string; Details?: string } = {}
     try {
-      const url = `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}/SMS/${normalPhone}/AUTOGEN`
-      const res = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(10000) })
-      const data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
-
-      if (data.Status === 'Success' && data.Details) {
-        return {
-          ok: true,
-          sessionId: data.Details,
-          isDemo: false,
-          message: `SMS OTP dispatched to +91 ${normalPhone} via 2Factor.`,
-        }
-      }
-
-      console.warn('[2Factor.in] API returned error:', data)
-      // If 2Factor reports failure (e.g. balance exhausted or invalid key), fall through to local demo fallback
-    } catch (err) {
-      console.warn('[2Factor.in] Connection failed, falling back to demo mode:', err)
+      const res = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) })
+      data = (await res.json().catch(() => ({}))) as { Status?: string; Details?: string }
+    } catch {
+      throw new Error('SMS provider is unavailable. Please try again.')
     }
+    if (data.Status === 'Success' && data.Details) {
+      return { ok: true, sessionId: data.Details, isDemo: false, message: `SMS OTP dispatched to +91 ${normalPhone} via 2Factor.` }
+    }
+    throw new Error(data.Details || 'SMS provider rejected this phone number.')
   }
 
-  // Local / Demo Fallback Mode
+  if (!allowDemo) throw new Error('SMS OTP delivery is not configured.')
+
   const demoOtp = isDemoNumber ? DEMO_FIXED_OTP : String(Math.floor(100000 + Math.random() * 900000))
   const sessionId = `demo_${normalPhone}_${Date.now()}`
 
@@ -107,7 +101,7 @@ export async function sendOtp(phone: string): Promise<SendOtpResult> {
 export async function verifyOtp(phone: string, otp: string, sessionId?: string): Promise<VerifyOtpResult> {
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
   const enteredOtp = otp.trim()
-  const apiKey = process.env.TWOFACTOR_API_KEY?.trim()
+  const apiKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()
 
   if (!sessionId) {
     return { ok: false, error: 'Session ID is missing. Please request a new OTP.' }
@@ -151,7 +145,7 @@ export async function verifyOtp(phone: string, otp: string, sessionId?: string):
     return { ok: false, error: 'Too many incorrect attempts. Please request a new code.' }
   }
 
-  if (challenge.otp !== enteredOtp && enteredOtp !== DEMO_FIXED_OTP) {
+  if (challenge.otp !== enteredOtp) {
     challenge.attempts += 1
     return { ok: false, error: 'Incorrect verification code.' }
   }
