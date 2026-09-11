@@ -377,6 +377,8 @@ function Sidebar({
   volumePct: number
   mobile?: boolean
 }) {
+  const [ordersExpanded, setOrdersExpanded] = useState(false)
+
   return (
     <div className={`flex ${mobile ? 'flex-col' : 'flex-1 flex-col justify-between'} px-3 py-6`}>
       <nav className="space-y-1">
@@ -385,23 +387,50 @@ function Sidebar({
         </div>
         {navItems
           .filter((item) => roleNav[role].includes(item.label as Screen))
-          .map(({ label, icon: Icon, count }) => (
-            <button
-              key={label}
-              onClick={() => go(label as Screen)}
-              className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
-                activeNav === label
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <Icon className="size-4" />
-                {label}
-              </span>
-              {count && <span className="font-mono text-[10px]">{count}</span>}
-            </button>
-          ))}
+          .map(({ label, icon: Icon, count }) => {
+            const isBuyerOrders = role === 'Buyer' && label === 'Orders'
+            return (
+              <div key={label}>
+                <button
+                  onClick={() => {
+                    go(label as Screen)
+                    if (isBuyerOrders) setOrdersExpanded((expanded) => !expanded)
+                  }}
+                  aria-expanded={isBuyerOrders ? ordersExpanded : undefined}
+                  className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
+                    activeNav === label
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  }`}
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon className="size-4" />
+                    {label}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {count && <span className="font-mono text-[10px]">{count}</span>}
+                    {isBuyerOrders && (ordersExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />)}
+                  </span>
+                </button>
+                {isBuyerOrders && ordersExpanded && (
+                  <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3" aria-label="Order Categories">
+                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><Users className="size-3.5 text-primary" /> Low Order</div>
+                      <div className="mt-1 pl-5 text-[10px] leading-4">Individual · 1–50 cages</div>
+                    </div>
+                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><PackageCheck className="size-3.5 text-accent-foreground" /> Medium Order</div>
+                      <div className="mt-1 pl-5 text-[10px] leading-4">Institutional · 51–300 cages</div>
+                    </div>
+                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><Truck className="size-3.5 text-blue-600" /> Bulk Order</div>
+                      <div className="mt-1 pl-5 text-[10px] leading-4">Industrial · measured in tons</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
       </nav>
 
       {!mobile && (
