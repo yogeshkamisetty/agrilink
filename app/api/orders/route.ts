@@ -1,63 +1,57 @@
-import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+import { CropId } from '@/lib/domain/crops'
+import { getDb } from '@/lib/server/db'
+import { listBuyers } from '@/lib/server/repo'
+import { createOrder } from '@/lib/server/sourcing'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
-const asText = (value: unknown) => typeof value === 'string' ? value.trim() : ''
-
-export async function POST(request: Request) {
+export async function GET() {
   try {
-    const supabaseAdmin = requireSupabaseAdmin()
-    const body = await request.json()
-    const buyerId = asText(body.buyer_id)
-    const cropRequired = asText(body.crop_required)
-    const gradeRequired = asText(body.grade_required)
-    const deliveryDate = asText(body.delivery_date)
-    const deliveryLocation = asText(body.delivery_location)
-    const quantityRequired = Number(body.quantity_required)
-
-    if (!buyerId || !cropRequired || !deliveryDate || !deliveryLocation || !Number.isFinite(quantityRequired) || quantityRequired <= 0) {
-      return Response.json({ error: 'Buyer, crop, positive quantity, delivery date, and location are required.' }, { status: 400 })
+    if (supabaseAdmin) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('id,buyer_id,crop_required,quantity_required,grade_required,delivery_date,delivery_location,status,created_at')
+        .order('created_at', { ascending: false })
+      if (!error && data) return Response.json({ orders: data })
     }
 
-    const { data: order, error: orderError } = await supabaseAdmin.from('orders').insert({
-      buyer_id: buyerId, crop_required: cropRequired, quantity_required: quantityRequired,
-      grade_required: gradeRequired || null, delivery_date: deliveryDate, delivery_location: deliveryLocation, status: 'open',
-    }).select('id,buyer_id,crop_required,quantity_required,grade_required,delivery_date,delivery_location,status').single()
-    if (orderError) return Response.json({ error: orderError.message }, { status: 400 })
-
-    const { data: farmers, error: farmerError } = await supabaseAdmin.from('farmers')
-      .select('id,name,mobile_number,quantity,crop_name,quality_grade,harvest_date,verified')
-      .eq('verified', true).ilike('crop_name', cropRequired).gt('quantity', 0)
-    if (farmerError) return Response.json({ error: farmerError.message }, { status: 500 })
-
-    const eligible = (farmers ?? []).filter((farmer) => {
-      const gradeMatches = !gradeRequired || farmer.quality_grade?.toLowerCase() === gradeRequired.toLowerCase()
-      const dateMatches = !farmer.harvest_date || farmer.harvest_date <= deliveryDate
-      return gradeMatches && dateMatches
-    })
-
-    let remaining = quantityRequired
-    const commitments = []
-    for (const farmer of eligible) {
-      if (remaining <= 0) break
-      const quantityCommitted = Math.min(Number(farmer.quantity), remaining)
-      if (quantityCommitted <= 0) continue
-      commitments.push({ order_id: order.id, farmer_id: farmer.id, quantity_committed: quantityCommitted, commitment_status: 'pending' })
-      remaining -= quantityCommitted
-    }
-
-    if (commitments.length) {
-      const { error: commitmentError } = await supabaseAdmin.from('commitments').insert(commitments)
-      if (commitmentError) return Response.json({ error: commitmentError.message }, { status: 500 })
-    }
-
-    return Response.json({ order, matched_farmers: eligible.slice(0, commitments.length), commitments, unmet_quantity: Math.max(remaining, 0) })
-  } catch {
-    return Response.json({ error: 'Unable to create and match order.' }, { status: 500 })
+    const db = await getDb()
+    const rows = await db.query(`select o.*, b.name as buyer_name from agrilink.orders o join agrilink.buyers b on b.id = o.buyer_id order by o.created_at desc`)
+    return Response.json({ orders: rows })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to fetch orders'
+    return Response.json({ error: message }, { status: 500 })
   }
 }
 
-export async function GET() {
-  const supabaseAdmin = requireSupabaseAdmin()
-  const { data, error } = await supabaseAdmin.from('orders').select('id,buyer_id,crop_required,quantity_required,grade_required,delivery_date,delivery_location,status,created_at').order('created_at', { ascending: false })
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json({ orders: data })
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const db = await getDb()
+
+    // Map fields from either Supabase schema or AgriLink domain schema
+    let buyerId = body.buyerId || body.buyer_id
+    if (!buyerId) {
+      const buyers = await listBuyers(db)
+      if (buyers.length > 0) buyerId = buyers[0].id
+    }
+
+    const crop = (body.crop || body.crop_required || 'PADDY').toUpperCase() as CropId
+    const qtyTargetKg = Number(body.qtyTargetKg || body.quantity_required || 1000)
+    const pricePerKg = Number(body.pricePerKg || body.price_per_kg || 28)
+    const deliveryDate = body.deliveryDate || body.delivery_date || new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0]
+
+    const order = await createOrder(db, {
+      buyerId,
+      crop,
+      qtyTargetKg,
+      pricePerKg,
+      deliveryDate,
+      advancePct: body.advancePct ? Number(body.advancePct) : undefined,
+    })
+
+    return Response.json({ order })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to create order'
+    return Response.json({ error: message }, { status: 400 })
+  }
 }

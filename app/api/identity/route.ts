@@ -1,44 +1,84 @@
+import { createHmac, timingSafeEqual } from 'crypto'
 import { NextResponse } from 'next/server'
+import { getAadhaarValidation, getMobileValidation } from '@/lib/identity'
 import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 
-function normalizeAadhaar(value: string) { return value.replace(/\D/g, '') }
-function validAadhaar(value: string) {
-  const digits = normalizeAadhaar(value)
-  if (!/^\d{12}$/.test(digits) || /^([0-9])\1{11}$/.test(digits)) return false
-  const table = [[0,1,2,3,4,5,6,7,8,9],[1,5,7,6,2,8,3,0,9,4],[5,8,0,3,7,9,6,1,4,2],[8,9,1,6,0,4,3,5,2,7],[9,4,8,2,6,3,0,7,5,1],[4,2,6,1,7,5,9,3,8,0],[2,7,9,3,8,0,6,4,1,5],[7,0,4,6,1,9,5,2,3,8]]
-  let checksum = 0
-  digits.split('').reverse().forEach((digit, index) => { checksum = table[index % 8][(checksum + Number(digit)) % 10] })
-  return checksum === 0
+const OTP_TTL_MS = 5 * 60 * 1000
+const allowedTypes = new Set(['farmer', 'buyer'])
+const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v)
+const secret = () => process.env.IDENTITY_OTP_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.NODE_ENV !== 'production' ? 'local-development-secret' : '')
+const hashOtp = (otp: string, id: string) => createHmac('sha256', secret()).update(`${id}:${otp}`).digest('hex')
+async function deliverOtp(mobile: string, otp: string) {
+  const endpoint = process.env.IDENTITY_OTP_WEBHOOK_URL
+  if (!endpoint) {
+    if (process.env.NODE_ENV === 'production') throw new Error('Identity OTP delivery is not configured.')
+    return
+  }
+  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, otp, purpose: 'agrilink_identity_verification' }), signal: AbortSignal.timeout(10_000) })
+  if (!response.ok) throw new Error('Unable to send the verification code. Please try again.')
+}
+function protectAadhaar(value: string) {
+  // A non-reversible keyed digest means this service never persists a readable Aadhaar value.
+  return `sha256:${createHmac('sha256', secret()).update(value).digest('hex')}`
+}
+function safe(row: Record<string, unknown>) {
+  return { id: row.id, user_type: row.user_type, user_id: row.user_id, aadhaar_last4: row.aadhaar_last4, mobile_verified: row.mobile_verified, aadhaar_format_valid: row.aadhaar_format_valid, verhoeff_valid: row.verhoeff_valid, aadhaar_consent: row.aadhaar_consent, aadhaar_document_url: row.aadhaar_document_url, identity_confidence: row.identity_confidence, verification_status: row.verification_status, verified_at: row.verified_at }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { action?: string; subject_type?: string; subject_id?: string; aadhaar?: string; consent?: boolean; otp?: string }
-    if (!body.subject_type || !body.subject_id || !body.action) return NextResponse.json({ error: 'Missing verification details.' }, { status: 400 })
-    const supabase = requireSupabaseAdmin()
+    const body = await request.json() as { action?: 'start' | 'verify' | 'resend'; user_type?: string; user_id?: string; aadhaar?: string; mobile?: string; consent_owner?: boolean; consent_storage?: boolean; otp?: string; document_path?: string }
+    if (!body.action || !allowedTypes.has(body.user_type ?? '') || !isUuid(body.user_id)) return NextResponse.json({ error: 'A valid user type and user ID are required.' }, { status: 400 })
+    if (!secret()) return NextResponse.json({ error: 'Identity service is not configured.' }, { status: 503 })
+    const db = requireSupabaseAdmin()
     if (body.action === 'start') {
-      if (!body.consent || !validAadhaar(body.aadhaar ?? '')) return NextResponse.json({ error: 'Enter a valid Aadhaar number and accept consent.' }, { status: 400 })
-      const aadhaarLast4 = normalizeAadhaar(body.aadhaar!).slice(-4)
-      const { data, error } = await supabase.from('identity_verifications').upsert({ subject_type: body.subject_type, subject_id: body.subject_id, aadhaar_last4: aadhaarLast4, status: 'otp_pending', consent_at: new Date().toISOString(), otp_sent_at: new Date().toISOString() }, { onConflict: 'subject_type,subject_id' }).select('id,status,aadhaar_last4,otp_sent_at').single()
+      const aadhaar = getAadhaarValidation(body.aadhaar ?? ''), mobile = getMobileValidation(body.mobile ?? '')
+      if (!aadhaar.formatValid || !aadhaar.verhoeffValid) return NextResponse.json({ error: 'Enter a valid 12-digit Aadhaar number.' }, { status: 400 })
+      if (!mobile.valid) return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
+      if (!body.consent_owner || !body.consent_storage) return NextResponse.json({ error: 'Both Aadhaar consent confirmations are required.' }, { status: 400 })
+      const { data: verification, error } = await db.from('identity_verifications').upsert({
+        user_id: body.user_id, user_type: body.user_type as 'farmer' | 'buyer', aadhaar_number: protectAadhaar(aadhaar.normalized), aadhaar_last4: aadhaar.normalized.slice(-4),
+        aadhaar_consent: true, mobile_number: mobile.normalized, mobile_verified: false, aadhaar_format_valid: true, verhoeff_valid: true,
+        aadhaar_document_url: body.document_path || null, verification_status: 'pending', verified_at: null, updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id,user_type' }).select().single()
       if (error) throw error
-      return NextResponse.json({ verification: data, message: 'OTP sent. Demo code: 123456' })
+      const otp = String(Math.floor(100000 + Math.random() * 900000))
+      const { error: otpError } = await db.from('identity_otp_challenges').insert({ verification_id: verification.id, otp_hash: hashOtp(otp, verification.id), expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString() })
+      if (otpError) throw otpError
+      await deliverOtp(mobile.normalized, otp)
+      return NextResponse.json({ verification: safe(verification), expires_in_seconds: OTP_TTL_MS / 1000, ...(process.env.NODE_ENV !== 'production' ? { development_otp: otp } : {}) })
     }
-    if (body.action === 'verify') {
-      if (body.otp !== '123456') return NextResponse.json({ error: 'Invalid verification code.' }, { status: 400 })
-      const { data, error } = await supabase.from('identity_verifications').update({ status: 'verified', verified_at: new Date().toISOString() }).eq('subject_type', body.subject_type).eq('subject_id', body.subject_id).select('id,status,verified_at,aadhaar_last4').single()
+    const { data: verification, error: lookupError } = await db.from('identity_verifications').select().eq('user_id', body.user_id).eq('user_type', body.user_type as 'farmer' | 'buyer').maybeSingle()
+    if (lookupError) throw lookupError
+    if (!verification) return NextResponse.json({ error: 'Start verification before requesting a code.' }, { status: 404 })
+    if (body.action === 'resend') {
+      const otp = String(Math.floor(100000 + Math.random() * 900000))
+      const { error } = await db.from('identity_otp_challenges').insert({ verification_id: verification.id, otp_hash: hashOtp(otp, verification.id), expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString() })
       if (error) throw error
-      return NextResponse.json({ verification: data })
+      await deliverOtp(verification.mobile_number, otp)
+      return NextResponse.json({ expires_in_seconds: OTP_TTL_MS / 1000, ...(process.env.NODE_ENV !== 'production' ? { development_otp: otp } : {}) })
     }
-    return NextResponse.json({ error: 'Unsupported action.' }, { status: 400 })
-  } catch (error) { console.error('[v0] identity verification failed', error); return NextResponse.json({ error: 'Identity verification is unavailable.' }, { status: 503 }) }
+    const { data: challenge, error: challengeError } = await db.from('identity_otp_challenges').select().eq('verification_id', verification.id).is('consumed_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (challengeError) throw challengeError
+    if (!challenge || new Date(challenge.expires_at).getTime() < Date.now()) return NextResponse.json({ error: 'This code has expired. Request a new one.' }, { status: 400 })
+    if (challenge.attempts >= 5) return NextResponse.json({ error: 'Too many incorrect attempts. Request a new code.' }, { status: 429 })
+    const candidate = hashOtp(String(body.otp ?? ''), verification.id)
+    const valid = candidate.length === challenge.otp_hash.length && timingSafeEqual(Buffer.from(candidate), Buffer.from(challenge.otp_hash))
+    if (!valid) { await db.from('identity_otp_challenges').update({ attempts: challenge.attempts + 1 }).eq('id', challenge.id); return NextResponse.json({ error: 'Incorrect verification code.' }, { status: 400 }) }
+    const now = new Date().toISOString()
+    await db.from('identity_otp_challenges').update({ consumed_at: now }).eq('id', challenge.id)
+    const { data, error } = await db.from('identity_verifications').update({ mobile_verified: true, verification_status: 'verified', verified_at: now, updated_at: now }).eq('id', verification.id).select().single()
+    if (error) throw error
+    return NextResponse.json({ verification: safe(data) })
+  } catch (error) { console.error('[identity] request failed', error); return NextResponse.json({ error: error instanceof Error ? error.message : 'Identity verification is unavailable.' }, { status: 503 }) }
 }
 
 export async function GET(request: Request) {
   try {
-    const url = new URL(request.url); const subjectType = url.searchParams.get('subject_type'); const subjectId = url.searchParams.get('subject_id')
-    if (!subjectType || !subjectId) return NextResponse.json({ error: 'Missing subject.' }, { status: 400 })
-    const { data, error } = await requireSupabaseAdmin().from('identity_verifications').select('id,status,aadhaar_last4,verified_at,consent_at,otp_sent_at').eq('subject_type', subjectType).eq('subject_id', subjectId).maybeSingle()
+    const url = new URL(request.url), userId = url.searchParams.get('user_id'), userType = url.searchParams.get('user_type')
+    if (!isUuid(userId) || !allowedTypes.has(userType ?? '')) return NextResponse.json({ error: 'A valid user is required.' }, { status: 400 })
+    const { data, error } = await requireSupabaseAdmin().from('identity_verifications').select().eq('user_id', userId).eq('user_type', userType as 'farmer' | 'buyer').maybeSingle()
     if (error) throw error
-    return NextResponse.json({ verification: data })
-  } catch (error) { console.error('[v0] identity lookup failed', error); return NextResponse.json({ error: 'Identity lookup is unavailable.' }, { status: 503 }) }
+    return NextResponse.json({ verification: data ? safe(data) : null })
+  } catch { return NextResponse.json({ error: 'Identity lookup is unavailable.' }, { status: 503 }) }
 }
