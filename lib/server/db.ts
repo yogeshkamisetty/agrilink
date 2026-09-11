@@ -114,6 +114,9 @@ export function getDb(): Promise<Db> {
   const holder = globalThis as Holder
   if (!holder[KEY]) {
     const url = process.env.DATABASE_URL
+    if (!url && process.env.VERCEL) {
+      throw new Error('DATABASE_URL is required in Vercel. Use the Supabase Postgres connection string; PGlite is local-development only.')
+    }
     holder[KEY] = (url ? openPostgres(url) : openPglite(localDataDir()))
       .then(async (db) => {
         await prepare(db)

@@ -7,6 +7,10 @@
 4. In Vercel → Project → Settings → Environment Variables, set
    NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and
    SUPABASE_SERVICE_ROLE_KEY for Production, Preview, and Development.
+   Also set DATABASE_URL to the Supabase Postgres transaction-pooler URL
+   (port 6543, with sslmode=require). This powers orders, crop matching,
+   collection, routing, delivery, and settlement; PGlite is not supported
+   on Vercel's read-only function filesystem.
 5. Redeploy, then open /api/health. It must return an ok true, supabase ready
    JSON response.
 
