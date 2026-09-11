@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema'
 
@@ -20,6 +21,7 @@ const INT8 = 20
 const DATE = 1082
 
 async function openPglite(dataDir: string | undefined): Promise<Db> {
+  if (dataDir) await fs.mkdir(dataDir, { recursive: true })
   const { PGlite } = await import('@electric-sql/pglite')
   const pg = new PGlite(dataDir, {
     parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
