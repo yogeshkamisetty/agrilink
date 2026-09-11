@@ -9,22 +9,21 @@ const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{
 const secret = () => process.env.IDENTITY_OTP_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.NODE_ENV !== 'production' ? 'local-development-secret' : '')
 const hashOtp = (otp: string, id: string) => createHmac('sha256', secret()).update(`${id}:${otp}`).digest('hex')
 async function deliverOtp(mobile: string, otp: string) {
-  const webhook = process.env.IDENTITY_OTP_WEBHOOK_URL
-  const apiKey = process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY
-  const twoFactorBase = process.env.TWOFACTOR_API_URL || 'https://2factor.in/API/V1'
-  const endpoint = webhook || (apiKey ? `${twoFactorBase}/${encodeURIComponent(apiKey)}/SMS/${encodeURIComponent(mobile)}/${encodeURIComponent(otp)}/AgriLink` : '')
-  if (!endpoint) throw new Error('Identity OTP delivery is not configured.')
-
-  const response = await fetch(endpoint, {
-    method: webhook ? 'POST' : 'GET',
-    ...(webhook ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, otp, purpose: 'agrilink_identity_verification' }) } : {}),
-    signal: AbortSignal.timeout(10_000),
-  })
-  if (!response.ok) throw new Error('Unable to send the verification code. Please try again.')
-  if (!webhook) {
+  const twoFactorKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()
+  if (twoFactorKey) {
+    const normal = mobile.replace(/\D/g, '').slice(-10)
+    const response = await fetch(`https://2factor.in/API/V1/${encodeURIComponent(twoFactorKey)}/SMS/${normal}/${encodeURIComponent(otp)}/AUTOGEN`, { method: 'POST', signal: AbortSignal.timeout(10_000) })
     const result = await response.json().catch(() => null) as { Status?: string } | null
-    if (result?.Status && result.Status.toLowerCase() !== 'success') throw new Error('Unable to send the verification code. Please try again.')
+    if (!response.ok || (result?.Status && result.Status.toLowerCase() !== 'success')) throw new Error('Unable to send the verification code. Please try again.')
+    return
   }
+  const webhook = process.env.IDENTITY_OTP_WEBHOOK_URL
+  if (!webhook) {
+    if (process.env.NODE_ENV === 'production') throw new Error('Identity OTP delivery is not configured.')
+    return
+  }
+  const response = await fetch(webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mobile, otp, purpose: 'agrilink_identity_verification' }), signal: AbortSignal.timeout(10_000) })
+  if (!response.ok) throw new Error('Unable to send the verification code. Please try again.')
 }
 function protectAadhaar(value: string) {
   // A non-reversible keyed digest means this service never persists a readable Aadhaar value.
