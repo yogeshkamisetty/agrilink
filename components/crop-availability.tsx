@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { Search, Sprout, MapPin, CalendarDays, ShieldCheck, AlertTriangle, RefreshCw } from 'lucide-react'
+import { Search, Sprout, MapPin, CalendarDays, ShieldCheck, AlertTriangle, RefreshCw, ArrowUpRight, ShoppingCart } from 'lucide-react'
 
 interface CropItem {
   crop: string
@@ -27,7 +27,7 @@ const cropImages: Record<string, string> = {
   potato: '/crops/potato.png',
 }
 
-export function CropAvailability() {
+export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: string) => void } = {}) {
   const [crop, setCrop] = useState('all')
   const [grade, setGrade] = useState('all')
   const [search, setSearch] = useState('')
@@ -225,13 +225,27 @@ export function CropAvailability() {
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[#68736c] pt-2 border-t border-[#f4eee4]">
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3.5 w-3.5 text-emerald-800" /> {item.villages.join(', ') || 'Multiple villages'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="h-3.5 w-3.5 text-emerald-800" /> Updated today
-                    </span>
+                  <div className="mt-4 flex items-center justify-between gap-2 pt-3 border-t border-[#f4eee4]">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#68736c]">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-emerald-800" /> {item.villages.join(', ') || 'Multiple villages'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSelectCrop) {
+                          onSelectCrop(item.crop)
+                        } else if (typeof window !== 'undefined') {
+                          window.dispatchEvent(new CustomEvent('agrilink:open-order', { detail: { crop: item.crop } }))
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 text-xs font-semibold shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                    >
+                      <ShoppingCart className="size-3.5" />
+                      <span>Procure {item.crop}</span>
+                      <ArrowUpRight className="size-3" />
+                    </button>
                   </div>
                 </article>
               )

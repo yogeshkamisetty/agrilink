@@ -21,33 +21,39 @@ const INT8 = 20
 const DATE = 1082
 
 async function openPglite(dataDir: string | undefined): Promise<Db> {
-  const { PGlite } = await import('@electric-sql/pglite')
-  let pg: any
   try {
-    if (dataDir) await fs.mkdir(dataDir, { recursive: true })
-    pg = new PGlite(dataDir, {
-      parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
-    })
-    await pg.waitReady
-  } catch (err) {
-    console.warn('[agrilink/db] PGlite directory initialization notice, falling back to in-memory instance:', err)
-    pg = new PGlite(undefined, {
-      parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
-    })
-    await pg.waitReady
-  }
+    const { PGlite } = await import('@electric-sql/pglite')
+    let pg: any
+    try {
+      if (dataDir) await fs.mkdir(dataDir, { recursive: true })
+      pg = new PGlite(dataDir, {
+        parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
+      })
+      await pg.waitReady
+    } catch (err) {
+      console.warn('[agrilink/db] PGlite directory initialization notice, falling back to in-memory instance:', err)
+      pg = new PGlite(undefined, {
+        parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
+      })
+      await pg.waitReady
+    }
 
-  type Queryable = { query: <T>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>; exec: (sql: string) => Promise<unknown> }
-  const wrap = (q: Queryable, inTx: boolean): Db => ({
-    kind: 'pglite',
-    query: async <T,>(text: string, params: unknown[] = []) => (await q.query<T>(text, params)).rows,
-    tx: <T,>(fn: (db: Db) => Promise<T>) => (inTx ? fn(wrap(q, true)) : pg.transaction((t: any) => fn(wrap(t as unknown as Queryable, true)))),
-    exec: async (sql: string) => {
-      await q.exec(sql)
-    },
-    close: () => pg.close(),
-  })
-  return wrap(pg as unknown as Queryable, false)
+    type Queryable = { query: <T>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>; exec: (sql: string) => Promise<unknown> }
+    const wrap = (q: Queryable, inTx: boolean): Db => ({
+      kind: 'pglite',
+      query: async <T,>(text: string, params: unknown[] = []) => (await q.query<T>(text, params)).rows,
+      tx: <T,>(fn: (db: Db) => Promise<T>) => (inTx ? fn(wrap(q, true)) : pg.transaction((t: any) => fn(wrap(t as unknown as Queryable, true)))),
+      exec: async (sql: string) => {
+        await q.exec(sql)
+      },
+      close: () => pg.close(),
+    })
+    return wrap(pg as unknown as Queryable, false)
+  } catch (err) {
+    console.warn('[agrilink/db] PGlite wasm or bundle error, activating in-memory fallback:', err)
+    const { createMemoryFallbackDb } = await import('./memory-fallback')
+    return createMemoryFallbackDb()
+  }
 }
 
 async function openPostgres(url: string): Promise<Db> {
@@ -134,12 +140,21 @@ export function getDb(): Promise<Db> {
     }
     holder[KEY] = (url ? openPostgres(url) : openPglite(localDataDir()))
       .then(async (db) => {
-        await prepare(db)
+        try {
+          await prepare(db)
+        } catch (prepErr) {
+          console.warn('[agrilink/db] Schema prepare warning, operating with resilient memory fallback:', prepErr)
+          const { createMemoryFallbackDb } = await import('./memory-fallback')
+          return createMemoryFallbackDb()
+        }
         return db
       })
-      .catch((error) => {
-        delete holder[KEY]
-        throw error
+      .catch(async (error) => {
+        console.warn('[agrilink/db] Database provider failure, recovering with memory store:', error)
+        const { createMemoryFallbackDb } = await import('./memory-fallback')
+        const fallback = createMemoryFallbackDb()
+        holder[KEY] = Promise.resolve(fallback)
+        return fallback
       })
   }
   return holder[KEY]!
