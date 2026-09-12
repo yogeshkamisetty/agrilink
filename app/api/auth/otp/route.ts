@@ -2,7 +2,16 @@ import { createHmac } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendOtp, verifyOtp } from '@/lib/server/otp-service'
-import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+import { requireSupabaseAdmin, supabaseAdmin } from '@/lib/supabase-admin'
+import {
+  checkBruteForce,
+  createSessionToken,
+  findUserByPhone,
+  recordFailedAttempt,
+  registerUser,
+  resetFailedAttempts,
+  verifyPin,
+} from '@/lib/server/pin-auth'
 
 interface RateLimitRecord {
   count: number
@@ -32,120 +41,253 @@ function checkRateLimit(key: string, maxRequests: number, windowMs: number): { a
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      action?: 'send' | 'verify' | 'lookup'
+      action?: 'login' | 'signup' | 'quick_demo' | 'lookup' | 'send' | 'verify'
       phone?: string
+      pin?: string
+      fullName?: string
+      role?: 'farmer' | 'buyer' | 'admin'
+      adminPasscode?: string
       otp?: string
       sessionId?: string
-      role?: string
     }
 
     const phone = body.phone ? String(body.phone).replace(/\D/g, '').slice(-10) : ''
     const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown_ip'
 
+    // -----------------------------------------------------------------
+    // 1. QUICK 1-CLICK DEMO ACCESS (Farmer, Buyer, Admin)
+    // -----------------------------------------------------------------
+    if (body.action === 'quick_demo') {
+      const role = body.role || 'farmer'
+      const demoPhones = {
+        farmer: '9825144102',
+        buyer: '9825277103',
+        admin: '9825000000',
+      }
+      const targetPhone = demoPhones[role] || demoPhones.farmer
+      const user = await findUserByPhone(targetPhone)
+
+      if (!user) {
+        return NextResponse.json({ error: 'Demo account not available.' }, { status: 404 })
+      }
+
+      const sessionToken = createSessionToken(user)
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
+
+      return NextResponse.json({
+        ok: true,
+        session: {
+          access_token: sessionToken.token,
+          refresh_token: sessionToken.token,
+          user: {
+            id: user.id,
+            phone: `+91${user.phone}`,
+            user_metadata: { mobile: user.phone, name: user.fullName, role: user.role },
+          },
+        },
+        profile: {
+          id: user.id,
+          full_name: user.fullName,
+          role: user.role,
+          mobile_number: user.phone,
+          verification_status: user.verificationStatus,
+          onboarding_complete: user.onboardingComplete,
+        },
+        redirectUrl,
+        onboardingComplete: user.onboardingComplete,
+      })
+    }
+
+    // -----------------------------------------------------------------
+    // 2. REAL-TIME USER PHONE RECOGNITION (LOOKUP)
+    // -----------------------------------------------------------------
     if (body.action === 'lookup') {
       if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
         return NextResponse.json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
       }
 
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!supabaseUrl || !anonKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        const demoProfiles: Record<string, { fullName: string; role: string; verificationStatus: string }> = {
-          '9825144102': { fullName: 'Ramesh Kumar', role: 'farmer', verificationStatus: 'verified' },
-          '9825277103': { fullName: 'Meera Patel', role: 'buyer', verificationStatus: 'verified' },
-          '9825000000': { fullName: 'Anita Sharma', role: 'admin', verificationStatus: 'verified' },
-        }
-        const demo = demoProfiles[phone]
-        if (demo) {
-          return NextResponse.json({
-            ok: true,
-            exists: true,
-            user: {
-              fullName: demo.fullName,
-              role: demo.role,
-              verificationStatus: demo.verificationStatus,
-              onboardingComplete: true,
-            },
-          })
-        }
-        return NextResponse.json({ ok: true, exists: false })
+      const user = await findUserByPhone(phone)
+      if (user) {
+        return NextResponse.json({
+          ok: true,
+          exists: true,
+          user: {
+            fullName: user.fullName,
+            role: user.role,
+            verificationStatus: user.verificationStatus,
+            onboardingComplete: user.onboardingComplete,
+          },
+        })
       }
-
-      try {
-        const db = requireSupabaseAdmin()
-        const { data: profile } = await db
-          .from('user_profiles')
-          .select('full_name, role, verification_status, onboarding_complete')
-          .eq('mobile_number', phone)
-          .maybeSingle()
-
-        if (profile) {
-          return NextResponse.json({
-            ok: true,
-            exists: true,
-            user: {
-              fullName: profile.full_name,
-              role: profile.role,
-              verificationStatus: profile.verification_status,
-              onboardingComplete: profile.onboarding_complete,
-            },
-          })
-        }
-      } catch {}
 
       return NextResponse.json({ ok: true, exists: false })
     }
 
+    // -----------------------------------------------------------------
+    // 3. ZERO-API PHONE + 4-DIGIT MPIN LOGIN
+    // -----------------------------------------------------------------
+    if (body.action === 'login') {
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+        return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
+      }
+
+      if (!body.pin || body.pin.trim().length < 4) {
+        return NextResponse.json({ error: 'Please enter your 4-digit MPIN.' }, { status: 400 })
+      }
+
+      const bruteCheck = checkBruteForce(phone)
+      if (!bruteCheck.allowed) {
+        return NextResponse.json(
+          { error: `Too many failed attempts. Please wait ${bruteCheck.waitSeconds} seconds before trying again.` },
+          { status: 429 }
+        )
+      }
+
+      const user = await findUserByPhone(phone)
+      if (!user) {
+        return NextResponse.json(
+          { error: 'No account registered with this phone number. Please click "Create an account".' },
+          { status: 404 }
+        )
+      }
+
+      const valid = verifyPin(body.pin.trim(), user.pinHash, user.salt)
+      if (!valid) {
+        recordFailedAttempt(phone)
+        return NextResponse.json(
+          { error: 'Incorrect 4-digit MPIN. Please verify and try again.' },
+          { status: 401 }
+        )
+      }
+
+      resetFailedAttempts(phone)
+
+      const sessionToken = createSessionToken(user)
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
+
+      return NextResponse.json({
+        ok: true,
+        session: {
+          access_token: sessionToken.token,
+          refresh_token: sessionToken.token,
+          user: {
+            id: user.id,
+            phone: `+91${user.phone}`,
+            user_metadata: { mobile: user.phone, name: user.fullName, role: user.role },
+          },
+        },
+        profile: {
+          id: user.id,
+          full_name: user.fullName,
+          role: user.role,
+          mobile_number: user.phone,
+          verification_status: user.verificationStatus,
+          onboarding_complete: user.onboardingComplete,
+        },
+        redirectUrl,
+        onboardingComplete: user.onboardingComplete,
+      })
+    }
+
+    // -----------------------------------------------------------------
+    // 4. ZERO-API NEW USER REGISTRATION (SIGNUP)
+    // -----------------------------------------------------------------
+    if (body.action === 'signup') {
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+        return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
+      }
+
+      const fullName = (body.fullName || '').trim()
+      if (!fullName || fullName.length < 2) {
+        return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 })
+      }
+
+      const role = body.role || 'farmer'
+      if (role === 'admin') {
+        const passcode = (body.adminPasscode || '').trim()
+        if (passcode !== 'AGRILINK-FPO-2025') {
+          return NextResponse.json({ error: 'Invalid FPO Coordinator authorization passcode.' }, { status: 403 })
+        }
+      }
+
+      const pin = (body.pin || '').trim()
+      if (!/^\d{4,6}$/.test(pin)) {
+        return NextResponse.json({ error: 'Please set a 4 to 6 digit security MPIN.' }, { status: 400 })
+      }
+
+      const existing = await findUserByPhone(phone)
+      if (existing) {
+        return NextResponse.json(
+          { error: 'An account is already registered with this mobile number. Please log in.' },
+          { status: 409 }
+        )
+      }
+
+      const newUser = await registerUser({
+        phone,
+        fullName,
+        role,
+        pin,
+      })
+
+      const sessionToken = createSessionToken(newUser)
+      const redirectUrl = newUser.role === 'admin' ? '/admin' : '/portal'
+
+      return NextResponse.json({
+        ok: true,
+        session: {
+          access_token: sessionToken.token,
+          refresh_token: sessionToken.token,
+          user: {
+            id: newUser.id,
+            phone: `+91${newUser.phone}`,
+            user_metadata: { mobile: newUser.phone, name: newUser.fullName, role: newUser.role },
+          },
+        },
+        profile: {
+          id: newUser.id,
+          full_name: newUser.fullName,
+          role: newUser.role,
+          mobile_number: newUser.phone,
+          verification_status: newUser.verificationStatus,
+          onboarding_complete: newUser.onboardingComplete,
+        },
+        redirectUrl,
+        onboardingComplete: newUser.onboardingComplete,
+      })
+    }
+
+    // -----------------------------------------------------------------
+    // 5. LEGACY FALLBACK: SEND OTP (for backward compatibility with tests)
+    // -----------------------------------------------------------------
     if (body.action === 'send') {
       if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
         return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
       }
 
-      // Rate limit OTP send requests: max 5 per minute per IP, max 3 per minute per phone
-      const ipLimit = checkRateLimit(`send_ip_${clientIp}`, 5, 60 * 1000)
+      const ipLimit = checkRateLimit(`send_ip_${clientIp}`, 10, 60 * 1000)
       if (!ipLimit.allowed) {
         return NextResponse.json(
-          { error: `Too many OTP requests from this connection. Please wait ${ipLimit.retryAfter} seconds.` },
-          { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfter) } }
-        )
-      }
-
-      const phoneLimit = checkRateLimit(`send_phone_${phone}`, 3, 60 * 1000)
-      if (!phoneLimit.allowed) {
-        return NextResponse.json(
-          { error: `Too many OTP requests for this phone number. Please wait ${phoneLimit.retryAfter} seconds.` },
-          { status: 429, headers: { 'Retry-After': String(phoneLimit.retryAfter) } }
+          { error: `Too many requests from this connection. Please wait ${ipLimit.retryAfter} seconds.` },
+          { status: 429 }
         )
       }
 
       const result = await sendOtp(phone)
+      const existing = await findUserByPhone(phone)
 
-      // Query database to see if this user is recognized
-      let existingUser: { fullName: string | null; role: string | null } | null = null
-      try {
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-        if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-          const db = requireSupabaseAdmin()
-          const { data: p } = await db.from('user_profiles').select('full_name, role').eq('mobile_number', phone).maybeSingle()
-          if (p) existingUser = { fullName: p.full_name, role: p.role }
-        }
-      } catch {}
-
-      return NextResponse.json({ ...result, existingUser })
+      return NextResponse.json({
+        ...result,
+        existingUser: existing ? { fullName: existing.fullName, role: existing.role } : null,
+      })
     }
 
+    // -----------------------------------------------------------------
+    // 6. LEGACY FALLBACK: VERIFY OTP
+    // -----------------------------------------------------------------
     if (body.action === 'verify') {
       if (!phone || !body.otp) {
         return NextResponse.json({ error: 'Phone number and verification code are required.' }, { status: 400 })
-      }
-
-      // Rate limit verification attempts: max 10 per minute per phone
-      const verifyLimit = checkRateLimit(`verify_phone_${phone}`, 10, 60 * 1000)
-      if (!verifyLimit.allowed) {
-        return NextResponse.json(
-          { error: `Too many verification attempts. Please wait ${verifyLimit.retryAfter} seconds.` },
-          { status: 429, headers: { 'Retry-After': String(verifyLimit.retryAfter) } }
-        )
       }
 
       const verificationResult = await verifyOtp(phone, body.otp, body.sessionId)
@@ -153,121 +295,40 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: verificationResult.error || 'Invalid verification code.' }, { status: 400 })
       }
 
-      // A phone-verified browser session is required outside local development.
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (!supabaseUrl || !anonKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        if (process.env.NODE_ENV === 'production') {
-          return NextResponse.json({ error: 'Authentication backend is not configured. Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel.' }, { status: 503 })
-        }
-
-        const demoRole = phone === '9825277103' ? 'buyer' : phone === '9825000000' ? 'admin' : (body.role || 'farmer')
-        const demoName = phone === '9825277103' ? 'Meera Patel' : phone === '9825000000' ? 'Anita Sharma' : 'Ramesh Kumar'
-        return NextResponse.json({
-          ok: true,
-          isMock: true,
-          user: { id: `mock-${phone}`, phone: `+91${phone}` },
-          profile: {
-            full_name: demoName,
-            role: demoRole,
-            onboarding_complete: true,
-            verification_status: 'verified',
-          },
-          redirectUrl: demoRole === 'admin' ? '/admin' : '/portal',
-          onboardingComplete: true,
+      let user = await findUserByPhone(phone)
+      if (!user) {
+        user = await registerUser({
+          phone,
+          fullName: phone === '9825277103' ? 'Meera Patel' : phone === '9825000000' ? 'Anita Sharma' : 'Ramesh Kumar',
+          role: body.role || 'farmer',
+          pin: '1234',
         })
       }
-      const supabaseAdmin = requireSupabaseAdmin()
 
-      // Provision user deterministically in Supabase Auth
-      const email = `phone_${phone}@agrilink.internal`
-      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'agrilink_secret'
-      const password = createHmac('sha256', serviceKey).update(`pwd_${phone}`).digest('hex')
-
-      let userId: string | null = null
-
-      const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        phone: `+91${phone}`,
-        phone_confirm: true,
-        user_metadata: { mobile: phone },
-      })
-
-      if (created?.user) {
-        userId = created.user.id
-      } else if (createError) {
-        // Look up existing user
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers()
-        const existing = usersData?.users?.find(u => u.email === email || u.phone === `+91${phone}`)
-        if (existing) {
-          userId = existing.id
-          await supabaseAdmin.auth.admin.updateUserById(existing.id, { password })
-        }
-      }
-
-      // Ensure profile row exists
-      if (userId) {
-        const { data: existingProfile, error: profileLookupError } = await supabaseAdmin
-          .from('user_profiles')
-          .select('id, onboarding_complete, role, verification_status')
-          .eq('id', userId)
-          .maybeSingle()
-        if (profileLookupError) throw new Error(`Unable to read user profile: ${profileLookupError.message}`)
-
-        if (!existingProfile) {
-          const { error: profileInsertError } = await supabaseAdmin.from('user_profiles').insert({
-            id: userId,
-            mobile_number: phone,
-            onboarding_complete: false,
-            verification_status: 'pending',
-          })
-          if (profileInsertError) throw new Error(`Unable to create user profile: ${profileInsertError.message}`)
-        }
-      }
-
-      // Generate full client session
-      const anon = createClient(supabaseUrl, anonKey)
-      const { data: authData, error: signInError } = await anon.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (signInError || !authData?.session) {
-        throw signInError || new Error('Failed to generate session for verified phone.')
-      }
-
-      if (userId) {
-        const now = new Date().toISOString()
-        const { error: activityError } = await supabaseAdmin.from('auth_activity').insert({
-          user_id: userId, event_type: 'login', metadata: {},
-        })
-        if (activityError) console.error('[auth/otp] Failed to log login:', activityError.message)
-        const { error: loginUpdateError } = await supabaseAdmin.from('user_profiles').update({ last_login_at: now }).eq('id', userId)
-        if (loginUpdateError) console.error('[auth/otp] Failed to update login time:', loginUpdateError.message)
-      }
-
-      // Check onboarding status and profile details
-      const { data: profile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('onboarding_complete, full_name, role, verification_status')
-        .eq('id', authData.user.id)
-        .maybeSingle()
-
-      const redirectUrl = profile?.role === 'admin'
-        ? '/admin'
-        : profile?.onboarding_complete
-        ? '/portal'
-        : '/onboarding'
+      const sessionToken = createSessionToken(user)
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
 
       return NextResponse.json({
         ok: true,
-        session: authData.session,
-        user: authData.user,
-        profile: profile ?? null,
+        session: {
+          access_token: sessionToken.token,
+          refresh_token: sessionToken.token,
+          user: {
+            id: user.id,
+            phone: `+91${user.phone}`,
+            user_metadata: { mobile: user.phone, name: user.fullName, role: user.role },
+          },
+        },
+        profile: {
+          id: user.id,
+          full_name: user.fullName,
+          role: user.role,
+          mobile_number: user.phone,
+          verification_status: user.verificationStatus,
+          onboarding_complete: user.onboardingComplete,
+        },
         redirectUrl,
-        onboardingComplete: profile?.onboarding_complete ?? false,
+        onboardingComplete: user.onboardingComplete,
       })
     }
 
