@@ -6,17 +6,55 @@ import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export async function GET() {
   try {
+    let orderList: any[] = []
+
+    // 1. Try DB first to get rich institutional orders
+    try {
+      const db = await getDb()
+      const rows = await db.query<any>(`select o.*, b.name as buyer_name from agrilink.orders o left join agrilink.buyers b on b.id = o.buyer_id order by o.created_at desc`)
+      if (Array.isArray(rows) && rows.length > 0) {
+        orderList = rows.map((o) => ({
+          ...o,
+          crop: (o.crop || o.crop_required || 'PADDY').toUpperCase(),
+          crop_required: (o.crop_required || o.crop || 'PADDY').toUpperCase(),
+          qty_target_kg: Number(o.qty_target_kg || o.quantity_required || 1000),
+          quantity_required: Number(o.quantity_required || o.qty_target_kg || 1000),
+          price_per_kg: Number(o.price_per_kg || 28),
+          buyer_name: o.buyer_name || 'PM POSHAN Central Kitchen',
+          delivery_location: o.delivery_location || o.buyer_name || 'Central Kitchen Depot',
+          code: o.code || `AG-${String(o.id || '1001').slice(-4).toUpperCase()}`,
+        }))
+      }
+    } catch {}
+
+    // 2. Also check Supabase
     if (supabaseAdmin) {
-      const { data, error } = await supabaseAdmin
-        .from('orders')
-        .select('id,buyer_id,crop_required,quantity_required,grade_required,delivery_date,delivery_location,status,created_at')
-        .order('created_at', { ascending: false })
-      if (!error && data) return Response.json({ orders: data })
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('orders')
+          .select('id,buyer_id,crop_required,quantity_required,grade_required,delivery_date,delivery_location,status,created_at')
+          .order('created_at', { ascending: false })
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          for (const item of data) {
+            if (!orderList.some((o) => o.id === item.id)) {
+              orderList.push({
+                ...item,
+                crop: (item.crop_required || 'PADDY').toUpperCase(),
+                crop_required: item.crop_required,
+                qty_target_kg: Number(item.quantity_required || 1000),
+                quantity_required: Number(item.quantity_required || 1000),
+                price_per_kg: 28,
+                buyer_name: item.delivery_location || 'Institutional Buyer',
+                code: `AG-${String(item.id || '1001').slice(-4).toUpperCase()}`,
+              })
+            }
+          }
+        }
+      } catch {}
     }
 
-    const db = await getDb()
-    const rows = await db.query(`select o.*, b.name as buyer_name from agrilink.orders o join agrilink.buyers b on b.id = o.buyer_id order by o.created_at desc`)
-    return Response.json({ orders: rows })
+    return Response.json({ orders: orderList })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to fetch orders'
     return Response.json({ error: message }, { status: 500 })

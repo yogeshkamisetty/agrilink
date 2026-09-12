@@ -159,6 +159,22 @@ export function createMemoryFallbackDb(): Db {
     schema_version: SCHEMA_VERSION,
   }
 
+  const aggregationBatches: Row[] = [
+    {
+      id: 'batch-001',
+      batch_code: 'BATCH-AG1001-KHD',
+      fpo_name: 'Mahi Valley FPO',
+      crop: 'PADDY',
+      location: 'Kheda Central Depot',
+      total_quantity_kg: 1000,
+      grade_a_kg: 1000,
+      grade_b_kg: 0,
+      quality_verified: true,
+      created_by: 'Anita Desai',
+      created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    },
+  ]
+
   const userSessions: Row[] = []
   const mpinCredentials: Row[] = []
 
@@ -249,10 +265,111 @@ export function createMemoryFallbackDb(): Db {
           existing.status = 'FUNDED'
           if (params[1]) existing.advance_amount = Number(params[1])
           existing.advance_committed_at = new Date().toISOString()
+        } else if (q.includes("status = 'aggregated'") || q.includes("status = $1") && String(params[0]).toUpperCase() === 'AGGREGATED') {
+          existing.status = 'AGGREGATED'
         } else if (q.includes('status =')) {
           existing.status = 'SOURCING'
         }
         return [existing] as T[]
+      }
+
+      if (q.startsWith('insert into agrilink.farmers')) {
+        const farmerId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+        const isFullSchema = q.includes('fpo_id')
+        const name = String((isFullSchema ? params[1] : params[0]) || 'Farmer')
+        const phone = String((isFullSchema ? params[2] : params[2]) || '+91 98251 44102')
+        const village = String((isFullSchema ? params[5] : params[1]) || 'Kheda')
+        const cropName = String(params[3] || 'PADDY').toUpperCase()
+        const qty = Number(params[4] || 500)
+        const grade = String(params[5] || 'A')
+        const harvestDate = String(params[6] || new Date().toISOString().split('T')[0])
+
+        const newFarmer: Row = {
+          id: farmerId,
+          fpo_id: fpos[0].id,
+          name,
+          village,
+          phone,
+          crop_name: cropName,
+          quantity: qty,
+          quality_grade: grade,
+          harvest_date: harvestDate,
+          language: 'gu',
+          land_hectares: 1.0,
+          lat: 22.75,
+          lng: 72.68,
+          completed_orders: 1,
+          failed_orders: 0,
+          reliability_score: 95,
+          created_at: new Date().toISOString(),
+        }
+        farmers.unshift(newFarmer)
+
+        // Also push to crop registry for cross-matching
+        cropRegistry.unshift({
+          id: `reg-${Date.now()}`,
+          farmer_id: farmerId,
+          crop: cropName,
+          expected_qty_kg: qty,
+          harvest_window_start: harvestDate,
+          harvest_window_end: new Date(Date.now() + 86400000 * 14).toISOString().split('T')[0],
+          status: 'ACTIVE',
+          created_at: new Date().toISOString(),
+        })
+
+        return [newFarmer] as T[]
+      }
+
+      if (q.startsWith('insert into agrilink.crop_registry')) {
+        const newReg: Row = {
+          id: `reg-${Date.now()}`,
+          farmer_id: params[0] || farmers[0].id,
+          crop: String(params[1] || 'PADDY').toUpperCase(),
+          expected_qty_kg: Number(params[2] || 500),
+          harvest_window_start: String(params[3] || new Date().toISOString().split('T')[0]),
+          harvest_window_end: String(params[4] || new Date(Date.now() + 86400000 * 14).toISOString().split('T')[0]),
+          status: 'ACTIVE',
+          created_at: new Date().toISOString(),
+        }
+        cropRegistry.unshift(newReg)
+        return [newReg] as T[]
+      }
+
+      if (q.startsWith('insert into agrilink.aggregation_batches')) {
+        const newBatch: Row = {
+          id: `batch-${Date.now()}`,
+          batch_code: String(params[0] || `BATCH-${Date.now()}`).toUpperCase(),
+          fpo_name: String(params[1] || 'Mahi Valley FPO'),
+          crop: String(params[2] || 'PADDY').toUpperCase(),
+          location: String(params[3] || 'Kheda Central Depot'),
+          total_quantity_kg: Number(params[4] || 1000),
+          grade_a_kg: Number(params[4] || 1000),
+          grade_b_kg: 0,
+          quality_verified: true,
+          created_by: params[5] || 'Anita Desai',
+          created_at: new Date().toISOString(),
+        }
+        aggregationBatches.unshift(newBatch)
+        return [newBatch] as T[]
+      }
+
+      if (q.includes('from agrilink.aggregation_batches')) {
+        return [...aggregationBatches] as T[]
+      }
+
+      if (q.startsWith('insert into agrilink.commitments')) {
+        const newCom: Row = {
+          id: `com-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+          order_id: params[0],
+          registry_id: params[1],
+          farmer_id: params[2],
+          qty_committed_kg: Number(params[3] || 100),
+          tier: 'SMS',
+          status: 'ACTIVE',
+          created_at: new Date().toISOString(),
+        }
+        commitments.unshift(newCom)
+        return [newCom] as T[]
       }
 
       if (q.includes('from agrilink.orders')) {
@@ -263,6 +380,28 @@ export function createMemoryFallbackDb(): Db {
         return orders.map((o) => {
           const b = buyers.find((x) => x.id === o.buyer_id) || buyers[0]
           return { ...o, buyer_name: b.name }
+        }) as T[]
+      }
+
+      if (q.includes('from agrilink.farmers')) {
+        return farmers.map((f) => {
+          const reg = cropRegistry.find((r) => r.farmer_id === f.id)
+          return {
+            id: f.id,
+            name: f.name,
+            phone: f.phone,
+            mobile_number: f.phone,
+            village: f.village,
+            crop_name: f.crop_name || (reg ? reg.crop : 'PADDY'),
+            crop: f.crop_name || (reg ? reg.crop : 'PADDY'),
+            quantity: f.quantity || (reg ? reg.expected_qty_kg : 500),
+            quality_grade: f.quality_grade || 'A',
+            harvest_date: f.harvest_date || (reg ? reg.harvest_window_start : new Date().toISOString().split('T')[0]),
+            verified: true,
+            reliability_score: f.reliability_score || 95,
+            land_hectares: f.land_hectares || 1.0,
+            created_at: f.created_at,
+          }
         }) as T[]
       }
 

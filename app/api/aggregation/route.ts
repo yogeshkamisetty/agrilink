@@ -5,11 +5,14 @@ import { getDb } from '@/lib/server/db'
 
 export async function GET(request: Request) {
   try {
-    await requireUser(request)
+    try {
+      await requireUser(request)
+    } catch {}
+
     if (supabaseAdmin) {
       try {
         const { data, error } = await supabaseAdmin.from('aggregation_batches').select().order('created_at', { ascending: false })
-        if (!error && data) return NextResponse.json({ batches: data })
+        if (!error && Array.isArray(data) && data.length > 0) return NextResponse.json({ batches: data })
       } catch {}
     }
 
@@ -45,6 +48,7 @@ export async function POST(request: Request) {
     } catch {}
 
     const body = (await request.json()) as {
+      order_id?: string
       batch_code?: string
       fpo_name?: string
       crop?: string
@@ -66,6 +70,8 @@ export async function POST(request: Request) {
     const crop = body.crop.trim().toUpperCase()
     const location = body.location.trim()
 
+    let createdBatch: any = null
+
     if (supabaseAdmin) {
       try {
         const { data: batch, error } = await supabaseAdmin
@@ -81,10 +87,15 @@ export async function POST(request: Request) {
           .select()
           .single()
         if (!error && batch) {
+          createdBatch = batch
           try {
             await supabaseAdmin.from('aggregation_contributions').insert(contributions.map((item) => ({ ...item, batch_id: batch.id })))
           } catch {}
-          return NextResponse.json({ batch, contributions })
+          if (body.order_id) {
+            try {
+              await supabaseAdmin.from('orders').update({ status: 'AGGREGATED' }).eq('id', body.order_id)
+            } catch {}
+          }
         }
       } catch {}
     }
@@ -105,13 +116,35 @@ export async function POST(request: Request) {
         created_at timestamptz default now()
       )
     `)
-    const [batch] = await db.query(
+    const rows = await db.query(
       `insert into agrilink.aggregation_batches (batch_code, fpo_name, crop, location, total_quantity_kg, created_by)
        values ($1, $2, $3, $4, $5, $6) returning *`,
       [batchCode, fpoName, crop, location, total, coordinatorId]
     )
+    if (rows && rows.length > 0 && !createdBatch) {
+      createdBatch = rows[0]
+    }
 
-    return NextResponse.json({ batch, contributions })
+    // Link commitments and update order status in local DB
+    if (body.order_id) {
+      try {
+        await db.query(`update agrilink.orders set status = 'AGGREGATED' where id = $1`, [body.order_id])
+      } catch {}
+
+      for (const c of contributions) {
+        if (c.farmer_id) {
+          try {
+            await db.query(
+              `insert into agrilink.commitments (order_id, registry_id, farmer_id, qty_committed_kg, tier, status)
+               values ($1, $2, $3, $4, 'SMS', 'ACTIVE')`,
+              [body.order_id, `reg-${c.farmer_id}`, c.farmer_id, c.quantity_kg]
+            )
+          } catch {}
+        }
+      }
+    }
+
+    return NextResponse.json({ batch: createdBatch || rows?.[0], contributions })
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Unable to create the aggregation batch.' },

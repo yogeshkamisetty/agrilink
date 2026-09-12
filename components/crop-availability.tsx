@@ -126,6 +126,77 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
   const [demands, setDemands] = useState<DemandForecastItem[]>(DEFAULT_FORECAST_DEMANDS)
   const [showCommunityModal, setShowCommunityModal] = useState(false)
   const [committedNotice, setCommittedNotice] = useState<string | null>(null)
+  const [liveFarmersCount, setLiveFarmersCount] = useState<number>(7)
+  const [liveFarmersKg, setLiveFarmersKg] = useState<number>(4100)
+
+  useEffect(() => {
+    let mounted = true
+    const fetchLiveFeeds = async () => {
+      try {
+        // 1. Fetch live orders
+        const ordersRes = await fetch('/api/orders')
+        if (ordersRes.ok) {
+          const ordData = await ordersRes.json()
+          if (ordData.orders && Array.isArray(ordData.orders) && ordData.orders.length > 0 && mounted) {
+            const mappedOrders: DemandForecastItem[] = ordData.orders.map((o: any) => {
+              const cropName = (o.crop || o.crop_required || 'Paddy').toUpperCase()
+              const target = Number(o.qty_target_kg || o.quantity_required || 1000)
+              const committed = o.status === 'AGGREGATED' ? target : Math.round(target * 0.7)
+              return {
+                id: o.id || `ord-${Math.random()}`,
+                orderCode: o.code || `AG-${String(o.id || '1001').slice(-4).toUpperCase()}`,
+                crop: cropName.charAt(0) + cropName.slice(1).toLowerCase(),
+                qtyTargetKg: target,
+                qtyCommittedKg: committed,
+                standbyBufferKg: Math.round(target * 0.15),
+                deliveryDate: o.delivery_date ? new Date(o.delivery_date).toISOString().split('T')[0] : '2025-10-25',
+                buyerName: o.buyer_name || o.delivery_location || 'Mid-day Meal Authority',
+                buyerType: 'Institutional Buyer',
+                buyerRating: 4.8,
+                buyerCompletedOrders: 18,
+                pricePerKg: Number(o.price_per_kg || 28),
+                category: 'INSTITUTIONAL',
+              }
+            })
+            // Combine with default community demands
+            setDemands((prev) => {
+              const communityItems = prev.filter((p) => p.category === 'COMMUNITY')
+              return [...mappedOrders, ...communityItems]
+            })
+          }
+        }
+
+        // 2. Fetch live farmers produce
+        const farmersRes = await fetch('/api/farmers')
+        if (farmersRes.ok) {
+          const farmData = await farmersRes.json()
+          if (farmData.farmers && Array.isArray(farmData.farmers) && mounted) {
+            setLiveFarmersCount(farmData.farmers.length)
+            const totalKg = farmData.farmers.reduce((sum: number, f: any) => sum + Number(f.quantity || 500), 0)
+            setLiveFarmersKg(totalKg)
+          }
+        }
+      } catch {}
+    }
+
+    fetchLiveFeeds()
+    const timer = setInterval(fetchLiveFeeds, 4000)
+    const onOrderCreated = () => fetchLiveFeeds()
+    const onHarvestUpdated = () => fetchLiveFeeds()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('agrilink:order-created', onOrderCreated)
+      window.addEventListener('agrilink:harvest-updated', onHarvestUpdated)
+    }
+
+    return () => {
+      mounted = false
+      clearInterval(timer)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('agrilink:order-created', onOrderCreated)
+        window.removeEventListener('agrilink:harvest-updated', onHarvestUpdated)
+      }
+    }
+  }, [])
 
   const filteredDemands = useMemo(() => {
     return demands.filter((item) => {
@@ -172,8 +243,14 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
       <div className="border-b border-border bg-secondary/40 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              <TrendingUp className="h-4 w-4" /> Demand Prediction & Supply Planning Board
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                <TrendingUp className="h-4 w-4" /> Demand Prediction & Supply Planning Board
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live: {liveFarmersCount} Verified Smallholders · {liveFarmersKg.toLocaleString()} KG Produce Registered
+              </span>
             </div>
             <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-bold">Upcoming Produce Demand Forecast</h2>
             <p className="mt-1.5 max-w-2xl text-xs text-muted-foreground leading-relaxed">

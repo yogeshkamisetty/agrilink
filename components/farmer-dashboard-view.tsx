@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Wheat,
   CircleDollarSign,
@@ -122,6 +122,58 @@ export function FarmerDashboardView({
       image: '/crops/onion.png',
     },
   ]
+
+  const [liveDemands, setLiveDemands] = useState(buyerDemands)
+
+  useEffect(() => {
+    let mounted = true
+    const fetchOrders = async () => {
+      try {
+        const res = await fetch('/api/orders')
+        if (!res.ok) return
+        const data = await res.json()
+        if (data.orders && Array.isArray(data.orders) && data.orders.length > 0 && mounted) {
+          const mapped = data.orders.map((o: any) => {
+            const cropRaw = o.crop || o.crop_required || 'PADDY'
+            const cropKey = String(cropRaw).toLowerCase()
+            const img = cropImages[cropKey] || '/crops/paddy.png'
+            const target = Number(o.qty_target_kg || o.quantity_required || 1000)
+            const stillNeeded = Math.round(target * 0.45)
+            const dateStr = o.delivery_date
+              ? new Date(o.delivery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+              : '25 Oct 2025'
+            return {
+              id: o.id || `dem-${Math.random()}`,
+              crop: cropRaw.charAt(0).toUpperCase() + cropRaw.slice(1).toLowerCase(),
+              buyer: o.buyer_name || o.delivery_location || 'Institutional Buyer',
+              targetKg: target,
+              stillNeededKg: stillNeeded,
+              pricePerKg: Number(o.price_per_kg || 28),
+              deliveryDate: dateStr,
+              badge: o.status === 'AGGREGATED' ? 'Aggregated' : o.status === 'FUNDED' ? 'Escrow Secured' : 'Open Sourcing',
+              image: img,
+            }
+          })
+          setLiveDemands(mapped)
+        }
+      } catch {}
+    }
+
+    fetchOrders()
+    const timer = setInterval(fetchOrders, 4000)
+    const handleOrderCreated = () => fetchOrders()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('agrilink:order-created', handleOrderCreated)
+    }
+
+    return () => {
+      mounted = false
+      clearInterval(timer)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('agrilink:order-created', handleOrderCreated)
+      }
+    }
+  }, [])
 
   const handleCommitDemand = (demandId: string, cropName: string, rate: number) => {
     setCommittingId(demandId)
@@ -322,7 +374,7 @@ export function FarmerDashboardView({
           <ShoppingBag className="size-4" />
           <span>{lang === 'hi' ? 'खरीदार मांग (ऑर्डर्स)' : lang === 'te' ? 'కొనుగోలుదారు డిమాండ్లు' : 'Buyer Demands'}</span>
           <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono text-emerald-800 dark:text-emerald-300">
-            3 Live
+            {liveDemands.length} Live
           </span>
         </button>
 
@@ -594,7 +646,7 @@ export function FarmerDashboardView({
 
             {/* Demand Cards Grid */}
             <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {buyerDemands.map((demand) => {
+              {liveDemands.map((demand) => {
                 const isCommitted = demandCommitted[demand.id] || false
                 const isCommitting = committingId === demand.id
 

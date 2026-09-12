@@ -8,7 +8,7 @@
  * all reads and writes go through the app's server routes, which enforce
  * the business rules.
  */
-export const SCHEMA_VERSION = '3'
+export const SCHEMA_VERSION = '5'
 
 export const SCHEMA_SQL = /* sql */ `
 create schema if not exists agrilink;
@@ -109,7 +109,7 @@ create table if not exists agrilink.orders (
   price_per_kg numeric(10, 2) not null check (price_per_kg > 0),
   delivery_date date not null,
   advance_pct numeric(4, 3) not null check (advance_pct >= 0 and advance_pct <= 1),
-  status text not null check (status in ('POSTED', 'FUNDED', 'SOURCING', 'COLLECTING', 'DISPATCHED', 'SETTLED')),
+  status text not null check (status in ('POSTED', 'FUNDED', 'SOURCING', 'AGGREGATED', 'COLLECTING', 'DISPATCHED', 'SETTLED')),
   mandi_ref jsonb,
   retail_ref jsonb,
   advance_amount numeric(12, 2),
@@ -285,7 +285,22 @@ create table if not exists agrilink.demo_reply_profiles (
   qty_kg numeric(10, 2)
 );
 
+create table if not exists agrilink.aggregation_batches (
+  id uuid primary key default gen_random_uuid(),
+  batch_code text not null,
+  fpo_name text not null,
+  crop text not null,
+  location text not null,
+  total_quantity_kg numeric not null,
+  grade_a_kg numeric default 0,
+  grade_b_kg numeric default 0,
+  quality_verified boolean default false,
+  created_by text,
+  created_at timestamptz default now()
+);
+
 alter table agrilink.fpos enable row level security;
+alter table agrilink.aggregation_batches enable row level security;
 alter table agrilink.farmers enable row level security;
 alter table agrilink.crop_registry enable row level security;
 alter table agrilink.buyers enable row level security;

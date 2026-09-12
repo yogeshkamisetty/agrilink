@@ -7,7 +7,7 @@ import type { RoutePlan } from './domain/routing'
 
 /** Records as the app sees them (camelCase, ISO timestamps, 'YYYY-MM-DD' dates). */
 
-export type OrderStatus = 'POSTED' | 'FUNDED' | 'SOURCING' | 'COLLECTING' | 'DISPATCHED' | 'SETTLED'
+export type OrderStatus = 'POSTED' | 'FUNDED' | 'SOURCING' | 'AGGREGATED' | 'COLLECTING' | 'DISPATCHED' | 'SETTLED'
 
 export type Fpo = { id: string; name: string; village: string; district: string; state: string; lat: number; lng: number; bankAccountRef: string }
 

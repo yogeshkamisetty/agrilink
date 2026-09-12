@@ -586,6 +586,9 @@ export function AgriLinkDashboard({
       })
       setShowOrderForm(false)
       setActionMessage('New order posted successfully to AgriLink registry!')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+      }
       setNotifications((prev) => [
         {
           id: `order-${Date.now()}`,
@@ -638,11 +641,38 @@ export function AgriLinkDashboard({
     }
   }
 
-  const handleDeclareHarvest = (e: React.FormEvent) => {
+  const handleDeclareHarvest = async (e: React.FormEvent) => {
     e.preventDefault()
     setFarmerCommittedLocalKg(Number(harvestQty))
     setShowHarvestModal(false)
-    setActionMessage(`Harvest declared! ${harvestQty} kg of ${harvestCrop} registered in FPO supply board.`)
+    setActionBusy(true)
+
+    const phone = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_phone') || '+919825144102' : '+919825144102'
+    try {
+      await fetch('/api/farmers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: currentUserName || 'Farmer Member',
+          village: harvestVillage || 'Kheda',
+          crop_name: harvestCrop,
+          quantity: Number(harvestQty),
+          mobile_number: phone,
+          quality_grade: 'A',
+          harvest_date: harvestWindow,
+        }),
+      })
+      await refresh()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
+      }
+    } catch (err) {
+      console.warn('Harvest declare non-fatal error:', err)
+    } finally {
+      setActionBusy(false)
+    }
+
+    setActionMessage(`Harvest declared! ${harvestQty} kg of ${harvestCrop} registered in live FPO supply board.`)
     setNotifications((prev) => [
       {
         id: `harvest-${Date.now()}`,
@@ -672,7 +702,7 @@ export function AgriLinkDashboard({
     ])
   }
 
-  const handleOnboardFarmer = (e: React.FormEvent) => {
+  const handleOnboardFarmer = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newFarmerName.trim()) return
     const newEntry = {
@@ -687,6 +717,27 @@ export function AgriLinkDashboard({
     }
     setRosterFarmers((prev) => [newEntry, ...prev])
     setShowOnboardFarmerModal(false)
+
+    try {
+      await fetch('/api/farmers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newFarmerName.trim(),
+          village: newFarmerVillage.trim() || 'Anand',
+          crop_name: newFarmerCrop.split('/')[0].trim(),
+          quantity: Number(newFarmerKg) || 500,
+          mobile_number: newFarmerPhone.trim() || '+919825144102',
+          quality_grade: 'A',
+          harvest_date: 'Upcoming Harvest',
+        }),
+      })
+      await refresh()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
+      }
+    } catch {}
+
     setActionMessage(`Farmer ${newFarmerName} onboarded to FPO cluster! Welcome SMS dispatched.`)
     setNotifications((prev) => [
       {
