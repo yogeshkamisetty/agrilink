@@ -196,15 +196,16 @@ console.log('[TEST 8/8] Multi-lingual Communication Templates');
 const templates = {
   en: (farmer, crop, qty) => `AgriLink: Hello ${farmer}, your commitment for ${qty} kg of ${crop} is confirmed.`,
   hi: (farmer, crop, qty) => `एग्रीलिंक: नमस्ते ${farmer}, ${qty} किग्रा ${crop} का आपका वादा स्वीकार कर लिया गया है।`,
+  te: (farmer, crop, qty) => `అగ్రిలింక్: నమస్కారం ${farmer}, ${qty} కిలోల ${crop} కోసం మీ నిబద్ధత ధృవీకరించబడింది.`,
   gu: (farmer, crop, qty) => `એગ્રીલિંક: નમસ્તે ${farmer}, ${qty} કિગ્રા ${crop} માટે તમારું સબ્સ્ક્રિપ્શન કન્ફર્મ થયું છે.`,
 };
 
-for (const lang of ['en', 'hi', 'gu']) {
+for (const lang of ['en', 'hi', 'te', 'gu']) {
   const msg = templates[lang]('Ramesh', 'Paddy', 500);
   assert(msg.includes('Ramesh'));
   assert(msg.includes('500'));
 }
-console.log('  ✓ English, Hindi & Gujarati template rendering verified');
+console.log('  ✓ English, Hindi, Telugu & Gujarati template rendering verified');
 
 console.log('\n====================================================');
 console.log('  ALL 8 SYSTEM SUITES EXECUTED AND PASSED (100%)');

@@ -1,4 +1,4 @@
-export type Language = 'en' | 'hi' | 'gu'
+export type Language = 'en' | 'hi' | 'te' | 'gu'
 
 export interface TranslationDictionary {
   appName: string
@@ -172,6 +172,62 @@ export const translations: Record<Language, TranslationDictionary> = {
     smsSampleOrder: 'एग्रीलिंक सूचना: {crop} के लिए मांग अनुबंध सुरक्षित। मूल्य: ₹{price}/किग्रा। {qty}किग्रा हेतु 1 भेजें।',
     smsSampleLot: 'एग्रीलिंक अपडेट: लाट #LOT-1001 ग्रेड A प्रमाणित। वजन {qty}किग्रा। 30% अग्रिम भुगतान जारी।',
     smsSamplePayment: 'एग्रीलिंक DBT: ₹{amount} आपके बैंक खाते में NPCI e-RUPI द्वारा सीधे जमा कर दिए गए हैं।',
+  },
+
+  te: {
+    appName: 'అగ్రిలింక్',
+    tagline: 'రైతు పొలం నుండి నేరుగా మార్కెట్‌కు',
+    goodMorning: 'శుభోదయం',
+    roleCoordinator: 'సమన్వయకర్త (కోఆర్డినేటర్)',
+    roleBuyer: 'సంస్థాగత కొనుగోలుదారు',
+    roleFarmer: 'రైతు మిత్రుడు',
+    viewAs: 'పాత్రను ఎంచుకోండి',
+    signOut: 'లాగ్ అవుట్',
+    refresh: 'డేటా రిఫ్రెష్ చేయండి',
+    notifications: 'కార్యకలాపాలు & అలర్ట్‌లు',
+    newOrder: 'కొత్త ఆర్డర్',
+    resetSeed: 'డేటా రీసెట్',
+    teamAccess: 'బృందం & అనుమతులు',
+    language: 'భాష',
+
+    navOverview: 'సమీక్ష (Overview)',
+    navOrders: 'ఆర్డర్లు (Orders)',
+    navFarmerNetwork: 'రైతు నెట్‌వర్క్',
+    navCollectionGrade: 'సేకరణ & గ్రేడింగ్',
+    navRoutes: 'వాహన మార్గాలు (Routes)',
+    navSettlements: 'చెల్లింపుల పరిష్కారం',
+
+    titleOverview: 'కోతకు ముందే కొనుగోలుదారు ఒప్పందం.',
+    titleOrders: 'పంట కోతకు ముందు పక్కా ఆర్డర్ ఒప్పందం.',
+    titleFarmerNetwork: 'నమోదిత రైతుల క్రియాశీల నెట్‌వర్క్.',
+    titleCollectionGrade: 'సేకరణ కేంద్రం వద్ద ఖచ్చితమైన నాణ్యతా ప్రమాణాలు.',
+    titleRoutes: 'ప్రతి లాట్ కోసం అత్యుత్తమ రవాణా మార్గం.',
+    titleSettlements: 'పారదర్శక మరియు తక్షణ బ్యాంక్ చెల్లింపులు.',
+
+    statActiveOrderValue: 'క్రియాశీల ఆర్డర్ విలువ',
+    statCommittedVolume: 'రైతులు అంగీకరించిన పంట పరిమాణం',
+    statFarmerRealised: 'రైతుకు లభించిన నికర ధర',
+    statPilotVolume: 'పైలట్ పరిమాణం',
+    statBuffer: '15% అదనపు రక్షణ బఫర్',
+    statIntermediaryMargin: 'మధ్యవర్తుల కమీషన్ 42% తగ్గింది',
+
+    actionNotifyFarmers: 'రైతులకు సమాచారం పంపండి',
+    actionFarmersNotified: 'సమాచారం పంపబడింది',
+    actionPostOrder: 'రిజిస్ట్రీలో ఆర్డర్ నమోదు చేయండి',
+    actionExportManifest: 'రవాణా జాబితా డౌన్‌లోడ్ (CSV)',
+    actionExportLedger: 'లెడ్జర్ డౌన్‌లోడ్ (CSV)',
+    actionExportRoster: 'రైతుల జాబితా డౌన్‌లోడ్ (CSV)',
+    actionExportOrder: 'ఆర్డర్ ఒప్పందం డౌన్‌లోడ్ (CSV)',
+    actionPrintInvoice: 'APMC ఇన్‌వాయిస్ ప్రింట్ (PDF)',
+    actionPrintWaybill: 'రవాణా బిల్లు ప్రింట్ (PDF)',
+    actionDispatch: 'వాహనం బయలుదేరనీయండి (₹1,200)',
+    actionConfirmDelivery: 'డెలివరీ నిర్ధారణ & చెల్లింపు',
+    actionAcceptLot: 'లాట్ ఆమోదించి 30% ముందస్తు చెల్లించండి',
+
+    smsPreviewTitle: 'రైతు SMS / వాట్సాప్ ప్రివ్యూ (తెలుగు)',
+    smsSampleOrder: 'అగ్రిలింక్ అలర్ట్: {crop} కోసం కొనుగోలుదారు ఒప్పందం ఖరారైంది. ధర: ₹{price}/కిలో. {qty}కిలో ఇవ్వడానికి 1 అని రిప్లై ఇవ్వండి.',
+    smsSampleLot: 'అగ్రిలింక్ అప్‌డేట్: లాట్ #LOT-1001 గ్రేడ్ A ధృవీకరించబడింది. బరువు {qty}కిలో. అడ్వాన్స్ చెల్లింపు జరుగుతోంది.',
+    smsSamplePayment: 'అగ్రిలింక్ DBT: లాట్ #LOT-1001 కోసం NPCI e-RUPI ద్వారా ₹{amount} మీ బ్యాంక్ ఖాతాలో జమ చేయబడింది.',
   },
 
   gu: {

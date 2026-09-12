@@ -732,13 +732,13 @@ export function AgriLinkDashboard({
                 हिं
               </button>
               <button
-                onClick={() => setLang('gu')}
+                onClick={() => setLang('te')}
                 className={`rounded-full px-2 py-1 text-[11px] font-sans transition-colors ${
-                  lang === 'gu' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                  lang === 'te' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
-                title="ગુજરાતી (Gujarati)"
+                title="తెలుగు (Telugu)"
               >
-                ગુ
+                తె
               </button>
             </div>
 
@@ -1949,7 +1949,7 @@ function Network({ notified, onNotify, busy, t, order }: any) {
             &quot;{smsMessage}&quot;
           </p>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Transmitted via GSM SMS, IVR audio dialer, and WhatsApp Business API in English, Hindi, and Gujarati.
+            Transmitted via GSM SMS, IVR audio dialer, and WhatsApp Business API in English, Hindi, and Telugu.
           </p>
         </div>
       </Card>
