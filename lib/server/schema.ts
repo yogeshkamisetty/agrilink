@@ -18,6 +18,21 @@ create table if not exists agrilink.meta (
   value text not null
 );
 
+create table if not exists agrilink.user_accounts (
+  id uuid primary key default gen_random_uuid(),
+  phone text not null unique,
+  full_name text not null,
+  role text not null check (role in ('farmer', 'buyer', 'admin')),
+  pin_hash text not null,
+  salt text not null,
+  verification_status text not null default 'verified',
+  onboarding_complete boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  last_login_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists user_accounts_phone on agrilink.user_accounts (phone);
+
 create table if not exists agrilink.fpos (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -35,7 +50,7 @@ create table if not exists agrilink.farmers (
   fpo_id uuid not null references agrilink.fpos(id),
   name text not null,
   phone text not null,
-  language text not null check (language in ('en', 'hi', 'gu')),
+  language text not null check (language in ('en', 'hi', 'te', 'gu')),
   land_hectares numeric(5, 2) not null check (land_hectares > 0),
   village text not null,
   lat double precision not null,

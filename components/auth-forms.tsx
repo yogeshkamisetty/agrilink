@@ -3,14 +3,14 @@
 import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Eye, EyeOff, Loader2, Lock, ShieldCheck, Sparkles, Sprout, User, Users } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, Lock, ShieldCheck, ShoppingCart, Sprout, User, Users } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 
 export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const router = useRouter()
   const newUser = mode === 'signup'
 
-  // Form states
+  // Form inputs
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
@@ -22,15 +22,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
   // UX & async states
   const [busy, setBusy] = useState(false)
-  const [quickBusyRole, setQuickBusyRole] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [recognizedUser, setRecognizedUser] = useState<{ fullName: string | null; role: string | null; verificationStatus: string } | null>(null)
   const [checkingPhone, setCheckingPhone] = useState(false)
 
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
 
-  // Real-time phone lookup
+  // Real-time phone lookup from the database
   const handlePhoneChange = async (val: string) => {
     const clean = val.replace(/\D/g, '').slice(0, 10)
     setPhone(clean)
@@ -55,11 +53,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     }
   }
 
-  // Handle successful session storage and redirection
+  // Handle successful session storage and role-specific redirection
   const handleAuthSuccess = async (data: any, fallbackRole: string, phoneUsed: string) => {
     const userRole = data.profile?.role || data.user?.role || fallbackRole || 'farmer'
     const mappedRole = userRole === 'farmer' ? 'Farmer' : userRole === 'buyer' ? 'Buyer' : 'Coordinator'
-    const userName = data.profile?.full_name || data.user?.fullName || data.user?.name || (mappedRole === 'Farmer' ? 'Ramesh Kumar' : mappedRole === 'Buyer' ? 'Meera Patel' : 'Anita Sharma')
+    const userName = data.profile?.full_name || data.user?.fullName || data.user?.name || fullName.trim() || 'AgriLink Member'
 
     if (typeof window !== 'undefined') {
       try {
@@ -86,28 +84,6 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
     const destination = data.redirectUrl || (userRole === 'admin' ? '/admin' : '/portal')
     router.replace(destination)
-  }
-
-  // 1-Click Quick Demo Login for Evaluators and Jury
-  async function handleQuickDemo(role: 'farmer' | 'buyer' | 'admin') {
-    setQuickBusyRole(role)
-    setError('')
-    try {
-      const res = await fetch('/api/auth/otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'quick_demo', role }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        throw new Error(data.error || 'Unable to sign in to demo persona.')
-      }
-      const demoPhone = role === 'farmer' ? '9825144102' : role === 'buyer' ? '9825277103' : '9825000000'
-      await handleAuthSuccess(data, role, demoPhone)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Quick login failed.')
-      setQuickBusyRole(null)
-    }
   }
 
   // Handle standard MPIN Login
@@ -137,7 +113,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
       const data = await res.json()
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'Login failed. Please check your details.')
+        throw new Error(data.error || 'Login failed. Please check your credentials.')
       }
 
       await handleAuthSuccess(data, recognizedUser?.role || 'farmer', normalPhone)
@@ -147,7 +123,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     }
   }
 
-  // Handle new user registration
+  // Handle new user registration (farmers, buyers, admins)
   async function handleSignup(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
@@ -156,7 +132,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
     try {
       if (!fullName.trim() || fullName.trim().length < 2) {
-        throw new Error('Please enter your full name.')
+        throw new Error('Please enter your full name or organisation name.')
       }
 
       if (!/^[6-9]\d{9}$/.test(normalPhone)) {
@@ -204,6 +180,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     }
   }
 
+  // Quick fill helper for evaluator convenience
+  function fillDemoCredentials(p: string, roleName: string) {
+    setPhone(p)
+    setPin('1234')
+    handlePhoneChange(p)
+  }
+
   return (
     <main className="grid min-h-screen place-items-center bg-background p-4 sm:p-6">
       <section className="w-full max-w-md rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm">
@@ -216,94 +199,29 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             AgriLink
           </Link>
           <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-            Zero-API Instant Login
+            Universal Access
           </span>
         </div>
 
         <p className="mt-6 text-xs font-semibold uppercase tracking-[.2em] text-primary">
-          {newUser ? 'New Registration' : 'Welcome back'}
+          {newUser ? 'Farmer & Buyer Registration' : 'Member Sign In'}
         </p>
         <h1 className="mt-1 font-serif text-2xl sm:text-3xl">
           {newUser ? 'Create your AgriLink account' : 'Sign in with Mobile & MPIN'}
         </h1>
         <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-muted-foreground">
           {newUser
-            ? 'Free self-hosted registration. Set your 4-digit security PIN to access your workspace.'
-            : 'Enter your 10-digit mobile number and 4-digit PIN. No external SMS APIs needed.'}
+            ? 'Open to all farmers, institutional buyers, and cooperatives across India. Zero SMS wait times.'
+            : 'Enter your 10-digit mobile number and 4-digit security MPIN to enter your portal.'}
         </p>
 
-        {/* 1-Click Quick Demo Access Bar (Prominent for Hackathons / Reviewers) */}
-        {!newUser && (
-          <div className="mt-5 rounded-2xl border border-border bg-secondary/40 p-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Sparkles className="size-3.5 text-amber-500" />
-                1-Click Quick Demo Access
-              </span>
-              <span className="text-[10px] text-muted-foreground font-mono">For Evaluators</span>
-            </div>
-            <p className="mt-1 text-[11px] text-muted-foreground leading-snug">
-              Instant login into pre-configured role workspaces with zero typing:
-            </p>
-            <div className="mt-2.5 grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                disabled={Boolean(quickBusyRole) || busy}
-                onClick={() => handleQuickDemo('farmer')}
-                className="flex flex-col items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2 text-center hover:bg-emerald-500/20 transition-all disabled:opacity-50"
-              >
-                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                  {quickBusyRole === 'farmer' ? <Loader2 className="size-3.5 animate-spin mx-auto" /> : '🌾 Farmer'}
-                </span>
-                <span className="text-[10px] text-emerald-800/80 dark:text-emerald-300/80 truncate w-full">Ramesh</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={Boolean(quickBusyRole) || busy}
-                onClick={() => handleQuickDemo('buyer')}
-                className="flex flex-col items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 p-2 text-center hover:bg-sky-500/20 transition-all disabled:opacity-50"
-              >
-                <span className="text-xs font-bold text-sky-700 dark:text-sky-300">
-                  {quickBusyRole === 'buyer' ? <Loader2 className="size-3.5 animate-spin mx-auto" /> : '🛒 Buyer'}
-                </span>
-                <span className="text-[10px] text-sky-800/80 dark:text-sky-300/80 truncate w-full">Meera</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={Boolean(quickBusyRole) || busy}
-                onClick={() => handleQuickDemo('admin')}
-                className="flex flex-col items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/10 p-2 text-center hover:bg-purple-500/20 transition-all disabled:opacity-50"
-              >
-                <span className="text-xs font-bold text-purple-700 dark:text-purple-300">
-                  {quickBusyRole === 'admin' ? <Loader2 className="size-3.5 animate-spin mx-auto" /> : '🏢 FPO Admin'}
-                </span>
-                <span className="text-[10px] text-purple-800/80 dark:text-purple-300/80 truncate w-full">Anita</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Divider */}
-        {!newUser && (
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-2 text-muted-foreground">Or sign in with your phone</span>
-            </div>
-          </div>
-        )}
-
         {/* Form: Login or Signup */}
-        <form onSubmit={newUser ? handleSignup : handleLogin} className="space-y-4">
+        <form onSubmit={newUser ? handleSignup : handleLogin} className="mt-6 space-y-4">
           {/* Signup specific: Full Name */}
           {newUser && (
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Full Name
+                {selectedRole === 'buyer' ? 'Organisation / Buyer Name' : 'Full Name'}
               </label>
               <div className="mt-1.5 flex rounded-xl border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
                 <span className="flex items-center pl-3.5 text-muted-foreground">
@@ -314,7 +232,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Ramesh Kumar Patel"
+                  placeholder={selectedRole === 'buyer' ? 'e.g. PM POSHAN Kitchen / Apex Foods' : 'e.g. Rameshbhai Patel'}
                   className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2.5 text-sm outline-none"
                 />
               </div>
@@ -325,7 +243,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           {newUser && (
             <div className="space-y-2">
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Select Your Role
+                Account Type
               </label>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -333,35 +251,35 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                   onClick={() => setSelectedRole('farmer')}
                   className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
                     selectedRole === 'farmer'
-                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">Farmer</span>
-                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Crops & Payouts</span>
+                  <span className="text-xs font-bold">🌾 Farmer</span>
+                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Sell Produce</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedRole('buyer')}
                   className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
                     selectedRole === 'buyer'
-                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">Buyer</span>
-                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Procurement</span>
+                  <span className="text-xs font-bold">🛒 Buyer</span>
+                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Procure Food</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedRole('admin')}
                   className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
                     selectedRole === 'admin'
-                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
+                      ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">FPO Admin</span>
+                  <span className="text-xs font-bold">🏢 FPO Admin</span>
                   <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Coordinator</span>
                 </button>
               </div>
@@ -384,14 +302,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                   </label>
                   {passcodeError && <p className="text-[11px] text-destructive font-medium">{passcodeError}</p>}
                   <p className="text-[10px] text-muted-foreground">
-                    Coordinator access is restricted to authorized FPO federation staff.
+                    FPO Lead access requires authorization by the district cooperative federation.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* Mobile Number */}
+          {/* Mobile Number Field */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Mobile Number
@@ -413,7 +331,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           {/* Real-time Phone Recognition Card */}
           {checkingPhone && (
             <p className="text-xs text-muted-foreground flex items-center gap-1.5 animate-pulse">
-              <Loader2 className="size-3 animate-spin" /> Verifying account in database…
+              <Loader2 className="size-3 animate-spin" /> Verifying member record in database…
             </p>
           )}
 
@@ -425,21 +343,21 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-xs text-emerald-950 dark:text-emerald-100 truncate">
-                    {recognizedUser.fullName || 'Registered User'}
+                    {recognizedUser.fullName || 'Registered Member'}
                   </span>
                   <span className="inline-flex items-center rounded-full bg-emerald-600/20 px-2 py-0.2 text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
                     {recognizedUser.role}
                   </span>
                 </div>
                 <p className="text-[10px] text-emerald-800/80 dark:text-emerald-300/80">
-                  Recognized · Enter your 4-digit MPIN below
+                  Recognized from registry · Enter your 4-digit MPIN
                 </p>
               </div>
               <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
             </div>
           )}
 
-          {/* 4-Digit MPIN Field */}
+          {/* 4-Digit Security MPIN Field */}
           <div>
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -465,15 +383,10 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 required
                 value={pin}
                 onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder={newUser ? 'Enter 4-digit PIN (e.g. 1234)' : '4-digit MPIN (Default: 1234)'}
+                placeholder={newUser ? 'Set 4-digit PIN (e.g. 1234)' : 'Enter 4-digit MPIN'}
                 className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2.5 text-sm font-mono tracking-widest outline-none"
               />
             </div>
-            {!newUser && (
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Tip: Default MPIN for pre-seeded accounts is <span className="font-mono font-bold text-foreground">1234</span>.
-              </p>
-            )}
           </div>
 
           {/* Signup specific: Confirm MPIN */}
@@ -503,7 +416,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           {/* Action Submit Button */}
           <button
             type="submit"
-            disabled={busy || Boolean(quickBusyRole)}
+            disabled={busy}
             className="w-full rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60 shadow-xs hover:bg-primary/95 transition-colors"
           >
             {busy && <Loader2 className="mr-2 inline size-4 animate-spin" />}
@@ -518,17 +431,47 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </p>
         )}
 
+        {/* Quick Testing / Evaluator Reference (Subtle Helper) */}
+        {!newUser && (
+          <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-2.5 text-[11px] text-muted-foreground">
+            <span className="font-semibold text-foreground">Quick Test Credentials (PIN: 1234):</span>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => fillDemoCredentials('9825144102', 'Farmer')}
+                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+              >
+                Farmer: 9825144102
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemoCredentials('9825277103', 'Buyer')}
+                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+              >
+                Buyer: 9825277103
+              </button>
+              <button
+                type="button"
+                onClick={() => fillDemoCredentials('9825000000', 'Coordinator')}
+                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+              >
+                Admin: 9825000000
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Security badge */}
-        <div className="mt-5 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
+        <div className="mt-4 flex items-start gap-2 rounded-xl bg-muted/60 p-3 text-xs leading-5 text-muted-foreground">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
           <span>
-            Self-hosted authentication with PBKDF2 encryption. Zero external SMS API dependencies.
+            Database-backed PBKDF2 encryption. Supports unlimited farmers and buyers with zero third-party API dependencies.
           </span>
         </div>
 
-        {/* Navigation link */}
+        {/* Navigation toggle */}
         <p className="mt-4 text-center text-xs sm:text-sm text-muted-foreground">
-          {newUser ? 'Already registered?' : 'New to AgriLink?'}{' '}
+          {newUser ? 'Already registered?' : 'New farmer or buyer?'}{' '}
           <Link className="font-semibold text-primary hover:underline" href={newUser ? '/login' : '/signup'}>
             {newUser ? 'Sign in with MPIN' : 'Create new account'}
           </Link>

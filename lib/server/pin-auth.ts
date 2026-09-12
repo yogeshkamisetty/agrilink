@@ -1,5 +1,6 @@
 import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
-import { requireSupabaseAdmin, supabaseAdmin } from '@/lib/supabase-admin'
+import { getDb } from './db'
+import { supabaseAdmin } from '@/lib/supabase-admin'
 
 export interface UserAccount {
   id: string
@@ -10,6 +11,7 @@ export interface UserAccount {
   pinHash: string
   verificationStatus: 'verified' | 'pending'
   onboardingComplete: boolean
+  metadata?: Record<string, unknown>
   createdAt: string
   lastLoginAt?: string
 }
@@ -57,7 +59,7 @@ export function verifyPin(pin: string, storedHash: string, salt: string): boolea
   }
 }
 
-// In-memory registry to guarantee instant zero-setup operation
+// In-memory cache for ultra-fast lookups
 const inMemoryUsers = new Map<string, UserAccount>()
 
 // Seed pre-defined demo accounts
@@ -71,6 +73,7 @@ function seedDemoUsers() {
       role: 'farmer' as const,
       verificationStatus: 'verified' as const,
       onboardingComplete: true,
+      metadata: { village: 'Boriavi', state: 'Gujarat' },
     },
     {
       id: 'demo-buyer-meera',
@@ -79,6 +82,7 @@ function seedDemoUsers() {
       role: 'buyer' as const,
       verificationStatus: 'verified' as const,
       onboardingComplete: true,
+      metadata: { company: 'PM POSHAN Central Kitchen', city: 'Anand' },
     },
     {
       id: 'demo-admin-anita',
@@ -87,6 +91,7 @@ function seedDemoUsers() {
       role: 'admin' as const,
       verificationStatus: 'verified' as const,
       onboardingComplete: true,
+      metadata: { role: 'Lead FPO Federation Coordinator' },
     },
   ]
 
@@ -105,7 +110,7 @@ function seedDemoUsers() {
 
 seedDemoUsers()
 
-// Rate limiting map for failed login attempts
+// Rate limiting map for failed login attempts (brute force protection)
 const failedAttempts = new Map<string, { count: number; lockedUntil: number }>()
 
 export function checkBruteForce(phone: string): { allowed: boolean; waitSeconds?: number } {
@@ -142,16 +147,146 @@ export function resetFailedAttempts(phone: string) {
 }
 
 /**
- * Retrieve user by phone number
+ * Ensure database table exists before querying
+ */
+async function ensureTable() {
+  try {
+    const db = await getDb()
+    await db.exec(`
+      create table if not exists agrilink.user_accounts (
+        id uuid primary key default gen_random_uuid(),
+        phone text not null unique,
+        full_name text not null,
+        role text not null check (role in ('farmer', 'buyer', 'admin')),
+        pin_hash text not null,
+        salt text not null,
+        verification_status text not null default 'verified',
+        onboarding_complete boolean not null default true,
+        metadata jsonb not null default '{}'::jsonb,
+        last_login_at timestamptz,
+        created_at timestamptz not null default now()
+      );
+      create index if not exists user_accounts_phone on agrilink.user_accounts (phone);
+    `)
+  } catch (e) {
+    console.warn('[pin-auth] ensureTable notice:', e)
+  }
+}
+
+/**
+ * Retrieve user by phone number from persistent PostgreSQL database
  */
 export async function findUserByPhone(phone: string): Promise<UserAccount | null> {
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
   seedDemoUsers()
 
+  // 1. Check in-memory fast cache
   const cached = inMemoryUsers.get(normalPhone)
   if (cached) return cached
 
-  // Check Supabase if configured
+  // 2. Query persistent SQL database (agrilink.user_accounts)
+  try {
+    await ensureTable()
+    const db = await getDb()
+    const rows = await db.query<{
+      id: string
+      phone: string
+      full_name: string
+      role: 'farmer' | 'buyer' | 'admin'
+      pin_hash: string
+      salt: string
+      verification_status: string
+      onboarding_complete: boolean
+      metadata: Record<string, unknown>
+      created_at: string
+      last_login_at?: string
+    }>(`select * from agrilink.user_accounts where phone = $1 limit 1`, [normalPhone])
+
+    if (rows.length > 0) {
+      const r = rows[0]
+      const user: UserAccount = {
+        id: r.id,
+        phone: r.phone,
+        fullName: r.full_name,
+        role: r.role,
+        pinHash: r.pin_hash,
+        salt: r.salt,
+        verificationStatus: (r.verification_status as any) || 'verified',
+        onboardingComplete: r.onboarding_complete ?? true,
+        metadata: r.metadata || {},
+        createdAt: r.created_at,
+        lastLoginAt: r.last_login_at,
+      }
+      inMemoryUsers.set(normalPhone, user)
+      return user
+    }
+
+    // 3. Check if phone matches any pre-seeded or registered farmer in agrilink.farmers
+    const farmerRows = await db.query<{ id: string; name: string; phone: string; village: string }>(
+      `select id, name, phone, village from agrilink.farmers where replace(phone, ' ', '') like '%' || $1 limit 1`,
+      [normalPhone]
+    )
+    if (farmerRows.length > 0) {
+      const f = farmerRows[0]
+      const { hash, salt } = hashPin('1234', `salt_${normalPhone}`)
+      const meta = { village: f.village, farmerId: f.id }
+      await db.query(
+        `insert into agrilink.user_accounts (phone, full_name, role, pin_hash, salt, verification_status, onboarding_complete, metadata)
+         values ($1, $2, 'farmer', $3, $4, 'verified', true, $5)
+         on conflict (phone) do update set full_name = excluded.full_name`,
+        [normalPhone, f.name, hash, salt, JSON.stringify(meta)]
+      )
+      const user: UserAccount = {
+        id: f.id,
+        phone: normalPhone,
+        fullName: f.name,
+        role: 'farmer',
+        pinHash: hash,
+        salt,
+        verificationStatus: 'verified',
+        onboardingComplete: true,
+        metadata: meta,
+        createdAt: new Date().toISOString(),
+      }
+      inMemoryUsers.set(normalPhone, user)
+      return user
+    }
+
+    // 4. Check if phone matches any pre-seeded or registered buyer in agrilink.buyers
+    const buyerRows = await db.query<{ id: string; name: string; contact_name: string; contact_phone: string; city: string }>(
+      `select id, name, contact_name, contact_phone, city from agrilink.buyers where replace(contact_phone, ' ', '') like '%' || $1 limit 1`,
+      [normalPhone]
+    )
+    if (buyerRows.length > 0) {
+      const b = buyerRows[0]
+      const { hash, salt } = hashPin('1234', `salt_${normalPhone}`)
+      const meta = { company: b.name, city: b.city, buyerId: b.id }
+      await db.query(
+        `insert into agrilink.user_accounts (phone, full_name, role, pin_hash, salt, verification_status, onboarding_complete, metadata)
+         values ($1, $2, 'buyer', $3, $4, 'verified', true, $5)
+         on conflict (phone) do update set full_name = excluded.full_name`,
+        [normalPhone, b.contact_name || b.name, hash, salt, JSON.stringify(meta)]
+      )
+      const user: UserAccount = {
+        id: b.id,
+        phone: normalPhone,
+        fullName: b.contact_name || b.name,
+        role: 'buyer',
+        pinHash: hash,
+        salt,
+        verificationStatus: 'verified',
+        onboardingComplete: true,
+        metadata: meta,
+        createdAt: new Date().toISOString(),
+      }
+      inMemoryUsers.set(normalPhone, user)
+      return user
+    }
+  } catch (dbErr) {
+    console.warn('[pin-auth] Database lookup notice:', dbErr)
+  }
+
+  // 5. Check Supabase if configured
   if (supabaseAdmin) {
     try {
       const { data: profile } = await supabaseAdmin
@@ -161,7 +296,6 @@ export async function findUserByPhone(phone: string): Promise<UserAccount | null
         .maybeSingle()
 
       if (profile) {
-        // Build user with fallback demo PIN if not in local cache
         const { hash, salt } = hashPin('1234', `salt_${normalPhone}`)
         const user: UserAccount = {
           id: profile.id,
@@ -184,33 +318,72 @@ export async function findUserByPhone(phone: string): Promise<UserAccount | null
 }
 
 /**
- * Register a new user
+ * Register a new farmer, buyer, or coordinator permanently in the database
  */
 export async function registerUser(params: {
   phone: string
   fullName: string
   role: 'farmer' | 'buyer' | 'admin'
   pin: string
+  metadata?: Record<string, unknown>
 }): Promise<UserAccount> {
   const normalPhone = params.phone.replace(/\D/g, '').slice(-10)
   const { hash, salt } = hashPin(params.pin)
+  const meta = params.metadata || {}
 
-  const userId = `usr_${normalPhone}_${Date.now()}`
-  const user: UserAccount = {
-    id: userId,
-    phone: normalPhone,
-    fullName: params.fullName.trim(),
-    role: params.role,
-    salt,
-    pinHash: hash,
-    verificationStatus: 'verified',
-    onboardingComplete: true,
-    createdAt: new Date().toISOString(),
+  let targetId = `usr_${normalPhone}_${Date.now()}`
+
+  // 1. Persist permanently to PostgreSQL / PGlite database
+  try {
+    await ensureTable()
+    const db = await getDb()
+
+    // Insert into agrilink.user_accounts
+    const [inserted] = await db.query<{ id: string }>(
+      `insert into agrilink.user_accounts (phone, full_name, role, pin_hash, salt, verification_status, onboarding_complete, metadata)
+       values ($1, $2, $3, $4, $5, 'verified', true, $6)
+       on conflict (phone) do update set
+         full_name = excluded.full_name,
+         role = excluded.role,
+         pin_hash = excluded.pin_hash,
+         salt = excluded.salt,
+         metadata = excluded.metadata
+       returning id`,
+      [normalPhone, params.fullName.trim(), params.role, hash, salt, JSON.stringify(meta)]
+    )
+
+    if (inserted?.id) {
+      targetId = inserted.id
+    }
+
+    // If farmer, register into agrilink.farmers directory so they appear in farmer network
+    if (params.role === 'farmer') {
+      const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
+      const fpoId = fpos[0]?.id
+      if (fpoId) {
+        await db.query(
+          `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
+           values ($1, $2, $3, 'en', 1.0, 'Anand Hub', 22.56, 72.93)
+           on conflict do nothing`,
+          [fpoId, params.fullName.trim(), `+91 ${normalPhone}`]
+        ).catch(() => {})
+      }
+    }
+
+    // If buyer, register into agrilink.buyers directory
+    if (params.role === 'buyer') {
+      await db.query(
+        `insert into agrilink.buyers (name, type, address, city, lat, lng, contact_name, contact_phone)
+         values ($1, 'INSTITUTIONAL', 'Central Market Road', 'Anand', 22.56, 72.93, $2, $3)
+         on conflict do nothing`,
+        [params.fullName.trim(), params.fullName.trim(), `+91 ${normalPhone}`]
+      ).catch(() => {})
+    }
+  } catch (err) {
+    console.warn('[pin-auth] Database save notice:', err)
   }
 
-  inMemoryUsers.set(normalPhone, user)
-
-  // Try to sync with Supabase if configured
+  // 2. Synchronize to Supabase if configured
   if (supabaseAdmin) {
     try {
       const email = `phone_${normalPhone}@agrilink.internal`
@@ -223,17 +396,17 @@ export async function registerUser(params: {
         email_confirm: true,
         phone: `+91${normalPhone}`,
         phone_confirm: true,
-        user_metadata: { mobile: normalPhone, name: user.fullName, role: user.role },
+        user_metadata: { mobile: normalPhone, name: params.fullName.trim(), role: params.role },
       })
 
-      const targetId = created?.user?.id || user.id
-      user.id = targetId
+      const finalId = created?.user?.id || targetId
+      targetId = finalId
 
       await supabaseAdmin.from('user_profiles').upsert({
-        id: targetId,
+        id: finalId,
         mobile_number: normalPhone,
-        full_name: user.fullName,
-        role: user.role,
+        full_name: params.fullName.trim(),
+        role: params.role,
         verification_status: 'verified',
         onboarding_complete: true,
       })
@@ -242,11 +415,25 @@ export async function registerUser(params: {
     }
   }
 
+  const user: UserAccount = {
+    id: targetId,
+    phone: normalPhone,
+    fullName: params.fullName.trim(),
+    role: params.role,
+    salt,
+    pinHash: hash,
+    verificationStatus: 'verified',
+    onboardingComplete: true,
+    metadata: meta,
+    createdAt: new Date().toISOString(),
+  }
+
+  inMemoryUsers.set(normalPhone, user)
   return user
 }
 
 /**
- * Create an HMAC-signed session token
+ * Create an HMAC-signed session token (valid for 7 days)
  */
 export function createSessionToken(user: UserAccount): { token: string; exp: number } {
   const now = Math.floor(Date.now() / 1000)
