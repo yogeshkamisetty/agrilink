@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useAgriLink } from '@/lib/hooks/use-agrilink'
 import {
-  AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Boxes, Camera, Check, CheckCircle2, ChevronDown, ChevronRight,
-  CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, LogOut, MapPin, Menu, PackageCheck,
-  Pencil, Phone, Plus, Printer, Receipt, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Truck, Users, Wallet, Wheat, X
+  AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Boxes, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight,
+  CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, Layers, LogOut, MapPin, Menu, MessageSquare, Mic, PackageCheck,
+  Pencil, Phone, PhoneCall, Plus, Printer, Receipt, Recycle, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Star, Truck, Users, UtensilsCrossed, Volume2, Wallet, Wheat, X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { GradeCamCamera } from './gradecam-camera'
@@ -15,6 +15,10 @@ import { PrintableReceiptModal, DocumentType } from './printable-receipt-modal'
 import { TeamManagementModal } from './team-management-modal'
 import { DeclareHarvestModal } from './declare-harvest-modal'
 import { OnboardFarmerModal } from './onboard-farmer-modal'
+import { SmartAggregationCard } from './aggregation-engine-card'
+import { ExcessRedistributionModal } from './excess-redistribution-modal'
+import { CommunityDemandModal } from './community-demand-modal'
+import { VoiceAssistantModal } from './voice-assistant-modal'
 import { getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -258,11 +262,12 @@ function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?:
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <section className={`rounded-2xl border border-border bg-card ${className}`}>{children}</section>
 }
-function Button({ children, onClick, variant = 'primary', disabled = false, className = '' }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'ghost'; disabled?: boolean; className?: string }) {
+function Button({ children, onClick, variant = 'primary', disabled = false, className = '', title }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'ghost'; disabled?: boolean; className?: string; title?: string }) {
   return (
     <button
       disabled={disabled}
       onClick={onClick}
+      title={title}
       className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 ${
         variant === 'primary'
           ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
@@ -445,11 +450,16 @@ export function AgriLinkDashboard({
   const [newFarmerCrop, setNewFarmerCrop] = useState('Paddy / Tomato')
   const [newFarmerKg, setNewFarmerKg] = useState('650')
   const [rosterFarmers, setRosterFarmers] = useState([
-    { id: 'FARM-001', name: 'Ramesh Kumar', village: 'Kheda', crop: 'Paddy / Tomato', kg: 500, status: 'Accepted', color: 'bg-primary' },
-    { id: 'FARM-002', name: 'Savitri Devi', village: 'Borsad', crop: 'Paddy / Wheat', kg: 700, status: 'Accepted', color: 'bg-amber-700' },
-    { id: 'FARM-003', name: 'Mohan Lal', village: 'Vasad', crop: 'Paddy', kg: 800, status: 'Accepted', color: 'bg-sky-700' },
-    { id: 'FARM-004', name: 'Lakshmi Bai', village: 'Kheda', crop: 'Paddy / Onion', kg: 300, status: 'Standby', color: 'bg-stone-500' },
+    { id: 'FARM-001', name: 'Ramesh Kumar', village: 'Kheda', crop: 'Paddy / Tomato', kg: 500, status: 'Accepted', reliability: 94, color: 'bg-primary' },
+    { id: 'FARM-002', name: 'Savitri Devi', village: 'Borsad', crop: 'Paddy / Wheat', kg: 700, status: 'Accepted', reliability: 98, color: 'bg-amber-700' },
+    { id: 'FARM-003', name: 'Mohan Lal', village: 'Vasad', crop: 'Paddy', kg: 800, status: 'Accepted', reliability: 91, color: 'bg-sky-700' },
+    { id: 'FARM-004', name: 'Lakshmi Bai', village: 'Kheda', crop: 'Paddy / Onion', kg: 300, status: 'Standby', reliability: 89, color: 'bg-stone-500' },
   ])
+
+  // SIH Feature Modals (Voice Assistant, Excess Redistribution, Community Demand Pool)
+  const [showVoiceModal, setShowVoiceModal] = useState(false)
+  const [showExcessModal, setShowExcessModal] = useState(false)
+  const [showCommunityModal, setShowCommunityModal] = useState(false)
 
   // Listen to open-order events from Crop Availability board
   useEffect(() => {
@@ -666,6 +676,7 @@ export function AgriLinkDashboard({
       crop: newFarmerCrop,
       kg: Number(newFarmerKg) || 500,
       status: 'Standby',
+      reliability: 90,
       color: 'bg-emerald-700',
     }
     setRosterFarmers((prev) => [newEntry, ...prev])
@@ -885,6 +896,16 @@ export function AgriLinkDashboard({
               <span>{t.teamAccess}</span>
             </button>
 
+            {/* Voice-Based Digital Assistant */}
+            <button
+              onClick={() => setShowVoiceModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-primary transition-colors cursor-pointer shadow-xs"
+              title="Open Voice-Based Digital Assistant (Bhashini AI)"
+            >
+              <Mic className="size-3.5 animate-pulse text-primary" />
+              <span className="hidden sm:inline">Voice Assistant</span>
+            </button>
+
             <button onClick={() => refresh()} className="rounded-full p-2 text-muted-foreground hover:bg-secondary" title={t.refresh}>
               <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -1081,6 +1102,7 @@ export function AgriLinkDashboard({
               onDeclareHarvest={() => setShowHarvestModal(true)}
               onFundAdvance={handleFundAdvance}
               onAcceptCommitment={handleAcceptCommitment}
+              onRedistributeExcess={() => setShowExcessModal(true)}
               farmerOfferAccepted={farmerOfferAccepted}
               notified={activeOrder?.status !== 'POSTED'}
               onNotify={handleNotify}
@@ -1159,6 +1181,31 @@ export function AgriLinkDashboard({
           onClose={() => setPrintableModalOpen(false)}
           order={activeOrder}
           buyer={activeBuyer}
+        />
+
+        {/* SIH Innovation Modals */}
+        <VoiceAssistantModal
+          isOpen={showVoiceModal}
+          onClose={() => setShowVoiceModal(false)}
+          userRole={role}
+        />
+        <ExcessRedistributionModal
+          isOpen={showExcessModal}
+          onClose={() => setShowExcessModal(false)}
+          orderCode={activeOrder?.code || 'AG-1001'}
+          crop={activeOrder?.crop || 'Paddy (Rice)'}
+          surplusKg={80}
+          pricePerKg={activeOrder?.pricePerKg || 28}
+          onConfirmRedistribution={(res) => {
+            setActionMessage(`Surplus ${res.qtyKg} kg ${activeOrder?.crop || 'produce'} successfully redirected to ${res.recipientName} at ₹${res.discountedPrice}/kg! Zero waste recorded.`)
+          }}
+        />
+        <CommunityDemandModal
+          isOpen={showCommunityModal}
+          onClose={() => setShowCommunityModal(false)}
+          onSubmitCommunityDemand={(comm) => {
+            setActionMessage(`Community demand for ${comm.qtyKg} kg ${comm.crop} ("${comm.title}") posted! Nearby cluster farmers notified.`)
+          }}
         />
       </main>
     </div>
@@ -1923,6 +1970,7 @@ function Orders({
   onDeclareHarvest,
   onFundAdvance,
   onAcceptCommitment,
+  onRedistributeExcess,
   farmerOfferAccepted,
   notified,
   onNotify,
@@ -1934,181 +1982,209 @@ function Orders({
   const target = order?.qtyTargetKg || 1000
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-      <Card>
-        <div className="border-b border-border p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative size-16 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
-                <img
-                  src={cropImages[crop.toLowerCase()] || '/hero-produce.png'}
-                  alt={crop}
-                  className="size-full object-contain drop-shadow-sm"
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <Badge tone="live">{order?.code || 'Order #AG-1001'}</Badge>
-                  <Badge tone="good">{role === 'Farmer' ? 'Personal Commitment' : 'Aadhaar Verified'}</Badge>
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <Card>
+          <div className="border-b border-border p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="relative size-16 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
+                  <img
+                    src={cropImages[crop.toLowerCase()] || '/hero-produce.png'}
+                    alt={crop}
+                    className="size-full object-contain drop-shadow-sm"
+                  />
                 </div>
-                <h3 className="mt-1.5 font-serif text-2xl font-bold">
-                  {role === 'Farmer' ? `${crop} Sale Contract` : `${crop} · ${buyer?.name || 'School Kitchen'}`}
-                </h3>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {role === 'Farmer'
-                    ? `500 kg committed · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg guaranteed`
-                    : `${target} kg · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg`}
-                </p>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="live">{order?.code || 'Order #AG-1001'}</Badge>
+                    <Badge tone="good">{role === 'Farmer' ? 'Personal Commitment' : 'Aadhaar Verified'}</Badge>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                      <Star className="size-3 fill-amber-500 text-amber-500" />
+                      {buyer?.rating || 4.9} ★ ({buyer?.completedOrders || 24} settled · 0 disputes)
+                    </span>
+                  </div>
+                  <h3 className="mt-1.5 font-serif text-2xl font-bold">
+                    {role === 'Farmer' ? `${crop} Sale Contract` : `${crop} · ${buyer?.name || 'School Kitchen'}`}
+                  </h3>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {role === 'Farmer'
+                      ? `500 kg committed · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg guaranteed`
+                      : `${target} kg · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg`}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {role === 'Buyer' && (
-                <Button onClick={onNew}>
-                  <Plus className="size-4" /> New Order
+              <div className="flex flex-wrap items-center gap-2">
+                {role === 'Buyer' && (
+                  <Button onClick={onNew}>
+                    <Plus className="size-4" /> New Order
+                  </Button>
+                )}
+                {role === 'Farmer' && onDeclareHarvest && (
+                  <Button variant="secondary" onClick={onDeclareHarvest}>
+                    <Sprout className="size-4" /> Declare Harvest
+                  </Button>
+                )}
+                {onRedistributeExcess && (
+                  <Button
+                    variant="secondary"
+                    onClick={onRedistributeExcess}
+                    className="border-emerald-600/30 text-emerald-700 bg-emerald-500/10 hover:bg-emerald-500/20"
+                    title="Route surplus produce to student hostels & local canteens"
+                  >
+                    <Recycle className="size-4" /> Redistribute Surplus
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    downloadCsv(`agrilink-order-${order?.code || 'AG-1001'}.csv`, [
+                      'Order Code',
+                      'Crop',
+                      'Target Volume (kg)',
+                      'Committed Price (INR/kg)',
+                      'Total Order Value (INR)',
+                      'Buyer Name',
+                      'Delivery Date',
+                      'Status',
+                      'Quality Standard',
+                    ], [
+                      [
+                        order?.code || 'AG-1001',
+                        crop,
+                        role === 'Farmer' ? 500 : target,
+                        price,
+                        (role === 'Farmer' ? 500 : target) * price,
+                        buyer?.name || 'PM POSHAN Kitchen',
+                        order?.deliveryDate || '2025-10-20',
+                        order?.status || 'POSTED',
+                        'AGMARKNET Grade A Assured',
+                      ],
+                    ])
+                  }}
+                >
+                  <Download className="size-4" /> {t?.actionExportOrder || 'Export Order (CSV)'}
                 </Button>
-              )}
-              {role === 'Farmer' && onDeclareHarvest && (
-                <Button variant="secondary" onClick={onDeclareHarvest}>
-                  <Sprout className="size-4" /> Declare Harvest
-                </Button>
-              )}
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  downloadCsv(`agrilink-order-${order?.code || 'AG-1001'}.csv`, [
-                    'Order Code',
-                    'Crop',
-                    'Target Volume (kg)',
-                    'Committed Price (INR/kg)',
-                    'Total Order Value (INR)',
-                    'Buyer Name',
-                    'Delivery Date',
-                    'Status',
-                    'Quality Standard',
-                  ], [
-                    [
-                      order?.code || 'AG-1001',
-                      crop,
-                      role === 'Farmer' ? 500 : target,
-                      price,
-                      (role === 'Farmer' ? 500 : target) * price,
-                      buyer?.name || 'PM POSHAN Kitchen',
-                      order?.deliveryDate || '2025-10-20',
-                      order?.status || 'POSTED',
-                      'AGMARKNET Grade A Assured',
-                    ],
-                  ])
-                }}
-              >
-                <Download className="size-4" /> {t?.actionExportOrder || 'Export Order (CSV)'}
-              </Button>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="space-y-4 p-6">
-          {role === 'Farmer' ? (
-            <>
-              {!farmerOfferAccepted ? (
-                <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone="live">New Demand Offer</Badge>
-                        <span className="text-xs font-semibold text-primary">Pre-Harvest Contract</span>
+          <div className="space-y-4 p-6">
+            {role === 'Farmer' ? (
+              <>
+                {!farmerOfferAccepted ? (
+                  <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge tone="live">New Demand Offer</Badge>
+                          <span className="text-xs font-semibold text-primary">Pre-Harvest Contract</span>
+                        </div>
+                        <h4 className="mt-1 font-serif text-lg font-bold">500 kg {crop} · ₹{price}/kg Guaranteed</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          PM POSHAN Kitchen committed demand. Doorstep village collection with 30% advance on bag handover.
+                        </p>
                       </div>
-                      <h4 className="mt-1 font-serif text-lg font-bold">500 kg {crop} · ₹{price}/kg Guaranteed</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        PM POSHAN Kitchen committed demand. Doorstep village collection with 30% advance on bag handover.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button onClick={onAcceptCommitment} disabled={busy}>
-                        <Check className="size-4" /> Accept Commitment
-                      </Button>
-                      {onDeclareHarvest && (
-                        <Button variant="secondary" onClick={onDeclareHarvest}>
-                          <Sprout className="size-4" /> Declare More
+                      <div className="flex items-center gap-2">
+                        <Button onClick={onAcceptCommitment} disabled={busy}>
+                          <Check className="size-4" /> Accept Commitment
                         </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle2 className="size-5 text-emerald-600 shrink-0" />
-                    <div>
-                      <p className="text-xs font-semibold text-emerald-800">Harvest Commitment Confirmed (500 kg)</p>
-                      <p className="text-[11px] text-emerald-700/80">Vernacular WhatsApp and SMS contract details sent to registered mobile.</p>
-                    </div>
-                  </div>
-                  <Badge tone="good">Locked</Badge>
-                </div>
-              )}
-              <Step done={true} title="Demand contract locked" detail="Institutional buyer contract committed before harvest" />
-              <Step done={farmerOfferAccepted} title="Commitment confirmed" detail="Your 500 kg allocation confirmed via WhatsApp / SMS" />
-              <Step done={false} title="Farmgate GradeCam inspection" detail="Visual QC and weight confirmation during pickup" />
-              <Step done={false} title="e-RUPI direct bank payout" detail="Final balance credited directly to bank account upon delivery" />
-            </>
-          ) : role === 'Buyer' ? (
-            <>
-              {order?.status === 'POSTED' && (
-                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone="warn">Escrow Deposit Pending</Badge>
-                        <span className="text-xs font-semibold text-amber-800">15% Security Advance</span>
+                        {onDeclareHarvest && (
+                          <Button variant="secondary" onClick={onDeclareHarvest}>
+                            <Sprout className="size-4" /> Declare More
+                          </Button>
+                        )}
                       </div>
-                      <h4 className="mt-1 font-serif text-lg font-bold">Lock ₹{Math.round(target * price * 0.15).toLocaleString()} Escrow Advance</h4>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Deposit 15% into NPCI digital escrow to unlock farmer cluster harvesting and guaranteed delivery.
-                      </p>
                     </div>
-                    <Button onClick={onFundAdvance} disabled={busy}>
-                      <Wallet className="size-4" /> Deposit Escrow Advance
-                    </Button>
                   </div>
-                </div>
-              )}
-              <Step done={true} title="Purchase demand posted" detail="Contract locked with 15% escrow deposit reserved" />
-              <Step done={order?.status !== 'POSTED'} title="Supply matched & aggregated" detail="1,200 kg committed across verified smallholder clusters" />
-              <Step done={true} title="GradeCam inspection passed" detail="Visual computer vision verified against AGMARKNET Grade A" />
-              <Step done={false} title="Consignment delivery & escrow release" detail="Track delivery in Routes and release payment on drop-off" />
-            </>
-          ) : (
-            <>
-              <Step done={true} title="Demand committed" detail="Buyer contract posted & 15% advance reserved" />
-              <Step
-                done={notified}
-                title="Farmers notified"
-                detail={notified ? 'Four-tier notification cascade completed' : 'Trigger SMS, WhatsApp & IVR to nearby registered farmers'}
-                action={!notified ? <Button onClick={onNotify} disabled={busy}><Send className="size-4" /> Notify</Button> : undefined}
-              />
-              <Step done={false} title="GradeCam inspection" detail="Collection point visual quality assessment" />
-              <Step done={false} title="Delivery inspection" detail="Binding buyer acceptance at drop point" />
-            </>
-          )}
-        </div>
-      </Card>
+                ) : (
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="size-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-800">Harvest Commitment Confirmed (500 kg)</p>
+                        <p className="text-[11px] text-emerald-700/80">Vernacular WhatsApp and SMS contract details sent to registered mobile.</p>
+                      </div>
+                    </div>
+                    <Badge tone="good">Locked</Badge>
+                  </div>
+                )}
+                <Step done={true} title="Demand contract locked" detail="Institutional buyer contract committed before harvest" />
+                <Step done={farmerOfferAccepted} title="Commitment confirmed" detail="Your 500 kg allocation confirmed via WhatsApp / SMS" />
+                <Step done={false} title="Farmgate GradeCam inspection" detail="Visual QC and weight confirmation during pickup" />
+                <Step done={false} title="e-RUPI direct bank payout" detail="Final balance credited directly to bank account upon delivery" />
+              </>
+            ) : role === 'Buyer' ? (
+              <>
+                {order?.status === 'POSTED' && (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge tone="warn">Escrow Deposit Pending</Badge>
+                          <span className="text-xs font-semibold text-amber-800">15% Security Advance</span>
+                        </div>
+                        <h4 className="mt-1 font-serif text-lg font-bold">Lock ₹{Math.round(target * price * 0.15).toLocaleString()} Escrow Advance</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Deposit 15% into NPCI digital escrow to unlock farmer cluster harvesting and guaranteed delivery.
+                        </p>
+                      </div>
+                      <Button onClick={onFundAdvance} disabled={busy}>
+                        <Wallet className="size-4" /> Deposit Escrow Advance
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <Step done={true} title="Purchase demand posted" detail="Contract locked with 15% escrow deposit reserved" />
+                <Step done={order?.status !== 'POSTED'} title="Supply matched & aggregated" detail="1,200 kg committed across verified smallholder clusters" />
+                <Step done={true} title="GradeCam inspection passed" detail="Visual computer vision verified against AGMARKNET Grade A" />
+                <Step done={false} title="Consignment delivery & escrow release" detail="Track delivery in Routes and release payment on drop-off" />
+              </>
+            ) : (
+              <>
+                <Step done={true} title="Demand committed" detail="Buyer contract posted & 15% advance reserved" />
+                <Step
+                  done={notified}
+                  title="Farmers notified"
+                  detail={notified ? 'Four-tier notification cascade completed' : 'Trigger SMS, WhatsApp & IVR to nearby registered farmers'}
+                  action={!notified ? <Button onClick={onNotify} disabled={busy}><Send className="size-4" /> Notify</Button> : undefined}
+                />
+                <Step done={false} title="GradeCam inspection" detail="Collection point visual quality assessment" />
+                <Step done={false} title="Delivery inspection" detail="Binding buyer acceptance at drop point" />
+              </>
+            )}
+          </div>
+        </Card>
 
-      <Card className="p-6">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          {role === 'Farmer' ? 'Contract Protections' : 'Order details'}
-        </p>
-        <h3 className="mt-2 font-serif text-xl font-bold">
-          {role === 'Farmer' ? 'Guaranteed Farmgate Price' : 'Demand before harvest'}
-        </h3>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          {role === 'Farmer'
-            ? 'Your agreed price of ₹28/kg is protected against mandi spot-market crashes. The FPO collection vehicle arrives directly at your village center.'
-            : 'AgriLink matches buyer commitments to smallholder plot harvest windows before produce is picked, cutting transit spoilage to 3.8%.'}
-        </p>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Mini label={role === 'Farmer' ? 'Advance on loading' : 'Buyer type'} value={role === 'Farmer' ? '₹4,200 (30%)' : (buyer?.type || 'Institutional')} />
-          <Mini label={role === 'Farmer' ? 'Net balance payable' : 'Status'} value={role === 'Farmer' ? '₹9,240' : (order?.status || 'POSTED')} />
-        </div>
-      </Card>
+        <Card className="p-6">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {role === 'Farmer' ? 'Contract Protections' : 'Order details'}
+          </p>
+          <h3 className="mt-2 font-serif text-xl font-bold">
+            {role === 'Farmer' ? 'Guaranteed Farmgate Price' : 'Demand before harvest'}
+          </h3>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            {role === 'Farmer'
+              ? 'Your agreed price of ₹28/kg is protected against mandi spot-market crashes. The FPO collection vehicle arrives directly at your village center.'
+              : 'AgriLink matches buyer commitments to smallholder plot harvest windows before produce is picked, cutting transit spoilage to 3.8%.'}
+          </p>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <Mini label={role === 'Farmer' ? 'Advance on loading' : 'Buyer type'} value={role === 'Farmer' ? '₹4,200 (30%)' : (buyer?.type || 'Institutional')} />
+            <Mini label={role === 'Farmer' ? 'Net balance payable' : 'Status'} value={role === 'Farmer' ? '₹9,240' : (order?.status || 'POSTED')} />
+            <Mini label="Buyer Reliability" value={`${buyer?.rating || 4.9} ★ (${buyer?.completedOrders || 24} settled)`} />
+            <Mini label="Dispute History" value={`${buyer?.disputeCount || 0} disputes (Clean)`} />
+          </div>
+        </Card>
+      </div>
+
+      {/* Smart Aggregation Engine (Multi-Smallholder Pooling + Standby Buffer) */}
+      <SmartAggregationCard
+        orderCode={order?.code || 'AG-1001'}
+        crop={crop}
+        targetKg={target}
+        pricePerKg={price}
+        deliveryDate={order?.deliveryDate || '2025-10-20'}
+        buyerName={buyer?.name || 'PM POSHAN Central Kitchen'}
+      />
     </div>
   )
 }
@@ -2129,6 +2205,7 @@ function Step({ done, title, detail, action }: { done: boolean; title: string; d
 }
 
 function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any) {
+  const [cascadeTier, setCascadeTier] = useState<'sms' | 'whatsapp' | 'call'>('sms')
   const crop = order?.crop || 'PADDY'
   const price = order?.pricePerKg || 28
   const smsMessage = (t?.smsSampleOrder || 'AgriLink Alert: Buyer demand committed for {crop}. Price: ₹{price}/kg. Reply 1 to accept {qty}kg.')
@@ -2137,20 +2214,20 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
     .replace('{qty}', '500')
 
   const farmerList = farmers || [
-    { name: 'Ramesh Kumar', village: 'Kheda', crop: 'Paddy / Tomato', kg: 500, status: 'Accepted', color: 'bg-primary' },
-    { name: 'Savitri Devi', village: 'Borsad', crop: 'Paddy / Wheat', kg: 700, status: 'Accepted', color: 'bg-amber-700' },
-    { name: 'Mohan Lal', village: 'Vasad', crop: 'Paddy', kg: 800, status: 'Accepted', color: 'bg-sky-700' },
-    { name: 'Lakshmi Bai', village: 'Kheda', crop: 'Paddy / Onion', kg: 300, status: 'Standby', color: 'bg-stone-500' },
+    { name: 'Ramesh Kumar', village: 'Kheda', crop: 'Paddy / Tomato', kg: 500, status: 'Accepted', reliability: 94, color: 'bg-primary' },
+    { name: 'Savitri Devi', village: 'Borsad', crop: 'Paddy / Wheat', kg: 700, status: 'Accepted', reliability: 98, color: 'bg-amber-700' },
+    { name: 'Mohan Lal', village: 'Vasad', crop: 'Paddy', kg: 800, status: 'Accepted', reliability: 91, color: 'bg-sky-700' },
+    { name: 'Lakshmi Bai', village: 'Kheda', crop: 'Paddy / Onion', kg: 300, status: 'Standby', reliability: 89, color: 'bg-stone-500' },
   ]
   return (
     <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
       <Card>
         <div className="flex flex-col gap-3 border-b border-border p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Crop registry · 12 members</p>
-            <h3 className="mt-1 font-serif text-2xl font-bold">Matched farmers</h3>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Smallholder Cluster · 12 members</p>
+            <h3 className="mt-1 font-serif text-2xl font-bold">Aggregated Farmer Roster</h3>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {onOnboard && (
               <Button onClick={onOnboard}>
                 <Plus className="size-4" /> Onboard Farmer
@@ -2166,16 +2243,17 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
                   'Registered Crops',
                   'Committed Volume (kg)',
                   'Harvest Window',
+                  'Reliability Score',
                   'Commitment Status',
                   'Preferred Channel',
                   'Aadhaar KYC',
                 ], [
-                  ['FARM-001', 'Ramesh Kumar', 'Kheda', 'Paddy / Tomato', '500', '17–19 Oct 2025', 'Accepted', 'SMS + WhatsApp', 'Verified'],
-                  ['FARM-002', 'Savitri Devi', 'Borsad', 'Paddy / Wheat', '700', '17–19 Oct 2025', 'Accepted', 'IVR Voice', 'Verified'],
-                  ['FARM-003', 'Mohan Lal', 'Vasad', 'Paddy', '800', '18–20 Oct 2025', 'Accepted', 'WhatsApp', 'Verified'],
-                  ['FARM-004', 'Lakshmi Bai', 'Kheda', 'Paddy / Onion', '300', '19–21 Oct 2025', 'Standby (15% Buffer)', 'SMS', 'Verified'],
-                  ['FARM-005', 'Dinesh Patel', 'Nadiad', 'Tomato / Chilli', '650', '20–22 Oct 2025', 'Standby', 'IVR Voice', 'Verified'],
-                  ['FARM-006', 'Meenaben Parmar', 'Petlad', 'Potato / Wheat', '900', '21–24 Oct 2025', 'Standby', 'WhatsApp', 'Verified'],
+                  ['FARM-001', 'Ramesh Kumar', 'Kheda', 'Paddy / Tomato', '500', '17–19 Oct 2025', '94% (14 settled)', 'Accepted', 'SMS + WhatsApp', 'Verified'],
+                  ['FARM-002', 'Savitri Devi', 'Borsad', 'Paddy / Wheat', '700', '17–19 Oct 2025', '98% (21 settled)', 'Accepted', 'IVR Voice', 'Verified'],
+                  ['FARM-003', 'Mohan Lal', 'Vasad', 'Paddy', '800', '18–20 Oct 2025', '91% (11 settled)', 'Accepted', 'WhatsApp', 'Verified'],
+                  ['FARM-004', 'Lakshmi Bai', 'Kheda', 'Paddy / Onion', '300', '19–21 Oct 2025', '89% (Standby)', 'Standby (15% Buffer)', 'SMS', 'Verified'],
+                  ['FARM-005', 'Dinesh Patel', 'Nadiad', 'Tomato / Chilli', '650', '20–22 Oct 2025', '92% (Standby)', 'Standby', 'IVR Voice', 'Verified'],
+                  ['FARM-006', 'Meenaben Parmar', 'Petlad', 'Potato / Wheat', '900', '21–24 Oct 2025', '95% (Standby)', 'Standby', 'WhatsApp', 'Verified'],
                 ])
               }}
             >
@@ -2188,7 +2266,7 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
                 </>
               ) : (
                 <>
-                  <Send className="size-4" /> {t?.actionNotifyFarmers || 'Notify matched'}
+                  <Send className="size-4" /> {t?.actionNotifyFarmers || 'Trigger cascade'}
                 </>
               )}
             </Button>
@@ -2200,11 +2278,17 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
               <div className={`flex size-10 items-center justify-center rounded-full ${farmer.color} font-mono text-xs font-bold text-primary-foreground`}>
                 {farmer.name.split(' ').map((n: string) => n[0]).join('')}
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold">{farmer.name}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{farmer.village} · {farmer.crop} · harvest window 17–19 Oct</p>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold">{farmer.name}</p>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                    <Star className="size-2.5 fill-emerald-600 text-emerald-600" />
+                    {farmer.reliability || 94}% Reliability
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground truncate">{farmer.village} · {farmer.crop} · harvest window 17–19 Oct</p>
               </div>
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className="font-mono text-sm font-semibold">{farmer.kg} kg</p>
                 <Badge tone={farmer.status === 'Standby' ? 'warn' : 'good'}>{farmer.status}</Badge>
               </div>
@@ -2212,31 +2296,151 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
           ))}
         </div>
       </Card>
+
       <Card className="p-6 flex flex-col justify-between">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Matching engine</p>
-          <h3 className="mt-2 font-serif text-xl font-bold">115% commitment cascade</h3>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Commitments accumulate to 115% of buyer demand. The extra 15% forms a standby buffer so buyers never face shortfalls.
-          </p>
-        </div>
-
-        {/* Vernacular Broadcast Preview (Bhashini AI / SMS) */}
-        <div className="mt-6 rounded-2xl border border-primary/20 bg-primary/5 p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="flex size-2 rounded-full bg-primary animate-pulse" />
-              <p className="font-mono text-[10px] uppercase tracking-wider text-primary font-semibold">
-                {t?.smsPreviewTitle || 'Vernacular SMS Broadcast Preview'}
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Notification Engine</p>
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+              Bhashini + GSM Protocol
+            </span>
+          </div>
+          <h3 className="mt-2 font-serif text-xl font-bold">Multi-Channel Alert Cascade</h3>
+          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+            Escalates automatically across channels until smallholders confirm harvest commitments:
+          </p>
+
+          {/* Cascade Tier Selector Tabs */}
+          <div className="mt-4 flex rounded-xl bg-secondary/80 p-1 text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setCascadeTier('sms')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+                cascadeTier === 'sms' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Smartphone className="size-3.5" />
+              <span>1. GSM SMS</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCascadeTier('whatsapp')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+                cascadeTier === 'whatsapp' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MessageSquare className="size-3.5 text-emerald-600" />
+              <span>2. WhatsApp</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCascadeTier('call')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+                cascadeTier === 'call' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <PhoneCall className="size-3.5 text-primary" />
+              <span>3. AI Voice Call</span>
+            </button>
+          </div>
+
+          {/* Tier Content */}
+          {cascadeTier === 'sms' && (
+            <div className="mt-4 rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[11px] font-semibold text-primary">SMS (Sender: VM-AGRILK)</span>
+                <span className="text-[10px] text-muted-foreground">99.8% Feature Phone Delivery</span>
+              </div>
+              <div className="rounded-xl border border-border bg-card p-3 font-mono text-xs leading-relaxed text-foreground shadow-inner">
+                {smsMessage}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                T-0 mins: Works without mobile data. Free reply via shortcode 56767.
               </p>
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground">Bhashini Engine</span>
+          )}
+
+          {cascadeTier === 'whatsapp' && (
+            <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+                  <CheckCheck className="size-3.5 text-emerald-600" /> WhatsApp Business API
+                </span>
+                <span className="text-[10px] text-muted-foreground">Verified Green Badge</span>
+              </div>
+              <div className="rounded-xl border border-emerald-500/20 bg-card p-3.5 text-xs text-foreground space-y-2 shadow-inner">
+                <p className="font-semibold text-primary">🌾 AgriLink Verified Harvest Alert</p>
+                <p className="text-muted-foreground text-[11px]">
+                  Namaste Rameshji, buyer <strong>PM POSHAN</strong> has locked a purchase demand for <strong>{crop}</strong> at guaranteed price <strong>₹{price}/kg</strong>.
+                </p>
+                <p className="text-muted-foreground text-[11px]">Your recommended allocation: <strong>500 KG</strong>.</p>
+                <div className="pt-2 flex gap-2">
+                  <span className="inline-flex flex-1 justify-center rounded-lg bg-emerald-600 text-white py-1.5 text-xs font-semibold">
+                    ✅ 1. Accept 500 KG
+                  </span>
+                  <span className="inline-flex flex-1 justify-center rounded-lg bg-secondary text-muted-foreground py-1.5 text-xs font-semibold">
+                    ❌ 2. Pass to Standby
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                T+5 mins: Triggers if SMS is unreplied. Farmer clicks one tap to lock allocation.
+              </p>
+            </div>
+          )}
+
+          {cascadeTier === 'call' && (
+            <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[11px] font-semibold text-amber-700 flex items-center gap-1">
+                  <Volume2 className="size-3.5 text-amber-600 animate-pulse" /> Bhashini Outbound IVR
+                </span>
+                <span className="text-[10px] text-muted-foreground">AI Speech Synthesis</span>
+              </div>
+              <div className="rounded-xl border border-amber-500/20 bg-card p-3.5 text-xs text-foreground space-y-2 shadow-inner">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Phone className="size-3.5 text-amber-600" />
+                  <span className="font-mono text-[11px]">Incoming Call: +91 1800-247-4546</span>
+                </div>
+                <p className="italic text-foreground/90 bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 text-xs">
+                  &quot;नमस्ते रमेशजी, आपके खेत के {crop} के लिए ₹{price} प्रति किलो का पक्का ऑर्डर उपलब्ध है। 500 किलो स्वीकार करने के लिए कृपया फोन पर 1 दबाएं।&quot;
+                </p>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10px] font-mono text-muted-foreground">Keypress: 1 = Accept</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel()
+                        const utterance = new SpeechSynthesisUtterance(
+                          `नमस्ते रमेशजी, आपके खेत के लिए ₹${price} प्रति किलो का पक्का ऑर्डर उपलब्ध है। स्वीकार करने के लिए 1 दबाएं।`
+                        )
+                        utterance.lang = 'hi-IN'
+                        utterance.rate = 0.95
+                        window.speechSynthesis.speak(utterance)
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                  >
+                    <Volume2 className="size-3" /> Play Call Demo
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                T+15 mins: Automated phone call. If no answer, shifts to Standby Buffer farmer automatically.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* 115% Standby Buffer Assurance */}
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="flex items-center justify-between text-xs mb-1.5">
+            <span className="font-semibold">Buffer Commitment Status</span>
+            <span className="font-mono text-primary font-bold">115% Target (15% Standby)</span>
           </div>
-          <p className="mt-2 text-xs italic text-foreground/90 bg-card/60 p-3 rounded-xl border border-border leading-relaxed">
-            &quot;{smsMessage}&quot;
-          </p>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Transmitted via GSM SMS, IVR audio dialer, and WhatsApp Business API in English, Hindi, and Telugu.
+          <p className="text-[11px] text-muted-foreground">
+            Standby smallholders (Lakshmi Bai, Dinesh Patel) are pre-notified on standby to prevent any institutional supply deficit.
           </p>
         </div>
       </Card>
@@ -2273,7 +2477,7 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
             }`}
           >
             <Camera className="size-4" />
-            AI GradeCam Pre-Check Scanner
+            Camera-Assisted Quality Verification
           </button>
         </div>
 
@@ -2292,10 +2496,10 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
                   <div>
                     <div className="flex items-center gap-2">
                       <Badge tone="live">Farmer Pre-Check Mode</Badge>
-                      <Badge tone="good">Instant AI Screening</Badge>
+                      <Badge tone="good">Dual-Review Protocol</Badge>
                     </div>
-                    <h3 className="mt-1 font-serif text-2xl font-bold">Produce Optical Quality Scanner</h3>
-                    <p className="text-xs text-muted-foreground">Scan your harvest before dispatch to ensure Grade A compliance.</p>
+                    <h3 className="mt-1 font-serif text-2xl font-bold">Camera-Assisted Quality Verification</h3>
+                    <p className="text-xs text-muted-foreground">Capture timestamped produce lot photos to pair with physical QC coordinator inspection.</p>
                   </div>
                 </div>
                 <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -2308,7 +2512,7 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
               <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground flex items-center gap-3">
                 <ShieldCheck className="size-5 text-primary shrink-0" />
                 <p>
-                  Pre-scanning confirms your produce passes AGMARKNET Grade A standards before truck arrival, protecting you from depot disputes.
+                  Dual-review protocol confirms your produce meets AGMARKNET Grade A standards before truck arrival, eliminating subjective depot deductions.
                 </p>
               </div>
             </Card>
@@ -2316,31 +2520,31 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
             <Card className="p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">GradeCam verdict</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Verification verdict</p>
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    AI Vision 4.2
+                    Dual-Check Protocol
                   </span>
                 </div>
                 <h3 className="mt-2 font-serif text-xl font-bold">
-                  {aiResult ? `Scan Result: Grade ${aiResult.grade}` : 'Ready for Produce Scan'}
+                  {aiResult ? `Verified Result: Grade ${aiResult.grade}` : 'Ready for Visual Capture'}
                 </h3>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Mini label="AI Confidence" value={aiResult ? `${aiResult.confidence}%` : 'Awaiting image'} />
-                  <Mini label="Quality Status" value={aiResult?.status || 'PRE-CHECK'} />
+                  <Mini label="Visual Match" value={aiResult ? `${aiResult.confidence}%` : 'Awaiting image'} />
+                  <Mini label="QC Protocol" value={aiResult?.status || 'PRE-CHECK'} />
                 </div>
                 <p className="mt-4 rounded-xl bg-secondary p-4 text-xs text-muted-foreground leading-relaxed">
-                  {aiResult?.reasoning || 'Align camera with a clean sample of your crop. The on-device optical scanner analyzes defect perimeter, color uniformity, and kernel surface moisture.'}
+                  {aiResult?.reasoning || 'Align camera with a clean sample of your harvest lot. Optical visual check captures surface defect perimeter and color uniformity for dual review.'}
                 </p>
               </div>
 
               <div className="mt-6 rounded-2xl border border-border bg-secondary/50 p-4 flex items-center gap-3.5">
                 <div className="relative size-14 shrink-0 rounded-xl bg-card p-1 border border-border flex items-center justify-center overflow-hidden">
-                  <img src="/features/ai-gradecam.png" alt="AI GradeCam" className="size-full object-contain" />
+                  <img src="/features/ai-gradecam.png" alt="Quality Verification" className="size-full object-contain" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold">Zero Quality Rejection</p>
+                  <p className="text-xs font-semibold">Dual-Review Protection</p>
                   <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-                    Pre-cleared lots are fast-tracked for instant weighment & 30% digital advance.
+                    Dual QC coordinator sign-off protects farmers from post-delivery price renegotiation.
                   </p>
                 </div>
               </div>
@@ -2363,8 +2567,8 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
                       <Badge tone="live">Lot #LOT-1001</Badge>
                       <Badge tone="good">AGMARKNET Grade A</Badge>
                     </div>
-                    <h3 className="mt-1 font-serif text-2xl font-bold">My GradeCam Quality Slip</h3>
-                    <p className="text-xs text-muted-foreground">Kheda collection depot · 500 kg weighed · Verified</p>
+                    <h3 className="mt-1 font-serif text-2xl font-bold">Official Quality Verification Slip</h3>
+                    <p className="text-xs text-muted-foreground">Kheda collection depot · 500 kg weighed · Dual-Review Cleared</p>
                   </div>
                 </div>
                 <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -2375,10 +2579,10 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
               <div className="relative overflow-hidden rounded-2xl border border-border bg-secondary/30 p-5">
                 <div className="flex items-center justify-between border-b border-border/80 pb-3">
                   <div>
-                    <p className="text-xs font-semibold text-foreground">Visual Quality Assessment Record</p>
-                    <p className="text-[11px] text-muted-foreground">Inspected by Lead QC Inspector Anita Desai</p>
+                    <p className="text-xs font-semibold text-foreground">Dual-Review Protocol Assessment Record</p>
+                    <p className="text-[11px] text-muted-foreground">Physical inspection by QC Coordinator Anita Desai · Visual match confirmed by Buyer</p>
                   </div>
-                  <span className="font-mono text-xs font-bold text-emerald-600">PASSED · 98.4% SCORE</span>
+                  <span className="font-mono text-xs font-bold text-emerald-600">PASSED · 98.4% QUALITY SCORE</span>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
                   <div className="rounded-xl bg-card p-3 border border-border">
@@ -2415,27 +2619,27 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
             <Card className="p-6 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">GradeCam verdict</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Verification verdict</p>
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    AI Vision 4.2
+                    Dual Review Protocol
                   </span>
                 </div>
                 <h3 className="mt-2 font-serif text-xl font-bold">Grade A Quality Assured</h3>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Mini label="Model Confidence" value="98.4%" />
-                  <Mini label="Certificate Status" value="OFFICIALLY SEALED" />
+                  <Mini label="Visual Match" value="98.4%" />
+                  <Mini label="Certificate Status" value="DUAL-SEALED" />
                 </div>
                 <p className="mt-4 rounded-xl bg-secondary p-4 text-xs text-muted-foreground leading-relaxed">
-                  Optical inspection confirms Grade A produce. No middleman deduction for moisture or grading disputes.
+                  Dual-review inspection confirms Grade A produce. No middleman deduction for moisture or subjective grading disputes.
                 </p>
               </div>
 
               <div className="mt-6 rounded-2xl border border-border bg-secondary/50 p-4 flex items-center gap-3.5">
                 <div className="relative size-14 shrink-0 rounded-xl bg-card p-1 border border-border flex items-center justify-center overflow-hidden">
-                  <img src="/features/ai-gradecam.png" alt="AI GradeCam" className="size-full object-contain" />
+                  <img src="/features/ai-gradecam.png" alt="Quality Verification" className="size-full object-contain" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold">Immutable Digital Slip</p>
+                  <p className="text-xs font-semibold">Dual-Review Digital Slip</p>
                   <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
                     Quality record permanently linked to your e-RUPI passbook voucher.
                   </p>
@@ -2465,7 +2669,7 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
                 <Badge tone="live">Lot Inspection</Badge>
                 <Badge tone="good">AGMARK Standard</Badge>
               </div>
-              <h3 className="mt-1 font-serif text-2xl font-bold">GradeCam visual quality check</h3>
+              <h3 className="mt-1 font-serif text-2xl font-bold">Camera-Assisted Quality Verification</h3>
               <p className="text-xs text-muted-foreground">Ramesh Kumar · Kheda collection point · {crop}</p>
             </div>
           </div>
@@ -2495,29 +2699,29 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
       <Card className="p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">GradeCam verdict</p>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Verification verdict</p>
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-              AI Vision 4.2
+              Dual Review Protocol
             </span>
           </div>
-          <h3 className="mt-2 font-serif text-xl font-bold">AI Proposed: Grade {aiResult?.grade || 'A'}</h3>
+          <h3 className="mt-2 font-serif text-xl font-bold">Dual-Review Clearance: Grade {aiResult?.grade || 'A'}</h3>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <Mini label="Confidence" value={`${aiResult?.confidence || 91}%`} />
-            <Mini label="Status" value={aiResult?.status || 'GRADED'} />
+            <Mini label="Visual Match" value={`${aiResult?.confidence || 91}%`} />
+            <Mini label="QC Status" value={aiResult?.status || 'DUAL-VERIFIED'} />
           </div>
           <p className="mt-4 rounded-xl bg-secondary p-4 text-xs text-muted-foreground leading-relaxed">
-            {aiResult?.reasoning || 'Optical surface inspection confirms uniform color, size, and moisture within AGMARK Grade A tolerances.'}
+            {aiResult?.reasoning || 'Optical surface inspection matched with physical sample check by depot QC coordinator. Produce cleared under AGMARK Grade A tolerances.'}
           </p>
         </div>
 
         <div className="mt-6 rounded-2xl border border-border bg-secondary/50 p-4 flex items-center gap-3.5">
           <div className="relative size-14 shrink-0 rounded-xl bg-card p-1 border border-border flex items-center justify-center overflow-hidden">
-            <img src="/features/ai-gradecam.png" alt="AI GradeCam" className="size-full object-contain" />
+            <img src="/features/ai-gradecam.png" alt="Quality Verification" className="size-full object-contain" />
           </div>
           <div>
-            <p className="text-xs font-semibold">Real-Time Quality Guarantee</p>
+            <p className="text-xs font-semibold">Dual-Review Quality Guarantee</p>
             <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-              Grade score and defect classification logged directly into smart settlement contract.
+              Dual QC coordinator sign-off and visual timestamp log protect both farmer and buyer from depot disputes.
             </p>
           </div>
         </div>

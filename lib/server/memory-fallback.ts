@@ -28,6 +28,9 @@ export function createMemoryFallbackDb(): Db {
       contact_name: 'Meera Joshi',
       contact_phone: '+91 90000 20201',
       enrolment: 1100,
+      completed_orders: 24,
+      dispute_count: 0,
+      rating: 4.9,
       created_at: new Date().toISOString(),
     },
     {
@@ -40,6 +43,9 @@ export function createMemoryFallbackDb(): Db {
       lng: 72.958,
       contact_name: 'Dinesh Prajapati',
       contact_phone: '+91 90000 20202',
+      completed_orders: 18,
+      dispute_count: 1,
+      rating: 4.7,
       created_at: new Date().toISOString(),
     },
     {
@@ -52,18 +58,21 @@ export function createMemoryFallbackDb(): Db {
       lng: 72.9105,
       contact_name: 'Hetal Shah',
       contact_phone: '+91 90000 20203',
+      completed_orders: 12,
+      dispute_count: 0,
+      rating: 4.8,
       created_at: new Date().toISOString(),
     },
   ]
 
   const farmers: Row[] = [
-    { id: 'f-ramesh-101', fpo_id: 'fpo-anand-001', name: 'Rameshbhai Patel', phone: '+91 90000 10101', language: 'gu', land_hectares: 0.8, village: 'Boriavi', lat: 22.6167, lng: 72.9333, created_at: new Date().toISOString() },
-    { id: 'f-savita-102', fpo_id: 'fpo-anand-001', name: 'Savitaben Parmar', phone: '+91 90000 10102', language: 'gu', land_hectares: 1.2, village: 'Petlad', lat: 22.4768, lng: 72.7998, created_at: new Date().toISOString() },
-    { id: 'f-mohan-103', fpo_id: 'fpo-anand-001', name: 'Mohanbhai Solanki', phone: '+91 90000 10103', language: 'gu', land_hectares: 1.5, village: 'Sojitra', lat: 22.5387, lng: 72.7195, created_at: new Date().toISOString() },
-    { id: 'f-jignesh-104', fpo_id: 'fpo-anand-001', name: 'Jignesh Chauhan', phone: '+91 90000 10104', language: 'gu', land_hectares: 1.0, village: 'Bakrol', lat: 22.5796, lng: 72.958, created_at: new Date().toISOString() },
-    { id: 'f-laxmi-105', fpo_id: 'fpo-anand-001', name: 'Laxmiben Vaghela', phone: '+91 90000 10105', language: 'gu', land_hectares: 0.4, village: 'Umreth', lat: 22.6986, lng: 73.1149, created_at: new Date().toISOString() },
-    { id: 'f-suresh-108', fpo_id: 'fpo-anand-001', name: 'Suresh Yadav', phone: '+91 90000 10108', language: 'hi', land_hectares: 0.5, village: 'Kheda', lat: 22.7507, lng: 72.6847, created_at: new Date().toISOString() },
-    { id: 'f-bhavna-109', fpo_id: 'fpo-anand-001', name: 'Bhavnaben Thakor', phone: '+91 90000 10109', language: 'gu', land_hectares: 1.8, village: 'Borsad', lat: 22.4078, lng: 72.8988, created_at: new Date().toISOString() },
+    { id: 'f-ramesh-101', fpo_id: 'fpo-anand-001', name: 'Rameshbhai Patel', phone: '+91 90000 10101', language: 'gu', land_hectares: 0.8, village: 'Boriavi', lat: 22.6167, lng: 72.9333, completed_orders: 14, failed_orders: 1, reliability_score: 93, created_at: new Date().toISOString() },
+    { id: 'f-savita-102', fpo_id: 'fpo-anand-001', name: 'Savitaben Parmar', phone: '+91 90000 10102', language: 'gu', land_hectares: 1.2, village: 'Petlad', lat: 22.4768, lng: 72.7998, completed_orders: 19, failed_orders: 0, reliability_score: 98, created_at: new Date().toISOString() },
+    { id: 'f-mohan-103', fpo_id: 'fpo-anand-001', name: 'Mohanbhai Solanki', phone: '+91 90000 10103', language: 'gu', land_hectares: 1.5, village: 'Sojitra', lat: 22.5387, lng: 72.7195, completed_orders: 11, failed_orders: 1, reliability_score: 91, created_at: new Date().toISOString() },
+    { id: 'f-jignesh-104', fpo_id: 'fpo-anand-001', name: 'Jignesh Chauhan', phone: '+91 90000 10104', language: 'gu', land_hectares: 1.0, village: 'Bakrol', lat: 22.5796, lng: 72.958, completed_orders: 16, failed_orders: 1, reliability_score: 94, created_at: new Date().toISOString() },
+    { id: 'f-laxmi-105', fpo_id: 'fpo-anand-001', name: 'Laxmiben Vaghela', phone: '+91 90000 10105', language: 'gu', land_hectares: 0.4, village: 'Umreth', lat: 22.6986, lng: 73.1149, completed_orders: 8, failed_orders: 0, reliability_score: 96, created_at: new Date().toISOString() },
+    { id: 'f-suresh-108', fpo_id: 'fpo-anand-001', name: 'Suresh Yadav', phone: '+91 90000 10108', language: 'hi', land_hectares: 0.5, village: 'Kheda', lat: 22.7507, lng: 72.6847, completed_orders: 10, failed_orders: 2, reliability_score: 83, created_at: new Date().toISOString() },
+    { id: 'f-bhavna-109', fpo_id: 'fpo-anand-001', name: 'Bhavnaben Thakor', phone: '+91 90000 10109', language: 'gu', land_hectares: 1.8, village: 'Borsad', lat: 22.4078, lng: 72.8988, completed_orders: 22, failed_orders: 1, reliability_score: 95, created_at: new Date().toISOString() },
   ]
 
   const cropRegistry: Row[] = [

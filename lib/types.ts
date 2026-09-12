@@ -11,9 +11,59 @@ export type OrderStatus = 'POSTED' | 'FUNDED' | 'SOURCING' | 'COLLECTING' | 'DIS
 
 export type Fpo = { id: string; name: string; village: string; district: string; state: string; lat: number; lng: number; bankAccountRef: string }
 
-export type Farmer = { id: string; fpoId: string; name: string; phone: string; language: Lang; landHectares: number; village: string; lat: number; lng: number }
+export type Farmer = {
+  id: string
+  fpoId: string
+  name: string
+  phone: string
+  language: Lang
+  landHectares: number
+  village: string
+  lat: number
+  lng: number
+  completedOrders?: number
+  failedOrders?: number
+  reliabilityScore?: number
+}
 
-export type Buyer = { id: string; name: string; type: BuyerType; address: string; city: string; lat: number; lng: number; contactName: string; contactPhone: string; enrolment: number | null }
+export type Buyer = {
+  id: string
+  name: string
+  type: BuyerType
+  address: string
+  city: string
+  lat: number
+  lng: number
+  contactName: string
+  contactPhone: string
+  enrolment: number | null
+  completedOrders?: number
+  disputeCount?: number
+  rating?: number
+}
+
+export type ExcessRedistribution = {
+  id: string
+  orderId: string
+  crop: CropId
+  surplusKg: number
+  destination: 'HOSTEL' | 'KIRANA' | 'COMMUNITY_KITCHEN' | 'RESTAURANT'
+  recipientName: string
+  discountPct: number
+  deliveredAt: string
+}
+
+export type CommunityDemand = {
+  id: string
+  eventType: 'MARRIAGE' | 'TEMPLE' | 'SOCIETY' | 'EVENT'
+  title: string
+  crop: CropId
+  qtyKg: number
+  deliveryDate: string
+  contactName: string
+  location: string
+  status: 'OPEN' | 'COMMITTED' | 'FULFILLED'
+}
 
 export type RegistryEntry = { id: string; farmerId: string; crop: CropId; expectedQtyKg: number; harvestWindowStart: string; harvestWindowEnd: string; status: 'ACTIVE' | 'CLOSED'; createdAt: string }
 
