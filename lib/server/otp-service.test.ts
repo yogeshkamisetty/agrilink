@@ -16,4 +16,14 @@ describe('mobile OTP fallback', () => {
     const challenge = await sendOtp('9999999999')
     await expect(verifyOtp('9999999999', '000000', challenge.sessionId)).resolves.toMatchObject({ ok: false })
   })
+
+  it('verifies statelessly even if simulated memory is lost between lambda containers', async () => {
+    const challenge = await sendOtp('9811122233')
+    // Modify sessionId to point to another phone number - should fail
+    const forgedSession = challenge.sessionId.replace('9811122233', '9899988877')
+    await expect(verifyOtp('9899988877', '123456', forgedSession)).resolves.toMatchObject({ ok: false })
+
+    // Valid session works
+    await expect(verifyOtp('9811122233', '123456', challenge.sessionId)).resolves.toEqual({ ok: true })
+  })
 })

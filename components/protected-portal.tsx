@@ -84,22 +84,7 @@ export function ProtectedPortal() {
 
   return (
     <>
-      {!verified && (
-        <Link
-          href='/verify'
-          className='fixed bottom-5 left-5 z-50 rounded-xl bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground shadow-sm hover:opacity-90 transition-opacity'
-        >
-          Complete Aadhaar trust verification
-        </Link>
-      )}
-      <button
-        onClick={signOut}
-        className='fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold shadow-sm hover:bg-muted'
-      >
-        <LogOut className='size-4' />
-        Sign out
-      </button>
-      <AgriLinkDashboard />
+      <AgriLinkDashboard onSignOut={signOut} verified={verified} />
       <main className="mx-auto max-w-[1500px] px-5 pb-10 sm:px-8 lg:pl-[21rem] lg:pr-10">
         <CropAvailability />
       </main>

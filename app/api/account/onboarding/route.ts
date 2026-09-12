@@ -2,21 +2,38 @@ import { NextResponse } from 'next/server'
 import { requireUser } from '@/lib/server/auth'
 import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 
+function sanitizeText(value: unknown, maxLength = 100): string | null {
+  if (typeof value !== 'string') return null
+  const cleaned = value
+    .replace(/<[^>]*>/g, '') // strip HTML tags
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // strip control chars
+    .trim()
+  return cleaned ? cleaned.slice(0, maxLength) : null
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireUser(request)
     const body = (await request.json()) as Record<string, unknown>
     const requestedRole = body.role
 
-    if ((requestedRole !== 'farmer' && requestedRole !== 'buyer') || typeof body.full_name !== 'string' || !body.full_name.trim()) {
+    const fullName = sanitizeText(body.full_name, 100)
+    if ((requestedRole !== 'farmer' && requestedRole !== 'buyer') || !fullName) {
       return NextResponse.json({ error: 'Choose a role and enter your name.' }, { status: 400 })
     }
 
     const role: 'farmer' | 'buyer' = requestedRole
-    if (role === 'farmer' && (!body.village || !body.district || !body.state)) {
+    const village = sanitizeText(body.village, 100)
+    const district = sanitizeText(body.district, 100)
+    const state = sanitizeText(body.state, 100)
+    const fpoName = sanitizeText(body.fpo_name, 100)
+    const organizationName = sanitizeText(body.organization_name, 120)
+    const organizationType = sanitizeText(body.organization_type, 60)
+
+    if (role === 'farmer' && (!village || !district || !state)) {
       return NextResponse.json({ error: 'Village, district, and state are required for farmers.' }, { status: 400 })
     }
-    if (role === 'buyer' && (!body.organization_name || !body.organization_type)) {
+    if (role === 'buyer' && (!organizationName || !organizationType)) {
       return NextResponse.json({ error: 'Organization name and business type are required for buyers.' }, { status: 400 })
     }
 
@@ -28,14 +45,14 @@ export async function POST(request: Request) {
       .upsert({
         id: user.id,
         role,
-        full_name: body.full_name.trim(),
+        full_name: fullName,
         mobile_number: cleanPhone,
-        village: typeof body.village === 'string' ? body.village.trim() : null,
-        district: typeof body.district === 'string' ? body.district.trim() : null,
-        state: typeof body.state === 'string' ? body.state.trim() : null,
-        fpo_name: typeof body.fpo_name === 'string' ? body.fpo_name.trim() : null,
-        organization_name: typeof body.organization_name === 'string' ? body.organization_name.trim() : null,
-        organization_type: typeof body.organization_type === 'string' ? body.organization_type.trim() : null,
+        village,
+        district,
+        state,
+        fpo_name: fpoName,
+        organization_name: organizationName,
+        organization_type: organizationType,
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
       })
@@ -47,21 +64,21 @@ export async function POST(request: Request) {
     }
 
     // Synchronize to domain tables (buyers or farmers) for unified data flow
-    if (role === 'buyer' && body.organization_name) {
+    if (role === 'buyer' && organizationName) {
       try {
         await db.from('buyers').insert({
-          buyer_name: body.full_name.trim(),
-          organization_name: String(body.organization_name).trim(),
+          buyer_name: fullName,
+          organization_name: organizationName,
           mobile_number: cleanPhone || user.phone || '',
         })
       } catch (syncErr) {
         console.warn('[onboarding] buyer sync warning:', syncErr)
       }
-    } else if (role === 'farmer' && body.village) {
+    } else if (role === 'farmer' && village) {
       try {
         await db.from('farmers').insert({
-          name: body.full_name.trim(),
-          village: String(body.village).trim(),
+          name: fullName,
+          village: village,
           mobile_number: cleanPhone || user.phone || '',
           crop_name: 'Mixed Crops',
           quantity: 0,

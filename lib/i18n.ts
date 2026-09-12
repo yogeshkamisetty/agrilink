@@ -1,0 +1,236 @@
+export type Language = 'en' | 'hi' | 'gu'
+
+export interface TranslationDictionary {
+  appName: string
+  tagline: string
+  goodMorning: string
+  roleCoordinator: string
+  roleBuyer: string
+  roleFarmer: string
+  viewAs: string
+  signOut: string
+  refresh: string
+  notifications: string
+  newOrder: string
+  resetSeed: string
+  teamAccess: string
+  language: string
+
+  // Nav
+  navOverview: string
+  navOrders: string
+  navFarmerNetwork: string
+  navCollectionGrade: string
+  navRoutes: string
+  navSettlements: string
+
+  // Screen titles
+  titleOverview: string
+  titleOrders: string
+  titleFarmerNetwork: string
+  titleCollectionGrade: string
+  titleRoutes: string
+  titleSettlements: string
+
+  // Metrics
+  statActiveOrderValue: string
+  statCommittedVolume: string
+  statFarmerRealised: string
+  statPilotVolume: string
+  statBuffer: string
+  statIntermediaryMargin: string
+
+  // Actions
+  actionNotifyFarmers: string
+  actionFarmersNotified: string
+  actionPostOrder: string
+  actionExportManifest: string
+  actionExportLedger: string
+  actionExportRoster: string
+  actionExportOrder: string
+  actionPrintInvoice: string
+  actionPrintWaybill: string
+  actionDispatch: string
+  actionConfirmDelivery: string
+  actionAcceptLot: string
+
+  // Farmer SMS previews
+  smsPreviewTitle: string
+  smsSampleOrder: string
+  smsSampleLot: string
+  smsSamplePayment: string
+}
+
+export const translations: Record<Language, TranslationDictionary> = {
+  en: {
+    appName: 'AgriLink',
+    tagline: 'FARM TO COMMONS',
+    goodMorning: 'Good morning',
+    roleCoordinator: 'Coordinator',
+    roleBuyer: 'Buyer',
+    roleFarmer: 'Farmer',
+    viewAs: 'View as',
+    signOut: 'Sign out',
+    refresh: 'Refresh data',
+    notifications: 'Activity & Notifications',
+    newOrder: 'New order',
+    resetSeed: 'Reset seed',
+    teamAccess: 'Team & RBAC',
+    language: 'Language',
+
+    navOverview: 'Overview',
+    navOrders: 'Orders',
+    navFarmerNetwork: 'Farmer network',
+    navCollectionGrade: 'Collection & grade',
+    navRoutes: 'Routes',
+    navSettlements: 'Settlements',
+
+    titleOverview: 'Demand finds the harvest.',
+    titleOrders: 'Orders before harvest.',
+    titleFarmerNetwork: 'The crop registry, activated.',
+    titleCollectionGrade: 'Trust at the collection point.',
+    titleRoutes: 'Every lot has a route.',
+    titleSettlements: 'Transparent money movement.',
+
+    statActiveOrderValue: 'Active order value',
+    statCommittedVolume: 'Committed volume',
+    statFarmerRealised: 'Farmer realised',
+    statPilotVolume: 'Pilot volume',
+    statBuffer: '15% standby buffer',
+    statIntermediaryMargin: 'Intermediary margin compressed by 42%',
+
+    actionNotifyFarmers: 'Notify matched farmers',
+    actionFarmersNotified: 'Farmers notified',
+    actionPostOrder: 'Post order to registry',
+    actionExportManifest: 'Export Manifest (CSV)',
+    actionExportLedger: 'Export Ledger (CSV)',
+    actionExportRoster: 'Export Roster (CSV)',
+    actionExportOrder: 'Export Order (CSV)',
+    actionPrintInvoice: 'Print APMC Invoice (PDF)',
+    actionPrintWaybill: 'Print Bill of Lading (PDF)',
+    actionDispatch: 'Dispatch vehicle (₹1,200)',
+    actionConfirmDelivery: 'Confirm buyer delivery & settle',
+    actionAcceptLot: 'Accept lot & disburse 30% advance',
+
+    smsPreviewTitle: 'Farmer Vernacular SMS Preview',
+    smsSampleOrder: 'AgriLink Alert: Buyer demand committed for {crop}. Price: ₹{price}/kg. Reply 1 to accept {qty}kg.',
+    smsSampleLot: 'AgriLink Update: Lot #LOT-1001 Grade A verified. Weighed {qty}kg. Advance payment processing.',
+    smsSamplePayment: 'AgriLink DBT: ₹{amount} credited to your bank account for Lot #LOT-1001 via NPCI e-RUPI.',
+  },
+
+  hi: {
+    appName: 'एग्रीलिंक',
+    tagline: 'खेत से साझा बाज़ार',
+    goodMorning: 'शुभ प्रभात',
+    roleCoordinator: 'समन्वयक (कोऑर्डिनेटर)',
+    roleBuyer: 'संस्थागत खरीदार',
+    roleFarmer: 'किसान',
+    viewAs: 'भूमिका चुनें',
+    signOut: 'लॉग आउट',
+    refresh: 'डेटा रीफ्रेश करें',
+    notifications: 'गतिविधि और अलर्ट',
+    newOrder: 'नया ऑर्डर',
+    resetSeed: 'डेटा रीसेट',
+    teamAccess: 'टीम और अनुमतियाँ',
+    language: 'भाषा',
+
+    navOverview: 'अवलोकन (Overview)',
+    navOrders: 'ऑर्डर्स (Orders)',
+    navFarmerNetwork: 'किसान नेटवर्क',
+    navCollectionGrade: 'संग्रह और ग्रेडिंग',
+    navRoutes: 'वाहन मार्ग (Routes)',
+    navSettlements: 'भुगतान निपटान',
+
+    titleOverview: 'मांग फसल कटाई से पहले पहुंचे।',
+    titleOrders: 'कटाई पूर्व सुरक्षित अनुबंध।',
+    titleFarmerNetwork: 'सक्रिय किसान फसल रजिस्ट्री।',
+    titleCollectionGrade: 'संग्रह केंद्र पर गुणवत्ता और विश्वास।',
+    titleRoutes: 'हर लाट का अनुकूलित वाहन मार्ग।',
+    titleSettlements: 'पारदर्शी एवं त्वरित बैंक भुगतान।',
+
+    statActiveOrderValue: 'सक्रिय ऑर्डर मूल्य',
+    statCommittedVolume: 'प्रतिबद्ध फसल मात्रा',
+    statFarmerRealised: 'किसान प्राप्त मूल्य',
+    statPilotVolume: 'पायलट वॉल्यूम',
+    statBuffer: '15% अतिरिक्त सुरक्षा बफर',
+    statIntermediaryMargin: 'बिचौलियों का मार्जिन 42% कम हुआ',
+
+    actionNotifyFarmers: 'किसानों को सूचित करें',
+    actionFarmersNotified: 'सूचनाएं प्रेषित',
+    actionPostOrder: 'रजिस्ट्री में ऑर्डर दर्ज करें',
+    actionExportManifest: 'मार्ग सूची डाउनलोड (CSV)',
+    actionExportLedger: 'बहीखाता डाउनलोड (CSV)',
+    actionExportRoster: 'किसान सूची डाउनलोड (CSV)',
+    actionExportOrder: 'ऑर्डर अनुबंध डाउनलोड (CSV)',
+    actionPrintInvoice: 'APMC चालान प्रिंट (PDF)',
+    actionPrintWaybill: 'वाहन बिल्टी प्रिंट (PDF)',
+    actionDispatch: 'वाहन रवाना करें (₹1,200)',
+    actionConfirmDelivery: 'डिलीवरी पुष्टि एवं अंतिम भुगतान',
+    actionAcceptLot: 'लाट स्वीकारें एवं 30% अग्रिम भेजें',
+
+    smsPreviewTitle: 'किसान एसएमएस / व्हाट्सएप पूर्वावलोकन (हिंदी)',
+    smsSampleOrder: 'एग्रीलिंक सूचना: {crop} के लिए मांग अनुबंध सुरक्षित। मूल्य: ₹{price}/किग्रा। {qty}किग्रा हेतु 1 भेजें।',
+    smsSampleLot: 'एग्रीलिंक अपडेट: लाट #LOT-1001 ग्रेड A प्रमाणित। वजन {qty}किग्रा। 30% अग्रिम भुगतान जारी।',
+    smsSamplePayment: 'एग्रीलिंक DBT: ₹{amount} आपके बैंक खाते में NPCI e-RUPI द्वारा सीधे जमा कर दिए गए हैं।',
+  },
+
+  gu: {
+    appName: 'એગ્રીલિંક',
+    tagline: 'ખેતરથી સીધા બજાર સુધી',
+    goodMorning: 'સુપ્રભાત',
+    roleCoordinator: 'સંયોજક (કોઓર્ડિનેટર)',
+    roleBuyer: 'સંસ્થાકીય ખરીદદાર',
+    roleFarmer: 'ખેડૂત મિત્ર',
+    viewAs: 'ભૂમિકા પસંદ કરો',
+    signOut: 'લૉગ આઉટ',
+    refresh: 'માહિતી તાજી કરો',
+    notifications: 'પ્રવૃત્તિ અને સૂચનાઓ',
+    newOrder: 'નવો ઓર્ડર',
+    resetSeed: 'ડેટા રીસેટ',
+    teamAccess: 'ટીમ અને અધિકારો',
+    language: 'ભાષા',
+
+    navOverview: 'ઝાંખી (Overview)',
+    navOrders: 'ઓર્ડર્સ (Orders)',
+    navFarmerNetwork: 'ખેડૂત નેટવર્ક',
+    navCollectionGrade: 'સંગ્રહ અને ગ્રેડિંગ',
+    navRoutes: 'વાહન રૂટ (Routes)',
+    navSettlements: 'નાણાકીય ચૂકવણી',
+
+    titleOverview: 'લણણી પહેલાં ખરીદદારની ખાતરી.',
+    titleOrders: 'કાપણી પૂર્વે ઓર્ડર કરાર.',
+    titleFarmerNetwork: 'નોંધાયેલ ખેડૂતોનું સક્રિય નેટવર્ક.',
+    titleCollectionGrade: 'સંગ્રહ કેન્દ્ર પર ચોક્કસ ગુણવત્તા તપાસ.',
+    titleRoutes: 'દરેક જથ્થા માટે ઓપ્ટિમાઇઝ્ડ રૂટ.',
+    titleSettlements: 'પારદર્શક અને તાત્કાલિક બેંક ચુકવણી.',
+
+    statActiveOrderValue: 'સક્રિય ઓર્ડર મૂલ્ય',
+    statCommittedVolume: 'ખાતરી કરેલ જથ્થો',
+    statFarmerRealised: 'ખેડૂતને મળેલ ભાવ',
+    statPilotVolume: 'પાયલોટ વોલ્યુમ',
+    statBuffer: '15% સુરક્ષા બફર સ્ટોક',
+    statIntermediaryMargin: 'વચેટિયાઓનું કમિશન 42% ઘટ્યું',
+
+    actionNotifyFarmers: 'ખેડૂતોને મેસેજ મોકલો',
+    actionFarmersNotified: 'મેસેજ મોકલાઈ ગયા',
+    actionPostOrder: 'નવો ઓર્ડર દાખલ કરો',
+    actionExportManifest: 'રૂટ લિસ્ટ ડાઉનલોડ (CSV)',
+    actionExportLedger: 'ખાતાવહી ડાઉનલોડ (CSV)',
+    actionExportRoster: 'ખેડૂત યાદી ડાઉનલોડ (CSV)',
+    actionExportOrder: 'ઓર્ડર કોન્ટ્રાક્ટ ડાઉનલોડ (CSV)',
+    actionPrintInvoice: 'APMC બિલ પ્રિન્ટ (PDF)',
+    actionPrintWaybill: 'વાહન બિલ્ટી પ્રિન્ટ (PDF)',
+    actionDispatch: 'વાહન રવાના કરો (₹1,200)',
+    actionConfirmDelivery: 'ડિલિવરી સ્વીકાર અને ચૂકવણી',
+    actionAcceptLot: 'જથ્થો સ્વીકારો અને 30% એડવાન્સ જમા કરો',
+
+    smsPreviewTitle: 'ખેડૂત એસએમએસ / વ્હોટ્સએપ પ્રિવ્યૂ (ગુજરાતી)',
+    smsSampleOrder: 'એગ્રીલિંક એલર્ટ: {crop} માટે ખરીદદાર ઓર્ડર મંજૂર. ભાવ: ₹{price}/કિલો. {qty}કિલો માટે 1 લખી મોકલો.',
+    smsSampleLot: 'એગ્રીલિંક અપડેટ: લોટ #LOT-1001 ગ્રેડ A માન્ય. વજન {qty}કિલો. એડવાન્સ ચૂકવણી પ્રોસેસમાં છે.',
+    smsSamplePayment: 'એગ્રીલિંક DBT: ₹{amount} તમારા બેંક ખાતામાં NPCI e-RUPI દ્વારા સફળતાપૂર્વક જમા થયા છે.',
+  },
+}
+
+export function getT(lang: Language): TranslationDictionary {
+  return translations[lang] || translations.en
+}

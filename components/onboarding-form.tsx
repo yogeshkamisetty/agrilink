@@ -76,8 +76,16 @@ export function OnboardingForm() {
 
   if (!userId) {
     return (
-      <main className='grid min-h-screen place-items-center'>
-        <Loader2 className='size-7 animate-spin text-primary' />
+      <main className="grid min-h-screen place-items-center bg-[#fcfbf7] px-4">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
+            <Loader2 className="size-7 animate-spin text-primary" />
+          </div>
+          <div>
+            <h2 className="font-serif text-xl font-bold">AgriLink Onboarding</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Verifying authenticated session…</p>
+          </div>
+        </div>
       </main>
     )
   }
@@ -101,26 +109,34 @@ export function OnboardingForm() {
           Your mobile number is already verified. Aadhaar trust verification can be completed from the workspace at any time.
         </p>
 
-        <div className='mt-6 grid grid-cols-2 gap-3'>
+        <div
+          role="radiogroup"
+          aria-label="Select your role in the supply network"
+          className="mt-6 grid grid-cols-2 gap-3"
+        >
           <button
-            type='button'
+            type="button"
+            role="radio"
+            aria-checked={role === 'farmer'}
             onClick={() => setRole('farmer')}
             className={`rounded-xl border p-4 text-left transition-colors ${
               role === 'farmer' ? 'border-primary bg-primary/10 shadow-sm' : 'border-border hover:bg-muted'
             }`}
           >
-            <b className='text-base font-semibold'>Farmer</b>
-            <span className='mt-1 block text-xs text-muted-foreground'>Crops, location and FPO details</span>
+            <b className="text-base font-semibold">Farmer</b>
+            <span className="mt-1 block text-xs text-muted-foreground">Crops, location and FPO details</span>
           </button>
           <button
-            type='button'
+            type="button"
+            role="radio"
+            aria-checked={role === 'buyer'}
             onClick={() => setRole('buyer')}
             className={`rounded-xl border p-4 text-left transition-colors ${
               role === 'buyer' ? 'border-primary bg-primary/10 shadow-sm' : 'border-border hover:bg-muted'
             }`}
           >
-            <b className='text-base font-semibold'>Buyer</b>
-            <span className='mt-1 block text-xs text-muted-foreground'>Organization and purchase profile</span>
+            <b className="text-base font-semibold">Buyer</b>
+            <span className="mt-1 block text-xs text-muted-foreground">Organization and purchase profile</span>
           </button>
         </div>
 
@@ -221,7 +237,7 @@ export function OnboardingForm() {
           )}
 
           {error && (
-            <div className='sm:col-span-2 flex items-start gap-2 rounded-xl bg-destructive/10 p-3.5 text-sm text-destructive'>
+            <div role="alert" aria-live="assertive" className='sm:col-span-2 flex items-start gap-2 rounded-xl bg-destructive/10 p-3.5 text-sm text-destructive'>
               <AlertCircle className='mt-0.5 size-4 shrink-0' />
               <span>{error}</span>
             </div>

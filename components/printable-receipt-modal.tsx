@@ -1,0 +1,332 @@
+'use client'
+
+import { Printer, X, ShieldCheck, CheckCircle2, Download, Building2, Truck, FileText } from 'lucide-react'
+
+export type DocumentType = 'receipt' | 'waybill'
+
+interface PrintableDocumentProps {
+  type: DocumentType
+  isOpen: boolean
+  onClose: () => void
+  order?: any
+  buyer?: any
+}
+
+export function PrintableReceiptModal({
+  type,
+  isOpen,
+  onClose,
+  order,
+  buyer,
+}: PrintableDocumentProps) {
+  if (!isOpen) return null
+
+  const crop = order?.crop || 'PADDY'
+  const price = order?.pricePerKg || 28
+  const qty = 500
+  const gross = qty * price
+  const advance = Math.round(gross * 0.3)
+  const transport = Math.round(gross * 0.04)
+  const net = gross - advance - transport
+  const orderCode = order?.code || '#AG-1001'
+  const deliveryDate = order?.deliveryDate || '2025-10-20'
+
+  const handlePrint = () => {
+    window.print()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/50 p-3 sm:p-6 backdrop-blur-sm print:p-0 print:bg-transparent">
+      {/* Container Dialog */}
+      <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden print:max-h-none print:w-full print:border-none print:shadow-none">
+        {/* Modal Header Controls (Hidden during print) */}
+        <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-6 py-4 print:hidden">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              {type === 'receipt' ? <FileText className="size-5" /> : <Truck className="size-5" />}
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">
+                {type === 'receipt' ? 'APMC Mandi Sale & Settlement Certificate' : 'Consignment Bill of Lading (Waybill)'}
+              </h3>
+              <p className="text-xs text-muted-foreground">Official certified documentation for compliance & audit</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrint}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-opacity"
+            >
+              <Printer className="size-3.5" /> Print / Save as PDF
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-xl p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Scrollable Printable Document Canvas */}
+        <div className="overflow-y-auto p-6 sm:p-10 bg-background text-foreground print:p-0 print:overflow-visible">
+          {type === 'receipt' ? (
+            /* =================== APMC SALE RECEIPT =================== */
+            <div className="printable-document-sheet space-y-6 text-xs sm:text-sm">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-border pb-6">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="size-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-lg font-serif">
+                      A
+                    </div>
+                    <div>
+                      <h1 className="font-serif text-xl font-bold tracking-tight">Kheda District Farmer Producer Co-operative Ltd</h1>
+                      <p className="text-xs text-muted-foreground font-mono">APMC Reg No: GJ-KHD-APMC-8842 · GSTIN: 24AAAFK1924L1ZP</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    National Agriculture Market (e-NAM) & AGMARKNET Certified Collection Point
+                  </p>
+                </div>
+                <div className="flex sm:flex-col sm:items-end items-center justify-between gap-2">
+                  <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs font-bold text-primary border border-primary/20">
+                    TAX INVOICE / VOUCHER
+                  </span>
+                  <p className="font-mono text-xs text-muted-foreground">Date: {new Date().toLocaleDateString('en-IN')}</p>
+                </div>
+              </div>
+
+              {/* Reference Grid */}
+              <div className="grid gap-4 sm:grid-cols-2 rounded-xl border border-border bg-secondary/30 p-4">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Beneficiary Farmer</p>
+                  <p className="mt-1 font-semibold text-sm">Ramesh Kumar</p>
+                  <p className="text-xs text-muted-foreground">Kheda Village, Anand Cluster, Gujarat</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Phone: +91 98251 44102</p>
+                  <span className="mt-2 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                    <ShieldCheck className="size-3" /> Aadhaar Vault Verified
+                  </span>
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Order & Buyer Details</p>
+                  <p className="mt-1 font-semibold text-sm">{buyer?.name || 'PM POSHAN Central Kitchen'}</p>
+                  <p className="text-xs text-muted-foreground">Order Ref: {orderCode} · Lot #LOT-1001-KHD</p>
+                  <p className="text-xs text-muted-foreground">Delivery Window: {deliveryDate}</p>
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">Clearing Rail: NPCI e-RUPI / Bank DBT</p>
+                </div>
+              </div>
+
+              {/* Quality Certification Box */}
+              <div className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative size-12 shrink-0 rounded-xl bg-card p-1 border border-border flex items-center justify-center overflow-hidden">
+                    <img src="/brand/agrilink-seal.png" alt="AgriLink Seal" className="size-full object-contain" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-xs text-foreground">GradeCam™ Quality Certificate</span>
+                      <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        Grade A Assured
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Uniformity index 98.2% · Moisture 11.4% · Zero pesticide residue deviation.
+                    </p>
+                  </div>
+                </div>
+                <div className="font-mono text-xs text-right sm:border-l sm:border-border sm:pl-4">
+                  <p className="text-muted-foreground">Inspection ID</p>
+                  <p className="font-bold text-foreground">GC-2025-9921</p>
+                </div>
+              </div>
+
+              {/* Itemized Table */}
+              <div className="overflow-hidden rounded-xl border border-border">
+                <table className="w-full text-left">
+                  <thead className="bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3">Description</th>
+                      <th className="px-4 py-3 text-right">Qty (kg)</th>
+                      <th className="px-4 py-3 text-right">Agreed Rate</th>
+                      <th className="px-4 py-3 text-right">Gross Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border text-xs sm:text-sm">
+                    <tr>
+                      <td className="px-4 py-3.5">
+                        <p className="font-semibold">{crop} (Grade A Table Produce)</p>
+                        <p className="text-[11px] text-muted-foreground">Weighed at Kheda FPO Digital Weighbridge</p>
+                      </td>
+                      <td className="px-4 py-3.5 text-right font-mono">{qty} kg</td>
+                      <td className="px-4 py-3.5 text-right font-mono">₹{price.toFixed(2)}/kg</td>
+                      <td className="px-4 py-3.5 text-right font-mono font-semibold">₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Financial Deductions & Net Breakdown */}
+              <div className="flex justify-end">
+                <div className="w-full max-w-sm space-y-2.5 rounded-xl border border-border bg-secondary/20 p-4 font-mono text-xs sm:text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Gross Produce Value:</span>
+                    <span>₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                    <span>Less: 30% Collection Advance Paid:</span>
+                    <span>− ₹{advance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Less: Transport Allocation (4%):</span>
+                    <span>− ₹{transport.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="border-t border-border pt-2 flex justify-between font-bold text-primary text-base">
+                    <span>Net Final Payout:</span>
+                    <span>₹{net.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settlement Proof & Clearing Footer */}
+              <div className="border-t border-border pt-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">NPCI e-RUPI Escrow Proof</p>
+                  <p className="font-mono text-xs text-foreground font-medium mt-1">
+                    TXN HASH: <span className="text-primary">0x7f4e91...b820a4</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Direct Bank Transfer (DBT) authenticated under RBI guidelines.
+                  </p>
+                </div>
+                <div className="flex gap-8 text-center text-xs">
+                  <div>
+                    <div className="h-10 border-b border-border w-28" />
+                    <p className="mt-1 font-medium text-muted-foreground">FPO Secretary</p>
+                  </div>
+                  <div>
+                    <div className="h-10 border-b border-border w-28" />
+                    <p className="mt-1 font-medium text-muted-foreground">Farmer Signature</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* =================== BILL OF LADING / WAYBILL =================== */
+            <div className="printable-document-sheet space-y-6 text-xs sm:text-sm">
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-border pb-6">
+                <div>
+                  <div className="flex items-center gap-2.5">
+                    <div className="size-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg font-serif">
+                      W
+                    </div>
+                    <div>
+                      <h1 className="font-serif text-xl font-bold tracking-tight">AgriLink Consignment Bill of Lading</h1>
+                      <p className="text-xs text-muted-foreground font-mono">Consignment Manifest #{orderCode}-BOL</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Multi-Stop Agro-Logistics Waypoint Routing</p>
+                </div>
+                <div className="flex sm:flex-col sm:items-end items-center justify-between gap-2">
+                  <span className="rounded-full bg-blue-500/10 px-3 py-1 font-mono text-xs font-bold text-blue-600 border border-blue-500/20">
+                    DISPATCH WAYBILL
+                  </span>
+                  <p className="font-mono text-xs text-muted-foreground">Generated: {new Date().toLocaleTimeString('en-IN')}</p>
+                </div>
+              </div>
+
+              {/* Carrier & Vehicle Details */}
+              <div className="grid gap-4 sm:grid-cols-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs sm:text-sm">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Transporter</p>
+                  <p className="mt-1 font-semibold">Anand Agro Logistics Fleet</p>
+                  <p className="text-xs text-muted-foreground">Carrier License: GJ-LOG-2024</p>
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Vehicle Assigned</p>
+                  <p className="mt-1 font-semibold font-mono">Tata Ace (GJ-07-TY-4912)</p>
+                  <p className="text-xs text-muted-foreground">Payload Capacity: 1,500 kg</p>
+                </div>
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Driver Contact</p>
+                  <p className="mt-1 font-semibold">Anand Parmar</p>
+                  <p className="text-xs text-muted-foreground">+91 98251 00000</p>
+                </div>
+              </div>
+
+              {/* Waypoint Stops Manifest */}
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-3">
+                  Waypoint Routing Sequence (Total Distance: 18.4 km)
+                </p>
+                <div className="overflow-hidden rounded-xl border border-border">
+                  <table className="w-full text-left text-xs sm:text-sm">
+                    <thead className="bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="px-3.5 py-2.5">Stop</th>
+                        <th className="px-3.5 py-2.5">Location & Contact</th>
+                        <th className="px-3.5 py-2.5">GPS Coords</th>
+                        <th className="px-3.5 py-2.5 text-right">Payload</th>
+                        <th className="px-3.5 py-2.5 text-right">ETA</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      <tr>
+                        <td className="px-3.5 py-3 font-mono font-bold">1 (Depot)</td>
+                        <td className="px-3.5 py-3">Kheda FPO Depot (Departure)</td>
+                        <td className="px-3.5 py-3 font-mono text-xs">22.7500, 72.6800</td>
+                        <td className="px-3.5 py-3 text-right font-mono">0 kg</td>
+                        <td className="px-3.5 py-3 text-right font-mono">06:30 AM</td>
+                      </tr>
+                      <tr>
+                        <td className="px-3.5 py-3 font-mono font-bold">2 (Pickup)</td>
+                        <td className="px-3.5 py-3">Ramesh Kumar (Kheda Village) · +91 98251 44102</td>
+                        <td className="px-3.5 py-3 font-mono text-xs">22.7200, 72.7100</td>
+                        <td className="px-3.5 py-3 text-right font-mono font-semibold">+500 kg</td>
+                        <td className="px-3.5 py-3 text-right font-mono">07:15 AM</td>
+                      </tr>
+                      <tr>
+                        <td className="px-3.5 py-3 font-mono font-bold">3 (Pickup)</td>
+                        <td className="px-3.5 py-3">Savitri Devi (Borsad Village) · +91 98250 88219</td>
+                        <td className="px-3.5 py-3 font-mono text-xs">22.4100, 72.9000</td>
+                        <td className="px-3.5 py-3 text-right font-mono font-semibold">+700 kg</td>
+                        <td className="px-3.5 py-3 text-right font-mono">08:00 AM</td>
+                      </tr>
+                      <tr className="bg-secondary/20">
+                        <td className="px-3.5 py-3 font-mono font-bold text-primary">4 (Drop)</td>
+                        <td className="px-3.5 py-3 font-semibold">PM POSHAN Central Kitchen (Anand Hub)</td>
+                        <td className="px-3.5 py-3 font-mono text-xs">22.5700, 72.9500</td>
+                        <td className="px-3.5 py-3 text-right font-mono font-bold text-primary">1,200 kg Total</td>
+                        <td className="px-3.5 py-3 text-right font-mono">09:15 AM</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Chain of Custody & Receiver Sign-off */}
+              <div className="border-t border-border pt-6 grid gap-6 sm:grid-cols-2 text-xs">
+                <div className="rounded-xl border border-border p-4 bg-secondary/15">
+                  <p className="font-semibold text-foreground">Tamper-Evident Seal Verification</p>
+                  <p className="text-muted-foreground mt-1">
+                    Seal Barcode #AGRI-SEAL-9921 attached at depot. Verified intact across all transit waypoints.
+                  </p>
+                  <p className="font-mono text-[11px] text-muted-foreground mt-2">AgriLink IoT GPS Logger Active</p>
+                </div>
+                <div className="rounded-xl border border-border p-4 flex flex-col justify-between">
+                  <p className="font-semibold">Drop-Point Receiving Verification</p>
+                  <div className="mt-6 border-b border-border w-full" />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Receiving Officer Signature · PM POSHAN Kitchen
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

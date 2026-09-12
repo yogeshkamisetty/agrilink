@@ -66,7 +66,10 @@ async function openPostgres(url: string): Promise<Db> {
   return wrap(sql as unknown as Unsafe, false)
 }
 
-export function localDataDir(): string {
+export function localDataDir(): string | undefined {
+  if (process.env.VERCEL) {
+    return '/tmp/agrilink-pglite'
+  }
   return process.env.AGRILINK_DATA_DIR || path.join(process.cwd(), '.data', 'pglite')
 }
 
@@ -117,7 +120,7 @@ export function getDb(): Promise<Db> {
   if (!holder[KEY]) {
     const url = process.env.DATABASE_URL
     if (!url && process.env.VERCEL) {
-      throw new Error('DATABASE_URL is required in Vercel. Use the Supabase Postgres connection string; PGlite is local-development only.')
+      console.warn('[agrilink] DATABASE_URL is not set on Vercel. Falling back to temporary PGlite database in /tmp.')
     }
     holder[KEY] = (url ? openPostgres(url) : openPglite(localDataDir()))
       .then(async (db) => {

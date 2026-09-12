@@ -4,6 +4,31 @@ import { createClient } from '@supabase/supabase-js'
 import { sendOtp, verifyOtp } from '@/lib/server/otp-service'
 import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 
+interface RateLimitRecord {
+  count: number
+  resetAt: number
+}
+
+const rateLimitMap = new Map<string, RateLimitRecord>()
+
+function checkRateLimit(key: string, maxRequests: number, windowMs: number): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now()
+  const record = rateLimitMap.get(key)
+
+  if (!record || record.resetAt <= now) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + windowMs })
+    return { allowed: true }
+  }
+
+  if (record.count >= maxRequests) {
+    const retryAfter = Math.ceil((record.resetAt - now) / 1000)
+    return { allowed: false, retryAfter }
+  }
+
+  record.count += 1
+  return { allowed: true }
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
@@ -14,10 +39,28 @@ export async function POST(request: Request) {
     }
 
     const phone = body.phone ? String(body.phone).replace(/\D/g, '').slice(-10) : ''
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown_ip'
 
     if (body.action === 'send') {
       if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
         return NextResponse.json({ error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
+      }
+
+      // Rate limit OTP send requests: max 5 per minute per IP, max 3 per minute per phone
+      const ipLimit = checkRateLimit(`send_ip_${clientIp}`, 5, 60 * 1000)
+      if (!ipLimit.allowed) {
+        return NextResponse.json(
+          { error: `Too many OTP requests from this connection. Please wait ${ipLimit.retryAfter} seconds.` },
+          { status: 429, headers: { 'Retry-After': String(ipLimit.retryAfter) } }
+        )
+      }
+
+      const phoneLimit = checkRateLimit(`send_phone_${phone}`, 3, 60 * 1000)
+      if (!phoneLimit.allowed) {
+        return NextResponse.json(
+          { error: `Too many OTP requests for this phone number. Please wait ${phoneLimit.retryAfter} seconds.` },
+          { status: 429, headers: { 'Retry-After': String(phoneLimit.retryAfter) } }
+        )
       }
 
       const result = await sendOtp(phone)
@@ -27,6 +70,15 @@ export async function POST(request: Request) {
     if (body.action === 'verify') {
       if (!phone || !body.otp) {
         return NextResponse.json({ error: 'Phone number and verification code are required.' }, { status: 400 })
+      }
+
+      // Rate limit verification attempts: max 10 per minute per phone
+      const verifyLimit = checkRateLimit(`verify_phone_${phone}`, 10, 60 * 1000)
+      if (!verifyLimit.allowed) {
+        return NextResponse.json(
+          { error: `Too many verification attempts. Please wait ${verifyLimit.retryAfter} seconds.` },
+          { status: 429, headers: { 'Retry-After': String(verifyLimit.retryAfter) } }
+        )
       }
 
       const verificationResult = await verifyOtp(phone, body.otp, body.sessionId)
