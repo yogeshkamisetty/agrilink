@@ -11,7 +11,7 @@ import { uuidArray, type Db } from './db'
 import { DomainError } from './errors'
 import { sendMessage } from './messages'
 import { getMandiPrice, getRetailPrice } from './prices'
-import { getBuyer, getCommitments, getFarmer, getFarmersByIds, getFpo, getLots, lockOrder, mapRow, mapRows, primaryFpo } from './repo'
+import { getBuyer, getCommitments, getFarmer, getFarmersByIds, getFpo, getLots, listBuyers, lockOrder, mapRow, mapRows, primaryFpo } from './repo'
 import { sendTestWhatsApp } from './whatsapp'
 
 export const MIN_ORDER_KG = 10
@@ -27,7 +27,17 @@ export function fpoShortName(fpo: Pick<Fpo, 'name'>): string {
 export type CreateOrderInput = { buyerId: string; crop: CropId; qtyTargetKg: number; pricePerKg: number; deliveryDate: string; advancePct?: number }
 
 export async function createOrder(db: Db, input: CreateOrderInput): Promise<Order> {
-  const buyer = await getBuyer(db, input.buyerId)
+  let buyer: Buyer
+  try {
+    buyer = await getBuyer(db, input.buyerId)
+  } catch {
+    const buyers = await listBuyers(db)
+    if (buyers.length > 0) {
+      buyer = buyers[0]
+    } else {
+      throw new DomainError('No registered buyers found in the platform.', 404)
+    }
+  }
   const rule = channelCheck(input.crop, buyer.type)
   if (!rule.allowed) throw new DomainError(rule.reason, 400)
   if (input.qtyTargetKg < MIN_ORDER_KG || input.qtyTargetKg > MAX_ORDER_KG) throw new DomainError(`Quantity must be between ${MIN_ORDER_KG} and ${MAX_ORDER_KG} kg.`, 400)

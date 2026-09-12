@@ -21,14 +21,18 @@ assert.equal(shelfClassOf('SPINACH'), 'perishable');
 assert.equal(shelfClassOf('ONION'), 'semiPerishable');
 assert.equal(shelfClassOf('POTATO'), 'semiPerishable');
 assert.equal(shelfClassOf('BAJRA'), 'shelfStable');
+assert.equal(shelfClassOf('PADDY'), 'shelfStable');
+assert.equal(shelfClassOf('WHEAT'), 'shelfStable');
 
 const tomatoAtFps = channelCheck('TOMATO', 'FAIR_PRICE_SHOP');
 assert.equal(tomatoAtFps.allowed, false);
 assert.equal(channelCheck('TOMATO', 'INSTITUTIONAL').allowed, true);
 assert.equal(channelCheck('ONION', 'FAIR_PRICE_SHOP').allowed, true);
 assert.equal(channelCheck('BAJRA', 'RESIDENTIAL_SOCIETY').allowed, true);
+assert.equal(channelCheck('PADDY', 'INSTITUTIONAL').allowed, true);
+assert.equal(channelCheck('WHEAT', 'FAIR_PRICE_SHOP').allowed, true);
 console.log('  ✓ Perishable crops restricted to institutional kitchens');
-console.log('  ✓ Semi-perishable & shelf-stable routing verified');
+console.log('  ✓ Semi-perishable & shelf-stable routing verified (including Paddy & Wheat)');
 
 // 2. Calendar & Dates Logic
 console.log('[2/8] Testing Calendar & Date Arithmetic...');

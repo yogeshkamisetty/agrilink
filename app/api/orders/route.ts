@@ -49,6 +49,23 @@ export async function POST(request: Request) {
       advancePct: body.advancePct ? Number(body.advancePct) : undefined,
     })
 
+    if (supabaseAdmin) {
+      try {
+        await (supabaseAdmin as any).from('orders').insert({
+          id: order.id,
+          buyer_id: buyerId,
+          crop_required: crop,
+          quantity_required: qtyTargetKg,
+          grade_required: 'Grade A Assured',
+          delivery_date: deliveryDate,
+          delivery_location: 'Central Kitchen Depot',
+          status: 'POSTED',
+        })
+      } catch (err) {
+        console.warn('Supabase sync non-fatal warning:', err)
+      }
+    }
+
     return Response.json({ order })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to create order'

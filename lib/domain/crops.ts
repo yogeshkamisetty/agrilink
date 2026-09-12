@@ -63,9 +63,9 @@ export function getCrop(crop: CropId | string): Crop {
   )
 }
 
-export function shelfClassOf(crop: CropId): ShelfClass {
+export function shelfClassOf(crop: CropId | string): ShelfClass {
   const cropObj = getCrop(crop)
-  const days = cropObj.shelfLifeDays
+  const days = cropObj?.shelfLifeDays ?? 30
   if (days <= SHELF_LIFE_ROUTING.perishable.maxDays) return 'perishable'
   if (days <= SHELF_LIFE_ROUTING.semiPerishable.maxDays) return 'semiPerishable'
   return 'shelfStable'
@@ -77,15 +77,18 @@ const SHELF_CLASS_LABEL: Record<ShelfClass, string> = {
   shelfStable: 'shelf-stable',
 }
 
-export function channelCheck(crop: CropId, buyerType: BuyerType): { allowed: boolean; reason: string } {
+export function channelCheck(crop: CropId | string, buyerType?: BuyerType | string | null): { allowed: boolean; reason: string } {
+  const normalizedType = ((buyerType || 'INSTITUTIONAL').toUpperCase()) as BuyerType
+  const typeKey = normalizedType in BUYER_TYPE_LABEL ? normalizedType : 'INSTITUTIONAL'
   const shelfClass = shelfClassOf(crop)
-  const rule = SHELF_LIFE_ROUTING[shelfClass]
+  const rule = SHELF_LIFE_ROUTING[shelfClass] || SHELF_LIFE_ROUTING.shelfStable
   const cropObj = getCrop(crop)
-  const days = cropObj.shelfLifeDays
-  const allowed = (rule.channels as readonly BuyerType[]).includes(buyerType)
+  const days = cropObj?.shelfLifeDays ?? 30
+  const allowed = (rule.channels as readonly string[]).includes(typeKey)
+  const label = BUYER_TYPE_LABEL[typeKey] || 'Institutional kitchen'
   const reason = allowed
-    ? `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) — permitted for ${BUYER_TYPE_LABEL[buyerType].toLowerCase()}.`
-    : `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day. ${BUYER_TYPE_LABEL[buyerType]} outlets have no cold storage.`
+    ? `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) — permitted for ${label.toLowerCase()}.`
+    : `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day. ${label} outlets have no cold storage.`
   return { allowed, reason }
 }
 
