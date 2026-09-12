@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { Loader2, ShieldCheck, Database, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 
@@ -133,7 +134,29 @@ export function AdminPortal() {
     <main className="mx-auto max-w-7xl p-5 py-10 sm:p-8 space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Control centre</p>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-xs font-semibold text-primary hover:underline">
+              ← Back to Main Home
+            </Link>
+            <span className="text-xs text-muted-foreground">·</span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const auth = getAuthClient()
+                  await auth.auth.signOut()
+                } catch {}
+                localStorage.removeItem('agrilink_user_name')
+                localStorage.removeItem('agrilink_user_role')
+                localStorage.removeItem('agrilink_user_phone')
+                localStorage.removeItem('agrilink_session')
+                window.location.href = '/'
+              }}
+              className="text-xs text-muted-foreground hover:text-destructive underline"
+            >
+              Sign out
+            </button>
+          </div>
           <h1 className="mt-2 font-serif text-4xl">Admin portal</h1>
         </div>
         <ShieldCheck className="size-10 text-primary" />

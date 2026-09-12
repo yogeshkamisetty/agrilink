@@ -82,8 +82,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       }
     }
 
-    const destination = data.redirectUrl || (userRole === 'admin' ? '/admin' : '/portal')
-    router.replace(destination)
+    const destination = data.redirectUrl || '/'
+    if (typeof window !== 'undefined') {
+      window.location.href = destination
+    } else {
+      router.replace(destination)
+    }
   }
 
   // Handle standard MPIN Login

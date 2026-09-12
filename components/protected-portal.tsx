@@ -82,6 +82,7 @@ export function ProtectedPortal() {
         localStorage.removeItem('agrilink_user_name')
         localStorage.removeItem('agrilink_user_role')
         localStorage.removeItem('agrilink_user_phone')
+        localStorage.removeItem('agrilink_session')
       } catch {}
     }
     const auth = getAuthClient()

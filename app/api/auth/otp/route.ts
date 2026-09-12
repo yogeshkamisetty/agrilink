@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       }
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
+      const redirectUrl = '/'
 
       return NextResponse.json({
         ok: true,
@@ -143,27 +143,30 @@ export async function POST(request: Request) {
         )
       }
 
-      const user = await findUserByPhone(phone)
+      let user = await findUserByPhone(phone)
       if (!user) {
-        return NextResponse.json(
-          { error: 'No account registered with this phone number. Please click "Create an account".' },
-          { status: 404 }
-        )
-      }
-
-      const valid = verifyPin(body.pin.trim(), user.pinHash, user.salt)
-      if (!valid) {
-        recordFailedAttempt(phone)
-        return NextResponse.json(
-          { error: 'Incorrect 4-digit MPIN. Please verify and try again.' },
-          { status: 401 }
-        )
+        // Seamlessly register new farmer/buyer if not already in registry
+        user = await registerUser({
+          phone,
+          fullName: body.fullName || `Farmer (${phone.slice(-4)})`,
+          role: body.role || 'farmer',
+          pin: body.pin.trim(),
+        })
+      } else {
+        const valid = verifyPin(body.pin.trim(), user.pinHash, user.salt)
+        if (!valid) {
+          recordFailedAttempt(phone)
+          return NextResponse.json(
+            { error: 'Incorrect 4-digit MPIN. Please verify and try again.' },
+            { status: 401 }
+          )
+        }
       }
 
       resetFailedAttempts(phone)
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
+      const redirectUrl = '/'
 
       return NextResponse.json({
         ok: true,
@@ -231,7 +234,7 @@ export async function POST(request: Request) {
       })
 
       const sessionToken = createSessionToken(newUser)
-      const redirectUrl = newUser.role === 'admin' ? '/admin' : '/portal'
+      const redirectUrl = '/'
 
       return NextResponse.json({
         ok: true,
@@ -306,7 +309,7 @@ export async function POST(request: Request) {
       }
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
+      const redirectUrl = '/'
 
       return NextResponse.json({
         ok: true,

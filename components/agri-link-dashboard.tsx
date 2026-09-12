@@ -801,6 +801,13 @@ export function AgriLinkDashboard({
                 <span>Admin Console</span>
               </Link>
             )}
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              title="Return to Main Landing Page"
+            >
+              <span>Main Home</span>
+            </Link>
             {onSignOut && (
               <button
                 onClick={onSignOut}

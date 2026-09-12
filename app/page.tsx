@@ -215,17 +215,37 @@ export default function HomePage() {
           </nav>
 
           {loggedInUser ? (
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium backdrop-blur-xs">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-muted-foreground">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card/80 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-medium backdrop-blur-xs">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="text-muted-foreground truncate max-w-[130px] sm:max-w-none">
                   Signed in as <strong className="text-foreground">{loggedInUser}</strong>
                   {userRole && <span className="ml-1.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{userRole}</span>}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const auth = getAuthClient()
+                      auth.auth.signOut()
+                    } catch {}
+                    localStorage.removeItem('agrilink_user_name')
+                    localStorage.removeItem('agrilink_user_role')
+                    localStorage.removeItem('agrilink_user_phone')
+                    localStorage.removeItem('agrilink_session')
+                    setLoggedInUser(null)
+                    setUserRole(null)
+                    window.location.href = '/'
+                  }}
+                  className="ml-1 text-[11px] text-muted-foreground hover:text-destructive underline transition-colors shrink-0"
+                  title="Sign out"
+                >
+                  Logout
+                </button>
               </div>
               <Link
                 href={userRole === 'Coordinator' ? '/admin' : '/portal'}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
               >
                 <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Workspace'}</span>
                 <ArrowRight className="size-4" />
@@ -273,6 +293,25 @@ export default function HomePage() {
                 >
                   Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Workspace`} <ArrowRight className="size-4" />
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const auth = getAuthClient()
+                      auth.auth.signOut()
+                    } catch {}
+                    localStorage.removeItem('agrilink_user_name')
+                    localStorage.removeItem('agrilink_user_role')
+                    localStorage.removeItem('agrilink_user_phone')
+                    localStorage.removeItem('agrilink_session')
+                    setLoggedInUser(null)
+                    setUserRole(null)
+                    window.location.href = '/'
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs"
+                >
+                  Sign out
+                </button>
               </div>
             ) : (
               <div className="mt-8 flex flex-wrap items-center gap-4">

@@ -27,51 +27,70 @@ export function getAuthClient(): AuthClientInstance {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-  if (url && key) {
-    return createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) as unknown as AuthClientInstance
-  }
+  const rawClient = url && key ? (createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }) as unknown as AuthClientInstance) : null
 
-  // Resilient Standalone Auth Client (Zero external APIs / localStorage powered)
   return {
     auth: {
       getSession: async () => {
-        if (typeof window === 'undefined') return { data: { session: null }, error: null }
-        try {
-          const raw = localStorage.getItem('agrilink_session')
-          if (!raw) return { data: { session: null }, error: null }
-          const session = JSON.parse(raw)
-          return { data: { session }, error: null }
-        } catch {
-          return { data: { session: null }, error: null }
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('agrilink_session')
+            if (raw) {
+              const session = JSON.parse(raw)
+              return { data: { session }, error: null }
+            }
+          } catch {}
         }
+        if (rawClient) {
+          try {
+            return await rawClient.auth.getSession()
+          } catch {}
+        }
+        return { data: { session: null }, error: null }
       },
       setSession: async ({ access_token, refresh_token }: { access_token: string; refresh_token?: string }) => {
-        if (typeof window === 'undefined') return { data: { session: null }, error: null }
-        const userPhone = localStorage.getItem('agrilink_user_phone') || '9825144102'
-        const userName = localStorage.getItem('agrilink_user_name') || 'AgriLink User'
-        const userRole = (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase()
-        const session = {
-          access_token,
-          refresh_token: refresh_token || access_token,
-          user: {
-            id: `usr_${userPhone}`,
-            phone: `+91${userPhone}`,
-            user_metadata: { mobile: userPhone, name: userName, role: userRole },
-          },
+        if (typeof window !== 'undefined') {
+          const userPhone = localStorage.getItem('agrilink_user_phone') || '9825144102'
+          const userName = localStorage.getItem('agrilink_user_name') || 'AgriLink User'
+          const userRole = (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase()
+          const session: AuthSessionData = {
+            access_token,
+            refresh_token: refresh_token || access_token,
+            user: {
+              id: `usr_${userPhone}`,
+              phone: `+91${userPhone}`,
+              user_metadata: { mobile: userPhone, name: userName, role: userRole },
+            },
+          }
+          try {
+            localStorage.setItem('agrilink_session', JSON.stringify(session))
+          } catch {}
+
+          if (rawClient && !access_token.startsWith('agl_')) {
+            try {
+              await rawClient.auth.setSession({ access_token, refresh_token: refresh_token || access_token })
+            } catch {}
+          }
+          return { data: { session }, error: null }
         }
-        localStorage.setItem('agrilink_session', JSON.stringify(session))
-        return { data: { session }, error: null }
+        return { data: { session: null }, error: null }
       },
       getUser: async () => {
-        if (typeof window === 'undefined') return { data: { user: null }, error: null }
-        try {
-          const raw = localStorage.getItem('agrilink_session')
-          if (!raw) return { data: { user: null }, error: null }
-          const session = JSON.parse(raw)
-          return { data: { user: session.user }, error: null }
-        } catch {
-          return { data: { user: null }, error: null }
+        if (typeof window !== 'undefined') {
+          try {
+            const raw = localStorage.getItem('agrilink_session')
+            if (raw) {
+              const session = JSON.parse(raw)
+              return { data: { user: session.user }, error: null }
+            }
+          } catch {}
         }
+        if (rawClient) {
+          try {
+            return await rawClient.auth.getUser()
+          } catch {}
+        }
+        return { data: { user: null }, error: null }
       },
       signOut: async () => {
         if (typeof window !== 'undefined') {
@@ -80,41 +99,49 @@ export function getAuthClient(): AuthClientInstance {
           localStorage.removeItem('agrilink_user_role')
           localStorage.removeItem('agrilink_user_phone')
         }
+        if (rawClient) {
+          try {
+            await rawClient.auth.signOut()
+          } catch {}
+        }
         return { error: null }
       },
     },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => {
-            const userName = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null
-            const userRole = typeof window !== 'undefined' ? (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase() : 'farmer'
-            return {
-              data: {
-                full_name: userName || 'AgriLink User',
-                role: userRole,
-                onboarding_complete: true,
-                verification_status: 'verified',
-              },
-              error: null,
-            }
-          },
-          single: async () => {
-            const userName = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null
-            const userRole = typeof window !== 'undefined' ? (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase() : 'farmer'
-            return {
-              data: {
-                full_name: userName || 'AgriLink User',
-                role: userRole,
-                onboarding_complete: true,
-                verification_status: 'verified',
-              },
-              error: null,
-            }
-          },
+    from: (table: string) => {
+      if (rawClient) return rawClient.from(table)
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => {
+              const userName = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null
+              const userRole = typeof window !== 'undefined' ? (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase() : 'farmer'
+              return {
+                data: {
+                  full_name: userName || 'AgriLink User',
+                  role: userRole,
+                  onboarding_complete: true,
+                  verification_status: 'verified',
+                },
+                error: null,
+              }
+            },
+            single: async () => {
+              const userName = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null
+              const userRole = typeof window !== 'undefined' ? (localStorage.getItem('agrilink_user_role') || 'Farmer').toLowerCase() : 'farmer'
+              return {
+                data: {
+                  full_name: userName || 'AgriLink User',
+                  role: userRole,
+                  onboarding_complete: true,
+                  verification_status: 'verified',
+                },
+                error: null,
+              }
+            },
+          }),
         }),
-      }),
-    }),
+      }
+    },
   }
 }
 
