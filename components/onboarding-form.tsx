@@ -66,6 +66,16 @@ export function OnboardingForm() {
         throw new Error(json.error || 'Failed to save profile.')
       }
 
+      if (typeof window !== 'undefined') {
+        try {
+          if (form.full_name) {
+            localStorage.setItem('agrilink_user_name', form.full_name.trim())
+          }
+          const mappedRole = role === 'farmer' ? 'Farmer' : 'Buyer'
+          localStorage.setItem('agrilink_user_role', mappedRole)
+        } catch {}
+      }
+
       setSaved(true)
     } catch (x) {
       setError(x instanceof Error ? x.message : 'Unable to save profile.')

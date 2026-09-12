@@ -95,6 +95,21 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         }
       }
 
+      if (typeof window !== 'undefined') {
+        try {
+          if (data.profile?.full_name) {
+            localStorage.setItem('agrilink_user_name', data.profile.full_name)
+          }
+          if (data.profile?.role) {
+            const mapped = data.profile.role === 'farmer' ? 'Farmer' : data.profile.role === 'buyer' ? 'Buyer' : 'Coordinator'
+            localStorage.setItem('agrilink_user_role', mapped)
+          }
+          if (normalPhone) {
+            localStorage.setItem('agrilink_user_phone', normalPhone)
+          }
+        } catch {}
+      }
+
       router.replace(data.onboardingComplete ? '/portal' : '/onboarding')
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to verify the code.')

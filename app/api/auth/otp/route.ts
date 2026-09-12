@@ -170,10 +170,10 @@ export async function POST(request: Request) {
         if (loginUpdateError) console.error('[auth/otp] Failed to update login time:', loginUpdateError.message)
       }
 
-      // Check onboarding status
+      // Check onboarding status and profile details
       const { data: profile } = await supabaseAdmin
         .from('user_profiles')
-        .select('onboarding_complete')
+        .select('onboarding_complete, full_name, role, verification_status')
         .eq('id', authData.user.id)
         .maybeSingle()
 
@@ -181,6 +181,7 @@ export async function POST(request: Request) {
         ok: true,
         session: authData.session,
         user: authData.user,
+        profile: profile ?? null,
         onboardingComplete: profile?.onboarding_complete ?? false,
       })
     }

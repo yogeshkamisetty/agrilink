@@ -12,6 +12,8 @@ export function ProtectedPortal() {
   const router = useRouter()
   const [ready, setReady] = useState(false)
   const [verified, setVerified] = useState(false)
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<'Coordinator' | 'Buyer' | 'Farmer' | null>(null)
 
   useEffect(() => {
     let live = true
@@ -23,7 +25,7 @@ export function ProtectedPortal() {
         if (!data.session) return router.replace('/login')
 
         // Fetch user profile via server API (bypasses any client RLS restrictions)
-        let profile: { onboarding_complete?: boolean; verification_status?: string } | null = null
+        let profile: { onboarding_complete?: boolean; verification_status?: string; full_name?: string; role?: string } | null = null
         try {
           const res = await fetch('/api/account/profile', {
             headers: { Authorization: 'Bearer ' + data.session.access_token },
@@ -36,7 +38,7 @@ export function ProtectedPortal() {
           // Fallback to client SDK if API call fails
           const { data: p } = await getAuthClient()
             .from('user_profiles')
-            .select('onboarding_complete,verification_status')
+            .select('onboarding_complete,verification_status,full_name,role')
             .eq('id', data.session.user.id)
             .maybeSingle()
           profile = p
@@ -45,6 +47,19 @@ export function ProtectedPortal() {
         if (!live) return
         if (!profile?.onboarding_complete) return router.replace('/onboarding')
         setVerified(profile.verification_status === 'verified')
+
+        // Resolve user display name and role
+        const resolvedName = profile.full_name || (typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null)
+        if (resolvedName) {
+          setUserName(resolvedName)
+          try { localStorage.setItem('agrilink_user_name', resolvedName) } catch {}
+        }
+        if (profile.role) {
+          const mappedRole = profile.role === 'farmer' ? 'Farmer' : profile.role === 'buyer' ? 'Buyer' : 'Coordinator'
+          setUserRole(mappedRole)
+          try { localStorage.setItem('agrilink_user_role', mappedRole) } catch {}
+        }
+
         setReady(true)
       } catch {
         if (live) router.replace('/login')
@@ -58,6 +73,13 @@ export function ProtectedPortal() {
   }, [router])
 
   async function signOut() {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('agrilink_user_name')
+        localStorage.removeItem('agrilink_user_role')
+        localStorage.removeItem('agrilink_user_phone')
+      } catch {}
+    }
     const auth = getAuthClient()
     const { data } = await auth.auth.getSession()
     if (data.session) {
@@ -84,7 +106,7 @@ export function ProtectedPortal() {
 
   return (
     <>
-      <AgriLinkDashboard onSignOut={signOut} verified={verified} />
+      <AgriLinkDashboard onSignOut={signOut} verified={verified} userName={userName} userRole={userRole} />
       <main className="mx-auto max-w-[1500px] px-5 pb-10 sm:px-8 lg:pl-[21rem] lg:pr-10">
         <CropAvailability />
       </main>

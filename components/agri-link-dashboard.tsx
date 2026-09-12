@@ -5,14 +5,15 @@ import { useAgriLink } from '@/lib/hooks/use-agrilink'
 import {
   AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Camera, Check, ChevronDown, ChevronRight,
   CircleDollarSign, ClipboardList, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, LogOut, MapPin, Menu, PackageCheck,
-  Phone, Plus, Printer, Receipt, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Truck, Users, Wheat, X
+  Pencil, Phone, Plus, Printer, Receipt, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Truck, Users, Wheat, X
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { GradeCamCamera } from './gradecam-camera'
 import { RouteMap } from './route-map'
 import { Language, getT, TranslationDictionary } from '@/lib/i18n'
 import { PrintableReceiptModal, DocumentType } from './printable-receipt-modal'
 import { TeamManagementModal } from './team-management-modal'
+import { getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
 type Screen = 'Overview' | 'Orders' | 'Farmer network' | 'Collection & grade' | 'Routes' | 'Settlements'
@@ -276,9 +277,13 @@ function Button({ children, onClick, variant = 'primary', disabled = false }: { 
 export function AgriLinkDashboard({
   onSignOut,
   verified = true,
+  userName,
+  userRole,
 }: {
   onSignOut?: () => void
   verified?: boolean
+  userName?: string | null
+  userRole?: Role | null
 } = {}) {
   const {
     data,
@@ -295,7 +300,105 @@ export function AgriLinkDashboard({
     resetData,
   } = useAgriLink()
 
-  const [role, setRole] = useState<Role>('Coordinator')
+  const [currentUserName, setCurrentUserName] = useState<string | null>(() => {
+    if (userName) return userName
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('agrilink_user_name')
+      } catch {
+        return null
+      }
+    }
+    return null
+  })
+
+  const [role, setRole] = useState<Role>(() => {
+    if (userRole) return userRole
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('agrilink_user_role')
+        if (saved === 'Farmer' || saved === 'Buyer' || saved === 'Coordinator') return saved
+      } catch {}
+    }
+    return 'Coordinator'
+  })
+
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+
+  useEffect(() => {
+    if (userName) {
+      setCurrentUserName(userName)
+      try { localStorage.setItem('agrilink_user_name', userName) } catch {}
+    }
+    if (userRole) {
+      setRole(userRole)
+      try { localStorage.setItem('agrilink_user_role', userRole) } catch {}
+    }
+  }, [userName, userRole])
+
+  // Also query profile from session if user name is not yet set
+  useEffect(() => {
+    if (currentUserName) return
+    try {
+      const auth = getAuthClient()
+      auth.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          fetch('/api/account/profile', {
+            headers: { Authorization: 'Bearer ' + data.session.access_token },
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.profile?.full_name) {
+                setCurrentUserName(res.profile.full_name)
+                try {
+                  localStorage.setItem('agrilink_user_name', res.profile.full_name)
+                  if (res.profile.role) {
+                    const mapped = res.profile.role === 'farmer' ? 'Farmer' : res.profile.role === 'buyer' ? 'Buyer' : 'Coordinator'
+                    setRole(mapped)
+                    localStorage.setItem('agrilink_user_role', mapped)
+                  }
+                } catch {}
+              }
+            })
+            .catch(() => {})
+        }
+      }).catch(() => {})
+    } catch {}
+  }, [currentUserName])
+
+  const handleSaveName = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmed = nameInput.trim()
+    if (!trimmed) return
+    setCurrentUserName(trimmed)
+    try {
+      localStorage.setItem('agrilink_user_name', trimmed)
+    } catch {}
+    setEditingName(false)
+    setActionMessage(`Display name updated to "${trimmed}"`)
+
+    // Persist to user profile if session exists
+    try {
+      const auth = getAuthClient()
+      auth.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          fetch('/api/account/onboarding', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + data.session.access_token,
+            },
+            body: JSON.stringify({
+              full_name: trimmed,
+              role: role.toLowerCase(),
+            }),
+          }).catch(() => {})
+        }
+      }).catch(() => {})
+    } catch {}
+  }
+
   const [activeNav, setActiveNav] = useState<Screen>('Overview')
   const [menuOpen, setMenuOpen] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
@@ -546,7 +649,7 @@ export function AgriLinkDashboard({
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
         <Brand t={t} />
-        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} />
+        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} />
       </aside>
       <main className="lg:pl-64">
         <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur-md sm:px-8 lg:px-10">
@@ -556,9 +659,48 @@ export function AgriLinkDashboard({
             </button>
             <div className="min-w-0">
               <p className="font-mono text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-muted-foreground truncate">AgriLink Pilot · Live Engine</p>
-              <h1 className="font-serif text-lg font-bold tracking-tight sm:text-2xl truncate">
-                {t.goodMorning}, {role === 'Farmer' ? 'Ramesh' : role === 'Buyer' ? 'Meera' : 'Anita'}
-              </h1>
+              {editingName ? (
+                <form onSubmit={handleSaveName} className="flex items-center gap-2 mt-0.5">
+                  <input
+                    type="text"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    placeholder="Enter your name"
+                    className="rounded-lg border border-primary bg-background px-2.5 py-1 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 max-w-[180px] sm:max-w-[220px]"
+                    autoFocus
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingName(false)}
+                    className="rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-secondary transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <h1 className="group flex items-center gap-2 font-serif text-lg font-bold tracking-tight sm:text-2xl truncate">
+                  <span className="truncate">
+                    {t.goodMorning}, {currentUserName?.trim() || (role === 'Farmer' ? 'Ramesh' : role === 'Buyer' ? 'Meera' : 'Anita')}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setNameInput(currentUserName?.trim() || (role === 'Farmer' ? 'Ramesh' : role === 'Buyer' ? 'Meera' : 'Anita'))
+                      setEditingName(true)
+                    }}
+                    className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-primary transition-colors shrink-0"
+                    title="Change display name"
+                    aria-label="Change display name"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                </h1>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -701,7 +843,7 @@ export function AgriLinkDashboard({
                   <X className="size-5" />
                 </button>
               </div>
-              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} />
+              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} />
             </div>
           </div>
         )}
@@ -849,6 +991,8 @@ function Sidebar({
   mobile = false,
   onSignOut,
   t,
+  userName,
+  verified = true,
 }: {
   activeNav: Screen
   role: Role
@@ -858,6 +1002,8 @@ function Sidebar({
   mobile?: boolean
   onSignOut?: () => void
   t?: TranslationDictionary
+  userName?: string | null
+  verified?: boolean
 }) {
   const [ordersExpanded, setOrdersExpanded] = useState(false)
 
@@ -928,6 +1074,19 @@ function Sidebar({
             <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-border">
               <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${volumePct}%` }} />
             </div>
+          </div>
+        )}
+
+        {userName && (
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-xs">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-serif font-bold text-primary">
+              {userName[0]?.toUpperCase() || 'U'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-foreground">{userName}</p>
+              <p className="truncate text-[10px] text-muted-foreground font-mono">{role} Account</p>
+            </div>
+            {verified && <ShieldCheck className="size-4 shrink-0 text-primary" />}
           </div>
         )}
 

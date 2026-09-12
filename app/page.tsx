@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight, BadgeCheck, Boxes, Check, CheckCircle2, ChevronRight,
@@ -8,6 +8,7 @@ import {
   QrCode, RefreshCw, Route, ShieldCheck, Smartphone, Sparkles, Sprout,
   Star, TrendingUp, Truck, Users, Wallet, Zap
 } from 'lucide-react'
+import { getAuthClient } from '@/lib/auth-client'
 
 const verifiedCrops = [
   { name: 'Tomato', img: '/crops/tomato.png', grade: 'Grade A', volume: '1,200 kg', region: 'Petlad & Boriavi' },
@@ -23,6 +24,35 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<FeatureTab>('gradecam')
   const [annualBilling, setAnnualBilling] = useState(true)
   const [monthlyVolumeKg, setMonthlyVolumeKg] = useState(15000)
+  const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('agrilink_user_name')
+        if (cached) setLoggedInUser(cached)
+      } catch {}
+    }
+
+    try {
+      const auth = getAuthClient()
+      auth.auth.getSession().then(({ data }) => {
+        if (data.session) {
+          fetch('/api/account/profile', {
+            headers: { Authorization: 'Bearer ' + data.session.access_token },
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              if (res.profile?.full_name) {
+                setLoggedInUser(res.profile.full_name)
+                try { localStorage.setItem('agrilink_user_name', res.profile.full_name) } catch {}
+              }
+            })
+            .catch(() => {})
+        }
+      }).catch(() => {})
+    } catch {}
+  }, [])
 
   // Dynamic ROI calculations based on monthly procurement volume
   const roi = useMemo(() => {
@@ -176,20 +206,36 @@ export default function HomePage() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link
-              href="/signup"
-              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
-            >
-              Get started free
-            </Link>
-          </div>
+          {loggedInUser ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium backdrop-blur-xs">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-muted-foreground">Signed in as <strong className="text-foreground">{loggedInUser}</strong></span>
+              </div>
+              <Link
+                href="/portal"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+              >
+                <span>Workspace</span>
+                <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/login"
+                className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/signup"
+                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+              >
+                Get started free
+              </Link>
+            </div>
+          )}
         </div>
       </header>
 
@@ -208,20 +254,31 @@ export default function HomePage() {
               AgriLink unifies farmers, FPOs, wholesale buyers, and logistics fleets into one transparent operating system—crop planning, AI visual grading, GPS routing, and instant bank settlements included.
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <Link
-                href="/signup"
-                className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
-              >
-                Create free FPO / Buyer account <ArrowRight className="size-4" />
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3.5 text-base font-semibold hover:bg-muted transition-colors shadow-2xs"
-              >
-                Open live workspace
-              </Link>
-            </div>
+            {loggedInUser ? (
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link
+                  href="/portal"
+                  className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
+                >
+                  Welcome back, {loggedInUser} · Open Workspace <ArrowRight className="size-4" />
+                </Link>
+              </div>
+            ) : (
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <Link
+                  href="/signup"
+                  className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
+                >
+                  Create free FPO / Buyer account <ArrowRight className="size-4" />
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3.5 text-base font-semibold hover:bg-muted transition-colors shadow-2xs"
+                >
+                  Open live workspace
+                </Link>
+              </div>
+            )}
 
             <div className="mt-10 grid grid-cols-3 gap-6 border-t border-border pt-8 text-left">
               <div>
