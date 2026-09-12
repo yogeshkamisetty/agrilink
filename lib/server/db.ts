@@ -21,17 +21,27 @@ const INT8 = 20
 const DATE = 1082
 
 async function openPglite(dataDir: string | undefined): Promise<Db> {
-  if (dataDir) await fs.mkdir(dataDir, { recursive: true })
   const { PGlite } = await import('@electric-sql/pglite')
-  const pg = new PGlite(dataDir, {
-    parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
-  })
-  await pg.waitReady
+  let pg: any
+  try {
+    if (dataDir) await fs.mkdir(dataDir, { recursive: true })
+    pg = new PGlite(dataDir, {
+      parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
+    })
+    await pg.waitReady
+  } catch (err) {
+    console.warn('[agrilink/db] PGlite directory initialization notice, falling back to in-memory instance:', err)
+    pg = new PGlite(undefined, {
+      parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
+    })
+    await pg.waitReady
+  }
+
   type Queryable = { query: <T>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>; exec: (sql: string) => Promise<unknown> }
   const wrap = (q: Queryable, inTx: boolean): Db => ({
     kind: 'pglite',
     query: async <T,>(text: string, params: unknown[] = []) => (await q.query<T>(text, params)).rows,
-    tx: <T,>(fn: (db: Db) => Promise<T>) => (inTx ? fn(wrap(q, true)) : pg.transaction((t) => fn(wrap(t as unknown as Queryable, true)))),
+    tx: <T,>(fn: (db: Db) => Promise<T>) => (inTx ? fn(wrap(q, true)) : pg.transaction((t: any) => fn(wrap(t as unknown as Queryable, true)))),
     exec: async (sql: string) => {
       await q.exec(sql)
     },

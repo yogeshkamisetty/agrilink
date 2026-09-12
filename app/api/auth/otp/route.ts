@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       }
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = '/'
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/'
 
       return NextResponse.json({
         ok: true,
@@ -166,7 +166,7 @@ export async function POST(request: Request) {
       resetFailedAttempts(phone)
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = '/'
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/'
 
       return NextResponse.json({
         ok: true,
@@ -234,7 +234,7 @@ export async function POST(request: Request) {
       })
 
       const sessionToken = createSessionToken(newUser)
-      const redirectUrl = '/'
+      const redirectUrl = newUser.role === 'admin' ? '/admin' : '/'
 
       return NextResponse.json({
         ok: true,
@@ -309,7 +309,7 @@ export async function POST(request: Request) {
       }
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = '/'
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/'
 
       return NextResponse.json({
         ok: true,
