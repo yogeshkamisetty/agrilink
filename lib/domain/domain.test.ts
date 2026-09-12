@@ -13,6 +13,8 @@ import { renderMessage, LANGS } from './i18n'
 
 describe('shelf-life channel routing', () => {
   it('classifies crops by shelf life', () => {
+    expect(shelfClassOf('PADDY')).toBe('shelfStable')
+    expect(shelfClassOf('WHEAT')).toBe('shelfStable')
     expect(shelfClassOf('TOMATO')).toBe('perishable')
     expect(shelfClassOf('SPINACH')).toBe('perishable')
     expect(shelfClassOf('ONION')).toBe('semiPerishable')
@@ -26,6 +28,8 @@ describe('shelf-life channel routing', () => {
     expect(tomatoAtFps.reason).toMatch(/institutional kitchens only/)
     expect(channelCheck('TOMATO', 'RESIDENTIAL_SOCIETY').allowed).toBe(false)
     expect(channelCheck('TOMATO', 'INSTITUTIONAL').allowed).toBe(true)
+    expect(channelCheck('PADDY', 'INSTITUTIONAL').allowed).toBe(true)
+    expect(channelCheck('WHEAT', 'FAIR_PRICE_SHOP').allowed).toBe(true)
     expect(channelCheck('ONION', 'FAIR_PRICE_SHOP').allowed).toBe(true)
     expect(channelCheck('BAJRA', 'RESIDENTIAL_SOCIETY').allowed).toBe(true)
   })

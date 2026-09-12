@@ -60,12 +60,16 @@ const BUYERS: Array<{ key: string; name: string; type: BuyerType; address: strin
 
 /** Illustrative prices for offline use. Clearly labelled SEEDED in the UI — never presented as a published figure. */
 const SEEDED_PRICES: Array<{ kind: 'MANDI' | 'RETAIL'; crop: CropId; price: number; market: string }> = [
+  { kind: 'MANDI', crop: 'PADDY', price: 22, market: 'Anand APMC' },
+  { kind: 'MANDI', crop: 'WHEAT', price: 24, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'TOMATO', price: 13, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'ONION', price: 14, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'POTATO', price: 11, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'BAJRA', price: 25, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'SPINACH', price: 12, market: 'Anand APMC' },
   { kind: 'MANDI', crop: 'TUR', price: 72, market: 'Anand APMC' },
+  { kind: 'RETAIL', crop: 'PADDY', price: 34, market: 'Ahmedabad' },
+  { kind: 'RETAIL', crop: 'WHEAT', price: 38, market: 'Ahmedabad' },
   { kind: 'RETAIL', crop: 'TOMATO', price: 28, market: 'Ahmedabad' },
   { kind: 'RETAIL', crop: 'ONION', price: 30, market: 'Ahmedabad' },
   { kind: 'RETAIL', crop: 'POTATO', price: 22, market: 'Ahmedabad' },

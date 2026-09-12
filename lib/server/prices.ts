@@ -1,4 +1,4 @@
-import { CROPS, type CropId } from '@/lib/domain/crops'
+import { CROPS, getCrop, type CropId } from '@/lib/domain/crops'
 import { summariseMandiRecords, type AgmarknetRecord, type PriceQuote } from '@/lib/domain/prices'
 import { clock } from './clock'
 import type { Db } from './db'
@@ -60,14 +60,14 @@ function dataGovUrl(resource: string, key: string, filters: Record<string, strin
 }
 
 /**
- * AGMARKNET daily mandi price (data.gov.in). Tries the pilot state first;
- * state arrivals are posted through the day, so early in the morning it
+ * AGMARKNET mandi price. Tries the pilot state's markets first; if none have
+ * reported yet today (common early in the morning before arrivals are logged)
  * falls back to the national median — and says so.
  */
 export async function getMandiPrice(db: Db, crop: CropId, state = process.env.PILOT_STATE || 'Gujarat'): Promise<PriceQuote | null> {
   const key = process.env.DATA_GOV_IN_API_KEY
   if (!key) return fallback(db, 'MANDI', crop, 'DATA_GOV_IN_API_KEY not set')
-  const commodity = CROPS[crop].agmarknetCommodity
+  const commodity = getCrop(crop).agmarknetCommodity
   try {
     const stateData = await fetchJson(dataGovUrl(AGMARKNET_RESOURCE, key, { 'state.keyword': state, commodity }))
     const inState = summariseMandiRecords((stateData.records ?? []) as AgmarknetRecord[])
@@ -102,7 +102,7 @@ function pickNumber(record: DocaRecord, keys: string[]): number | null {
  * the cached or seeded figure, labelled as such.
  */
 export async function getRetailPrice(db: Db, crop: CropId, centre = process.env.DOCA_CENTRE || 'Ahmedabad'): Promise<PriceQuote | null> {
-  const commodity = CROPS[crop].docaCommodity
+  const commodity = getCrop(crop).docaCommodity
   if (!commodity) return null
   const key = process.env.DATA_GOV_IN_API_KEY
   const resource = process.env.DOCA_RESOURCE_ID

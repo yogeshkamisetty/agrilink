@@ -16,6 +16,8 @@ export function isLang(value: unknown): value is Lang {
 }
 
 const CROP_NAMES: Record<CropId, Record<Lang, string>> = {
+  PADDY: { en: 'paddy (rice)', hi: 'धान (चावल)', te: 'వరి (వరి ధాన్యం)', gu: 'ડાંગર' },
+  WHEAT: { en: 'wheat', hi: 'गेहूं', te: 'గోధుమలు', gu: 'ઘઉં' },
   TOMATO: { en: 'tomato', hi: 'टमाटर', te: 'టమోటా', gu: 'ટામેટાં' },
   SPINACH: { en: 'spinach', hi: 'पालक', te: 'పాలకూర', gu: 'પાલક' },
   ONION: { en: 'onion', hi: 'प्याज़', te: 'ఉల్లిపాయ', gu: 'ડુંગળી' },
@@ -24,8 +26,9 @@ const CROP_NAMES: Record<CropId, Record<Lang, string>> = {
   TUR: { en: 'tur', hi: 'तुअर', te: 'కందులు', gu: 'તુવેર' },
 }
 
-export function cropName(crop: CropId, lang: Lang): string {
-  return CROP_NAMES[crop][lang]
+export function cropName(crop: CropId | string, lang: Lang): string {
+  const norm = (crop || '').toUpperCase() as CropId
+  return CROP_NAMES[norm]?.[lang] || CROP_NAMES[norm]?.['en'] || String(crop || '')
 }
 
 const DATE_LOCALE: Record<Lang, string> = { en: 'en-IN', hi: 'hi-IN', te: 'te-IN', gu: 'gu-IN' }

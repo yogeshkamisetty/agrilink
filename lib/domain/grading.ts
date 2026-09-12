@@ -49,7 +49,8 @@ export type AiGrading =
   | { status: 'UNAVAILABLE'; reason: string }
 
 export function buildGradingPrompt(crop: CropId): string {
-  const name = CROPS[crop].name
+  const norm = (crop || '').toUpperCase() as CropId
+  const name = CROPS[norm]?.name || CROPS[crop]?.name || crop
   const grades = (Object.entries(GRADE_CRITERIA) as Array<[Grade, (typeof GRADE_CRITERIA)[Grade]]>)
     .map(([g, c]) => `- ${g} (${c.agmark}): ${c.criteria}`)
     .join('\n')

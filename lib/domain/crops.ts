@@ -1,5 +1,5 @@
 export type BuyerType = 'INSTITUTIONAL' | 'FAIR_PRICE_SHOP' | 'RESIDENTIAL_SOCIETY'
-export type CropId = 'TOMATO' | 'SPINACH' | 'ONION' | 'POTATO' | 'BAJRA' | 'TUR'
+export type CropId = 'PADDY' | 'WHEAT' | 'TOMATO' | 'SPINACH' | 'ONION' | 'POTATO' | 'BAJRA' | 'TUR'
 export type ShelfClass = 'perishable' | 'semiPerishable' | 'shelfStable'
 
 /**
@@ -27,6 +27,8 @@ export type Crop = {
 }
 
 export const CROPS: Record<CropId, Crop> = {
+  PADDY: { id: 'PADDY', name: 'Paddy (Rice)', shelfLifeDays: 365, agmarknetCommodity: 'Paddy(Dhan)(Common)', docaCommodity: 'Rice' },
+  WHEAT: { id: 'WHEAT', name: 'Wheat', shelfLifeDays: 365, agmarknetCommodity: 'Wheat', docaCommodity: 'Wheat' },
   TOMATO: { id: 'TOMATO', name: 'Tomato', shelfLifeDays: 4, agmarknetCommodity: 'Tomato', docaCommodity: 'Tomato' },
   SPINACH: { id: 'SPINACH', name: 'Spinach', shelfLifeDays: 2, agmarknetCommodity: 'Spinach', docaCommodity: null },
   ONION: { id: 'ONION', name: 'Onion', shelfLifeDays: 45, agmarknetCommodity: 'Onion', docaCommodity: 'Onion' },
@@ -44,11 +46,26 @@ export const BUYER_TYPE_LABEL: Record<BuyerType, string> = {
 }
 
 export function isCropId(value: unknown): value is CropId {
-  return typeof value === 'string' && value in CROPS
+  return typeof value === 'string' && (value.toUpperCase() in CROPS || value in CROPS)
+}
+
+export function getCrop(crop: CropId | string): Crop {
+  const norm = (crop || '').toUpperCase() as CropId
+  return (
+    CROPS[norm] ||
+    CROPS[crop as CropId] || {
+      id: norm,
+      name: crop || 'Produce',
+      shelfLifeDays: 30,
+      agmarknetCommodity: crop || 'General',
+      docaCommodity: null,
+    }
+  )
 }
 
 export function shelfClassOf(crop: CropId): ShelfClass {
-  const days = CROPS[crop].shelfLifeDays
+  const cropObj = getCrop(crop)
+  const days = cropObj.shelfLifeDays
   if (days <= SHELF_LIFE_ROUTING.perishable.maxDays) return 'perishable'
   if (days <= SHELF_LIFE_ROUTING.semiPerishable.maxDays) return 'semiPerishable'
   return 'shelfStable'
@@ -63,11 +80,12 @@ const SHELF_CLASS_LABEL: Record<ShelfClass, string> = {
 export function channelCheck(crop: CropId, buyerType: BuyerType): { allowed: boolean; reason: string } {
   const shelfClass = shelfClassOf(crop)
   const rule = SHELF_LIFE_ROUTING[shelfClass]
-  const days = CROPS[crop].shelfLifeDays
+  const cropObj = getCrop(crop)
+  const days = cropObj.shelfLifeDays
   const allowed = (rule.channels as readonly BuyerType[]).includes(buyerType)
   const reason = allowed
-    ? `${CROPS[crop].name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) — permitted for ${BUYER_TYPE_LABEL[buyerType].toLowerCase()}.`
-    : `${CROPS[crop].name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day. ${BUYER_TYPE_LABEL[buyerType]} outlets have no cold storage.`
+    ? `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) — permitted for ${BUYER_TYPE_LABEL[buyerType].toLowerCase()}.`
+    : `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day. ${BUYER_TYPE_LABEL[buyerType]} outlets have no cold storage.`
   return { allowed, reason }
 }
 
@@ -77,5 +95,5 @@ export function channelCheck(crop: CropId, buyerType: BuyerType): { allowed: boo
  * delivery; stored onion or millet can come from a much older harvest.
  */
 export function harvestLeadDays(crop: CropId): number {
-  return Math.max(0, CROPS[crop].shelfLifeDays - 1)
+  return Math.max(0, getCrop(crop).shelfLifeDays - 1)
 }
