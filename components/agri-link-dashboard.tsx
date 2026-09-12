@@ -20,6 +20,7 @@ import { ExcessRedistributionModal } from './excess-redistribution-modal'
 import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
 import { FarmerDashboardView } from './farmer-dashboard-view'
+import { BolnaCallModal } from './bolna-call-modal'
 import { getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -461,6 +462,18 @@ export function AgriLinkDashboard({
   const [showVoiceModal, setShowVoiceModal] = useState(false)
   const [showExcessModal, setShowExcessModal] = useState(false)
   const [showCommunityModal, setShowCommunityModal] = useState(false)
+
+  // Bolna AI Calling Agent Confirmation States
+  const [bolnaModalOpen, setBolnaModalOpen] = useState(false)
+  const [callingFarmer, setCallingFarmer] = useState<{
+    id?: string
+    name: string
+    mobile_number?: string
+    village?: string
+    crop?: string
+    crop_name?: string
+  } | null>(null)
+  const [callingAllocatedKg, setCallingAllocatedKg] = useState<number>(500)
 
   // Live sync rosterFarmers with /api/farmers
   useEffect(() => {
@@ -1264,6 +1277,11 @@ export function AgriLinkDashboard({
                     farmers={rosterFarmers}
                     busy={actionBusy}
                     t={t}
+                    onCallFarmer={(farmer: any, allocatedKg?: number) => {
+                      setCallingFarmer(farmer)
+                      setCallingAllocatedKg(allocatedKg || 500)
+                      setBolnaModalOpen(true)
+                    }}
                   />
                 </div>
               )}
@@ -1352,6 +1370,18 @@ export function AgriLinkDashboard({
           onClose={() => setShowCommunityModal(false)}
           onSubmitCommunityDemand={(comm) => {
             setActionMessage(`Community demand for ${comm.qtyKg} kg ${comm.crop} ("${comm.title}") posted! Nearby cluster farmers notified.`)
+          }}
+        />
+
+        {/* Bolna AI Voice Confirmation Modal */}
+        <BolnaCallModal
+          isOpen={bolnaModalOpen}
+          onClose={() => setBolnaModalOpen(false)}
+          farmer={callingFarmer}
+          order={activeOrder}
+          allocatedKg={callingAllocatedKg}
+          onCallSuccess={(farmerId) => {
+            setActionMessage('Bolna AI Agent call initiated successfully! Farmer confirmation logged.')
           }}
         />
       </main>
@@ -2386,7 +2416,7 @@ function Step({ done, title, detail, action }: { done: boolean; title: string; d
   )
 }
 
-function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any) {
+function Network({ notified, onNotify, busy, t, order, onOnboard, farmers, onCallFarmer }: any) {
   const [cascadeTier, setCascadeTier] = useState<'sms' | 'whatsapp' | 'call'>('sms')
   const crop = order?.crop || 'PADDY'
   const price = order?.pricePerKg || 28
@@ -2470,9 +2500,33 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
                 </div>
                 <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-muted-foreground truncate">{farmer.village} · {farmer.crop} · harvest window 17–19 Oct</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="font-mono text-xs sm:text-sm font-semibold">{farmer.kg} kg</p>
-                <Badge tone={farmer.status === 'Standby' ? 'warn' : 'good'}>{farmer.status}</Badge>
+              <div className="flex items-center gap-2">
+                <div className="text-right shrink-0">
+                  <p className="font-mono text-xs sm:text-sm font-semibold">{farmer.kg} kg</p>
+                  <Badge tone={farmer.status === 'Standby' ? 'warn' : 'good'}>{farmer.status}</Badge>
+                </div>
+                {onCallFarmer && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCallFarmer(
+                        {
+                          id: farmer.id || `f-${farmer.name}`,
+                          name: farmer.name,
+                          mobile_number: farmer.mobile_number || farmer.phone || '+91 98251 44102',
+                          village: farmer.village,
+                          crop: farmer.crop,
+                        },
+                        Number(farmer.kg) || 500
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-2.5 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    title="Initiate Bolna AI Outbound Voice Call to Farmer"
+                  >
+                    <PhoneCall className="size-3" />
+                    <span className="hidden sm:inline">AI Call</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -2607,6 +2661,32 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
                     <Volume2 className="size-3" /> Play Call Demo
                   </button>
                 </div>
+
+                {onCallFarmer && (
+                  <div className="pt-2.5 border-t border-amber-500/20 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-foreground/80">Admin Outbound AI Calling:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onCallFarmer(
+                          {
+                            id: 'f-ramesh',
+                            name: 'Ramesh Kumar',
+                            mobile_number: '+91 98251 44102',
+                            village: 'Kheda',
+                            crop: crop,
+                          },
+                          500
+                        )
+                      }
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                      title="Trigger Bolna AI Outbound Voice Call to Farmer"
+                    >
+                      <PhoneCall className="size-3.5" />
+                      <span>Initiate Bolna AI Call</span>
+                    </button>
+                  </div>
+                )}
               </div>
               <p className="text-[11px] text-muted-foreground">
                 T+15 mins: Automated phone call. If no answer, shifts to Standby Buffer farmer automatically.

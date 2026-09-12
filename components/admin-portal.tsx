@@ -26,9 +26,12 @@ import {
   Fuel,
   Award,
   Compass,
+  PhoneCall,
+  Bot,
 } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 import { RouteMap } from '@/components/route-map'
+import { BolnaCallModal } from '@/components/bolna-call-modal'
 import {
   allocateFarmersOptimal,
   getVillageLatLng,
@@ -127,6 +130,12 @@ export function AdminPortal() {
   const [farmerAllocations, setFarmerAllocations] = useState<Record<string, number>>({})
   const [isAggregating, setIsAggregating] = useState(false)
   const [aggregationSuccess, setAggregationSuccess] = useState<string | null>(null)
+
+  // Bolna AI Calling Agent Confirmation States
+  const [bolnaModalOpen, setBolnaModalOpen] = useState(false)
+  const [selectedCallFarmer, setSelectedCallFarmer] = useState<LiveFarmer | null>(null)
+  const [selectedCallAllocatedKg, setSelectedCallAllocatedKg] = useState<number>(300)
+  const [confirmedFarmers, setConfirmedFarmers] = useState<Record<string, boolean>>({})
 
   // Auto-heal session for Anita Sharma (Coordinator / Admin)
   async function ensureSession(): Promise<string | null> {
@@ -840,6 +849,7 @@ export function AdminPortal() {
                     <th className="p-3.5 sm:px-4">Algorithm Role</th>
                     <th className="p-3.5 sm:px-4">Capacity</th>
                     <th className="p-3.5 sm:px-4">Allocated (KG)</th>
+                    <th className="p-3.5 sm:px-4 text-right">AI Voice Confirmation</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -922,6 +932,25 @@ export function AdminPortal() {
                             />
                             <span className="text-[11px] text-muted-foreground">/ {maxCap}</span>
                           </div>
+                        </td>
+                        <td className="p-3.5 sm:px-4 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCallFarmer(f)
+                              setSelectedCallAllocatedKg(allocated > 0 ? allocated : Number(f.quantity || 300))
+                              setBolnaModalOpen(true)
+                            }}
+                            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                              confirmedFarmers[f.id]
+                                ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                                : 'border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary hover:scale-105'
+                            }`}
+                            title="Trigger Bolna AI Outbound Voice Call to Farmer"
+                          >
+                            <PhoneCall className="size-3.5" />
+                            <span>{confirmedFarmers[f.id] ? 'Confirmed ✓' : 'Call AI Agent'}</span>
+                          </button>
                         </td>
                       </tr>
                     )
@@ -1345,6 +1374,18 @@ export function AdminPortal() {
           </div>
         </section>
       )}
+
+      {/* 8. Bolna AI Voice Calling Agent Confirmation Modal */}
+      <BolnaCallModal
+        isOpen={bolnaModalOpen}
+        onClose={() => setBolnaModalOpen(false)}
+        farmer={selectedCallFarmer}
+        order={activeOrder}
+        allocatedKg={selectedCallAllocatedKg}
+        onCallSuccess={(farmerId) => {
+          setConfirmedFarmers((prev) => ({ ...prev, [farmerId]: true }))
+        }}
+      />
     </main>
   )
 }
