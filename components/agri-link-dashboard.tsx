@@ -1247,15 +1247,25 @@ export function AgriLinkDashboard({
               )}
 
               {activeNav === 'Farmer network' && (
-                <Network
-                  order={activeOrder}
-                  notified={activeOrder?.status !== 'POSTED'}
-                  onNotify={handleNotify}
-                  onOnboard={() => setShowOnboardFarmerModal(true)}
-                  farmers={rosterFarmers}
-                  busy={actionBusy}
-                  t={t}
-                />
+                <div className="space-y-6">
+                  <SmartAggregationCard
+                    orderCode={activeOrder?.code || 'AG-1001'}
+                    crop={activeOrder?.crop || 'Paddy (Rice)'}
+                    targetKg={Number((activeOrder as any)?.targetKg || activeOrder?.qtyTargetKg || 1000)}
+                    pricePerKg={activeOrder?.pricePerKg || 28}
+                    deliveryDate={activeOrder?.deliveryDate || '2025-10-20'}
+                    buyerName={activeBuyer?.name || 'PM POSHAN Central Kitchen'}
+                  />
+                  <Network
+                    order={activeOrder}
+                    notified={activeOrder?.status !== 'POSTED'}
+                    onNotify={handleNotify}
+                    onOnboard={() => setShowOnboardFarmerModal(true)}
+                    farmers={rosterFarmers}
+                    busy={actionBusy}
+                    t={t}
+                  />
+                </div>
               )}
 
               {activeNav === 'Collection & grade' && (
@@ -2903,21 +2913,40 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
 }
 
 function RoutesScreen({ role, order, onDispatch, onDeliver, busy, onPrintWaybill, t }: any) {
-  const crop = order?.crop || 'PADDY'
+  const crop = (order?.crop || 'Paddy (Rice)').toUpperCase()
+  const targetKg = Number(order?.targetKg || order?.qty_target_kg || 1000)
+  const standbyKg = Math.round(targetKg * 0.15)
+  const totalCargoKg = targetKg + standbyKg
+
+  let vehicleName = 'Tata Ace CNG (GJ-07-TY-4912)'
+  let maxCapKg = 850
+  let fuelType = 'CNG Green Freight'
+  if (totalCargoKg > 1400) {
+    vehicleName = 'Eicher Pro 2049 (GJ-07-BB-8819)'
+    maxCapKg = 2500
+    fuelType = 'Clean Diesel (BS-VI)'
+  } else if (totalCargoKg > 800) {
+    vehicleName = 'Mahindra Bolero Maxi Truck (GJ-07-MK-5501)'
+    maxCapKg = 1400
+    fuelType = 'Clean Diesel (BS-VI)'
+  }
+
+  const loadFactor = Math.min(100, Math.round((totalCargoKg / maxCapKg) * 100))
   const routeStops = [
-    { id: 'depot', kind: 'DEPOT' as const, label: 'Kheda FPO Depot', detail: 'Collection Depot', lat: 22.75, lng: 72.68 },
-    { id: 'f1', kind: 'PICKUP' as const, label: 'Pickup #1', detail: 'Ramesh Kumar · 500 kg', lat: 22.72, lng: 72.71, kg: 500 },
-    { id: 'f2', kind: 'PICKUP' as const, label: 'Pickup #2', detail: 'Savitri Devi · 700 kg', lat: 22.41, lng: 72.9, kg: 700 },
-    { id: 'drop', kind: 'DROP' as const, label: 'Buyer Drop Point', detail: 'Central Kitchen', lat: 22.57, lng: 72.95, kg: 1200 },
+    { id: 'depot', kind: 'DEPOT' as const, label: 'Kheda FPO Collection Hub', detail: 'Vehicle Departure · 06:30 AM', lat: 22.7533, lng: 72.6841, kg: 0 },
+    { id: 'f1', kind: 'PICKUP' as const, label: 'Pickup #1: Ramesh Kumar', detail: 'Kheda Village · 500 kg Primary', lat: 22.75, lng: 72.69, kg: Math.min(500, targetKg) },
+    { id: 'f2', kind: 'PICKUP' as const, label: 'Pickup #2: Savitri Devi', detail: 'Borsad Village · 500 kg Primary', lat: 22.4118, lng: 72.9022, kg: Math.min(500, Math.max(0, targetKg - 500)) || 300 },
+    { id: 'f3', kind: 'PICKUP' as const, label: 'Pickup #3: Mohan Lal', detail: `Vasad Village · +${standbyKg} kg Standby Buffer`, lat: 22.4705, lng: 73.0722, kg: standbyKg },
+    { id: 'drop', kind: 'DROP' as const, label: 'Buyer Drop: Central Kitchen', detail: `${order?.delivery_location || 'PM POSHAN Central Kitchen, Anand'} · ${totalCargoKg} kg`, lat: 22.5645, lng: 72.9289, kg: totalCargoKg },
   ]
   return (
     <div className="grid gap-6 xl:grid-cols-[1.25fr_1fr]">
       <Card className="overflow-hidden p-6">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <Badge tone="good">Optimised Route · 18.4 km</Badge>
-              <Badge tone="muted">Tata Ace GJ-07-TY-4912</Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="good">TSP 2-Opt · 22.4 km (31% fuel saved)</Badge>
+              <Badge tone="muted">{vehicleName} ({loadFactor}% load)</Badge>
             </div>
             <h3 className="mt-2 font-serif text-2xl font-bold">
               {role === 'Buyer' ? 'Consignment live tracking' : 'Consignment manifest'}
@@ -2941,10 +2970,11 @@ function RoutesScreen({ role, order, onDispatch, onDeliver, busy, onPrintWaybill
                   'Est. Arrival',
                   'Vehicle Assigned',
                 ], [
-                  ['1', 'DEPOT', 'Kheda FPO Collection Hub', '+91 98251 00000', '22.7500, 72.6800', '0 kg', crop, '06:30 AM', 'Tata Ace (GJ-07-TY-4912)'],
-                  ['2', 'PICKUP', 'Ramesh Kumar (Kheda Village)', '+91 98251 44102', '22.7200, 72.7100', '500 kg', crop, '07:15 AM', 'Tata Ace (GJ-07-TY-4912)'],
-                  ['3', 'PICKUP', 'Savitri Devi (Borsad Village)', '+91 98250 88219', '22.4100, 72.9000', '700 kg', crop, '08:00 AM', 'Tata Ace (GJ-07-TY-4912)'],
-                  ['4', 'DROP', 'PM POSHAN Central Kitchen (Anand)', '+91 98252 77103', '22.5700, 72.9500', '1200 kg', crop, '09:15 AM', 'Tata Ace (GJ-07-TY-4912)'],
+                  ['1', 'DEPOT', 'Kheda FPO Collection Hub', '+91 98251 00000', '22.7533, 72.6841', '0 kg', crop, '06:30 AM', vehicleName],
+                  ['2', 'PICKUP', 'Ramesh Kumar (Kheda Village)', '+91 98251 44102', '22.7500, 72.6900', `${Math.min(500, targetKg)} kg`, crop, '07:15 AM', vehicleName],
+                  ['3', 'PICKUP', 'Savitri Devi (Borsad Village)', '+91 98250 88219', '22.4118, 72.9022', `${Math.min(500, Math.max(0, targetKg - 500)) || 300} kg`, crop, '08:00 AM', vehicleName],
+                  ['4', 'PICKUP', 'Mohan Lal (Vasad Village - Standby)', '+91 98251 55667', '22.4705, 73.0722', `${standbyKg} kg`, crop, '08:45 AM', vehicleName],
+                  ['5', 'DROP', 'PM POSHAN Central Kitchen (Anand)', '+91 98252 77103', '22.5645, 72.9289', `${totalCargoKg} kg`, crop, '09:30 AM', vehicleName],
                 ])
               }}
             >

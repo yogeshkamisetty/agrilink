@@ -36,7 +36,7 @@ type Stop = {
   id: string
   kind: 'DEPOT' | 'PICKUP' | 'DROP'
   label: string
-  detail: string
+  detail?: string
   lat: number
   lng: number
   kg?: number

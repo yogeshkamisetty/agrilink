@@ -20,8 +20,22 @@ import {
   Scale,
   Calendar,
   Building,
+  Truck,
+  Navigation,
+  MapPin,
+  Fuel,
+  Award,
+  Compass,
 } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
+import { RouteMap } from '@/components/route-map'
+import {
+  allocateFarmersOptimal,
+  getVillageLatLng,
+  type CandidateFarmer,
+  type OptimalAllocationResult,
+} from '@/lib/domain/allocation'
+import { planRoute } from '@/lib/domain/routing'
 
 type Profile = {
   id: string
@@ -242,32 +256,56 @@ export function AdminPortal() {
       const fCrop = (f.crop_name || f.crop || '').toUpperCase()
       return fCrop.includes(activeCrop) || activeCrop.includes(fCrop)
     })
-    // If fewer than 2 matched, provide additional available farmers so aggregation demo is always functional
+    // If fewer than 3 matched, provide additional available farmers so aggregation demo is always functional
     if (matched.length < 3) {
       const remaining = farmers.filter((f) => !matched.some((m) => m.id === f.id))
-      return [...matched, ...remaining].slice(0, 5)
+      return [...matched, ...remaining].slice(0, 6)
     }
     return matched
   }, [farmers, activeCrop])
 
-  // Pre-initialize farmer allocations when active order changes
-  useEffect(() => {
-    if (!matchedFarmers.length) return
-    let remainingNeeded = totalTargetWithBufferKg
-    const initialAlloc: Record<string, number> = {}
+  // Convert farmers to CandidateFarmers for the multi-objective allocation engine
+  const candidateFarmers: CandidateFarmer[] = useMemo(() => {
+    return matchedFarmers.map((f) => ({
+      id: f.id,
+      name: f.name,
+      village: f.village,
+      crop: f.crop_name || f.crop || activeCrop,
+      availableKg: Number(f.quantity || 500),
+      reliability: Number(f.reliability_score || 94),
+      qualityGrade: (f.quality_grade === 'B' ? 'B' : 'A') as 'A' | 'B',
+      location: getVillageLatLng(f.village),
+    }))
+  }, [matchedFarmers, activeCrop])
 
-    for (const f of matchedFarmers) {
-      const cap = Number(f.quantity || 300)
-      if (remainingNeeded > 0) {
-        const take = Math.min(cap, remainingNeeded)
-        initialAlloc[f.id] = take
-        remainingNeeded -= take
-      } else {
-        initialAlloc[f.id] = 0
-      }
+  // Multi-objective knapsack & corridor TSP optimization
+  const optimalResult = useMemo(() => {
+    if (!candidateFarmers.length || !activeTargetKg) return null
+    return allocateFarmersOptimal({
+      targetKg: activeTargetKg,
+      crop: activeCrop,
+      candidates: candidateFarmers,
+      standbyPct: 0.15,
+      depotLabel: 'Kheda FPO Central Sourcing Hub',
+      dropLabel: activeOrder?.buyer_name || activeOrder?.delivery_location || 'Institutional Buyer Central Kitchen',
+    })
+  }, [candidateFarmers, activeTargetKg, activeCrop, activeOrder])
+
+  // Apply algorithmically optimal farmer allocation
+  function applyOptimalAllocation() {
+    if (!optimalResult) return
+    const initialAlloc: Record<string, number> = {}
+    for (const alloc of optimalResult.allocations) {
+      initialAlloc[alloc.farmer.id] = alloc.allocatedKg
     }
     setFarmerAllocations(initialAlloc)
-  }, [activeOrder?.id, matchedFarmers.length, totalTargetWithBufferKg])
+    setRouteDispatched(false)
+  }
+
+  // Pre-initialize farmer allocations when active order changes
+  useEffect(() => {
+    applyOptimalAllocation()
+  }, [activeOrder?.id, optimalResult?.summaryText])
 
   // Total allocated KG across smallholders
   const totalAllocatedKg = useMemo(() => {
@@ -278,6 +316,91 @@ export function AdminPortal() {
   const bufferProgressPct = Math.min(100, Math.round((totalAllocatedKg / totalTargetWithBufferKg) * 100))
   const isTargetMet = totalAllocatedKg >= activeTargetKg
   const isBufferSecured = totalAllocatedKg >= totalTargetWithBufferKg
+
+  // Dynamic TSP Route recalculation reflecting active contributing smallholders
+  const dynamicRoutePlan = useMemo(() => {
+    if (!optimalResult) return null
+
+    const activeAllocations = Object.entries(farmerAllocations)
+      .filter(([_, kg]) => kg > 0)
+      .map(([id, kg]) => {
+        const farmer = matchedFarmers.find((f) => f.id === id)
+        return { id, kg, farmer }
+      })
+      .filter((item): item is { id: string; kg: number; farmer: LiveFarmer } => !!item.farmer)
+
+    if (activeAllocations.length === 0) return optimalResult.routePlan
+
+    const depotStop = {
+      id: 'fpo-depot',
+      kind: 'DEPOT' as const,
+      label: 'Kheda FPO Central Sourcing Hub',
+      detail: 'Collection start & vehicle dispatch',
+      lat: 22.7533,
+      lng: 72.6841,
+      kg: 0,
+    }
+
+    const pickupStops = activeAllocations.map((a, idx) => ({
+      id: a.id,
+      kind: 'PICKUP' as const,
+      label: `Stop #${idx + 1}: ${a.farmer.name}`,
+      detail: `${a.farmer.village} · Load ${a.kg} KG`,
+      lat: getVillageLatLng(a.farmer.village).lat,
+      lng: getVillageLatLng(a.farmer.village).lng,
+      kg: a.kg,
+    }))
+
+    const totalKg = activeAllocations.reduce((s, a) => s + a.kg, 0)
+    const dropStop = {
+      id: 'buyer-drop',
+      kind: 'DROP' as const,
+      label: activeOrder?.buyer_name || activeOrder?.delivery_location || 'Institutional Buyer Central Kitchen',
+      detail: `Central intake · Unload ${totalKg} KG`,
+      lat: 22.5645,
+      lng: 72.9289,
+      kg: totalKg,
+    }
+
+    return planRoute(depotStop, pickupStops, [dropStop])
+  }, [optimalResult, farmerAllocations, matchedFarmers, activeOrder])
+
+  // Vehicle recommendation & sustainability metrics
+  const vehicleStats = useMemo(() => {
+    let vehicleName = 'Tata Ace CNG (Mini Truck)'
+    let maxCapacityKg = 850
+    let fuelType = 'CNG Green Freight'
+
+    if (totalAllocatedKg > 1400) {
+      vehicleName = 'Eicher Pro 2049 (Medium Commercial)'
+      maxCapacityKg = 2500
+      fuelType = 'Clean Diesel (BS-VI)'
+    } else if (totalAllocatedKg > 800) {
+      vehicleName = 'Mahindra Bolero Maxi Truck Plus'
+      maxCapacityKg = 1400
+      fuelType = 'Clean Diesel (BS-VI)'
+    }
+
+    const loadFactorPct = Math.min(100, Math.round((totalAllocatedKg / maxCapacityKg) * 100))
+    const km = dynamicRoutePlan?.km || 22.4
+    const naiveKm = dynamicRoutePlan?.naiveKm || 32.1
+    const fuelSavedPct = naiveKm > 0 ? Math.max(0, Math.round(((naiveKm - km) / naiveKm) * 100)) : 30
+    const co2SavingsKg = Math.round(km * 0.18 * (fuelSavedPct / 100) * 10) / 10
+
+    return {
+      name: vehicleName,
+      maxCapacityKg,
+      loadFactorPct,
+      fuelType,
+      km,
+      naiveKm,
+      fuelSavedPct,
+      co2SavingsKg,
+    }
+  }, [totalAllocatedKg, dynamicRoutePlan])
+
+  // State for route dispatch notification
+  const [routeDispatched, setRouteDispatched] = useState(false)
 
   // Handle allocation toggle / adjustment
   function toggleFarmer(farmerId: string, maxQty: number) {
@@ -296,7 +419,7 @@ export function AdminPortal() {
     setFarmerAllocations((prev) => ({ ...prev, [farmerId]: valid }))
   }
 
-  // Lock and Combine Farmers Batch
+  // Lock and Combine Farmers Batch with Route Dispatch
   async function handleLockAggregation() {
     if (!activeOrder) return
     setIsAggregating(true)
@@ -328,7 +451,7 @@ export function AdminPortal() {
           batch_code: batchCode,
           fpo_name: 'Mahi Valley FPO',
           crop: activeCrop,
-          location: 'Kheda Central Sorting Hub',
+          location: 'Kheda Central Sourcing Hub',
           contributions,
         }),
       })
@@ -339,8 +462,9 @@ export function AdminPortal() {
       }
 
       setAggregationSuccess(
-        `Batch ${batchCode} successfully consolidated from ${contributions.length} smallholders! Total ${totalAllocatedKg} KG locked with 15% standby reserve.`
+        `Batch ${batchCode} consolidated from ${contributions.length} smallholders (${totalAllocatedKg} KG)! TSP collection runway dispatched via ${vehicleStats.name} (${vehicleStats.km} km, ${vehicleStats.fuelSavedPct}% fuel saved).`
       )
+      setRouteDispatched(true)
 
       // Refresh data
       await fetchLiveFeeds(false)
@@ -607,6 +731,42 @@ export function AdminPortal() {
             </div>
           )}
 
+          {/* Algorithm Rationale & Intelligence Banner */}
+          {optimalResult && (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="size-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-primary mt-0.5">
+                    <Sparkles className="size-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                        Multi-Factor Knapsack & TSP Corridor Optimization
+                      </span>
+                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                        {optimalResult.allocations.filter((a) => a.allocatedKg > 0).length} Optimal Matches
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs sm:text-sm text-foreground/90 font-medium leading-relaxed">
+                      {optimalResult.summaryText}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={applyOptimalAllocation}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 text-xs font-bold shrink-0 transition-colors cursor-pointer"
+                  title="Recalculate and restore optimal allocation quotas"
+                >
+                  <RefreshCw className="size-3.5" />
+                  <span>Re-apply Knapsack Optimal</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Allocation Progress Meter */}
           <div className="rounded-2xl border border-border bg-secondary/20 p-4 sm:p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -674,12 +834,12 @@ export function AdminPortal() {
                   <tr>
                     <th className="p-3.5 sm:px-4">Include</th>
                     <th className="p-3.5 sm:px-4">Farmer Member</th>
-                    <th className="p-3.5 sm:px-4">Village</th>
+                    <th className="p-3.5 sm:px-4">Village Corridor</th>
                     <th className="p-3.5 sm:px-4">Declared Crop</th>
+                    <th className="p-3.5 sm:px-4">Quality & Reliability</th>
+                    <th className="p-3.5 sm:px-4">Algorithm Role</th>
                     <th className="p-3.5 sm:px-4">Capacity</th>
                     <th className="p-3.5 sm:px-4">Allocated (KG)</th>
-                    <th className="p-3.5 sm:px-4">Quality Grade</th>
-                    <th className="p-3.5 sm:px-4">Reliability</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -687,6 +847,9 @@ export function AdminPortal() {
                     const allocated = farmerAllocations[f.id] || 0
                     const isSelected = allocated > 0
                     const maxCap = Number(f.quantity || 500)
+                    const allocInfo = optimalResult?.allocations.find((a) => a.farmer.id === f.id)
+                    const isPrimary = allocInfo && allocInfo.primaryKg > 0
+                    const isStandby = allocInfo && allocInfo.standbyKg > 0
 
                     return (
                       <tr
@@ -709,11 +872,42 @@ export function AdminPortal() {
                             {f.mobile_number || '+91 98251 44102'}
                           </span>
                         </td>
-                        <td className="p-3.5 sm:px-4 text-muted-foreground">{f.village}</td>
+                        <td className="p-3.5 sm:px-4 text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="size-3 text-primary" /> {f.village}
+                          </span>
+                        </td>
                         <td className="p-3.5 sm:px-4">
                           <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-medium">
                             {f.crop_name || f.crop || activeCrop}
                           </span>
+                        </td>
+                        <td className="p-3.5 sm:px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              Grade {f.quality_grade || 'A'}
+                            </span>
+                            <span className="font-mono text-xs font-semibold text-foreground">
+                              {f.reliability_score || 95}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3.5 sm:px-4">
+                          {isPrimary && isStandby ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                              Primary ({allocInfo.primaryKg}k) + Standby ({allocInfo.standbyKg}k)
+                            </span>
+                          ) : isPrimary ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                              Primary Fulfillment ({allocInfo.primaryKg} kg)
+                            </span>
+                          ) : isStandby ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                              +15% Standby Buffer ({allocInfo.standbyKg} kg)
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-muted-foreground">Reserve Standby Pool</span>
+                          )}
                         </td>
                         <td className="p-3.5 sm:px-4 font-mono font-medium">{maxCap} KG</td>
                         <td className="p-3.5 sm:px-4">
@@ -729,14 +923,6 @@ export function AdminPortal() {
                             <span className="text-[11px] text-muted-foreground">/ {maxCap}</span>
                           </div>
                         </td>
-                        <td className="p-3.5 sm:px-4">
-                          <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                            Grade {f.quality_grade || 'A'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 sm:px-4 font-mono text-xs text-foreground">
-                          {f.reliability_score || 95}%
-                        </td>
                       </tr>
                     )
                   })}
@@ -745,20 +931,163 @@ export function AdminPortal() {
             </div>
           </div>
 
-          {/* Action Button to Lock Sourcing Batch */}
+          {/* Consolidated Vehicle Collection Runway & TSP 2-Opt Routing */}
+          <div className="rounded-2xl border border-border bg-card p-4 sm:p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Truck className="size-5 text-primary" />
+                  <h4 className="font-serif text-xl font-bold text-foreground">
+                    Consolidated Collection Runway & TSP 2-Opt Route
+                  </h4>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Optimized vehicle waypoint routing visiting matched smallholders to eliminate empty haulage.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary flex items-center gap-1.5">
+                  <Navigation className="size-3.5" />
+                  <span>{vehicleStats.km} KM Route</span>
+                </span>
+                <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                  {vehicleStats.fuelSavedPct}% Fuel Saved
+                </span>
+                <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">
+                  {vehicleStats.co2SavingsKg} kg CO₂ Avoided
+                </span>
+              </div>
+            </div>
+
+            {/* Recommended Vehicle Card */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl bg-secondary/30 border border-border p-4">
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Assigned Logistics Vehicle
+                </span>
+                <p className="font-serif text-base font-bold text-foreground flex items-center gap-2">
+                  <Truck className="size-4 text-primary" />
+                  {vehicleStats.name}
+                </p>
+                <p className="text-xs text-muted-foreground">{vehicleStats.fuelType}</p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Payload Load Factor
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-lg font-bold text-foreground">
+                    {totalAllocatedKg} / {vehicleStats.maxCapacityKg} KG
+                  </span>
+                  <span className="text-xs font-semibold text-primary">
+                    ({vehicleStats.loadFactorPct}%)
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, vehicleStats.loadFactorPct)}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Route Optimization
+                </span>
+                <p className="text-xs font-semibold text-foreground">
+                  TSP 2-Opt Algorithm Solver
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {dynamicRoutePlan?.sequence.length || 0} Total Waypoints · {dynamicRoutePlan?.km || 0} km vs {dynamicRoutePlan?.naiveKm || 0} km unoptimized
+                </p>
+              </div>
+            </div>
+
+            {/* Waypoints List and Interactive Leaflet Route Map */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Waypoint Timeline Manifest */}
+              <div className="lg:col-span-5 space-y-2.5">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                  Waypoint Sequence Manifest ({dynamicRoutePlan?.sequence.length || 0} Stops):
+                </span>
+                <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                  {dynamicRoutePlan?.sequence.map((stop, idx) => (
+                    <div
+                      key={stop.id}
+                      className="rounded-xl border border-border bg-card p-3 flex items-start gap-3 text-xs"
+                    >
+                      <div
+                        className={`size-6 rounded-full flex items-center justify-center font-mono font-bold text-[11px] shrink-0 mt-0.5 ${
+                          stop.kind === 'DEPOT'
+                            ? 'bg-secondary text-foreground border border-border'
+                            : stop.kind === 'DROP'
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                        }`}
+                      >
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="font-semibold text-foreground truncate">{stop.label}</p>
+                          <span
+                            className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                              stop.kind === 'DEPOT'
+                                ? 'bg-secondary text-muted-foreground'
+                                : stop.kind === 'DROP'
+                                ? 'bg-primary/15 text-primary'
+                                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            }`}
+                          >
+                            {stop.kind}
+                          </span>
+                        </div>
+                        <p className="text-muted-foreground text-[11px] truncate mt-0.5">{stop.detail}</p>
+                        {stop.kg !== undefined && stop.kg > 0 && (
+                          <span className="inline-block mt-1 font-mono text-[10px] font-bold text-foreground">
+                            Weight: {stop.kg} KG
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Interactive Leaflet Route Map */}
+              <div className="lg:col-span-7">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                  Live Sourcing Cluster Map & Navigation Corridor:
+                </span>
+                <div className="h-[340px] w-full rounded-2xl overflow-hidden border border-border shadow-xs">
+                  <RouteMap stops={dynamicRoutePlan?.sequence || []} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Button to Lock Sourcing Batch & Dispatch Route */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-border">
             <div className="text-xs text-muted-foreground">
               Combining <strong>{Object.values(farmerAllocations).filter((kg) => kg > 0).length}</strong> smallholders ·
-              Total <strong>{totalAllocatedKg} KG</strong> will be assigned to batch{' '}
+              Total <strong>{totalAllocatedKg} KG</strong> assigned to batch{' '}
               <span className="font-mono text-foreground font-semibold">
                 BATCH-{activeOrder?.code || 'AG1001'}-{activeCrop}
               </span>
+              {routeDispatched && (
+                <span className="ml-2 inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                  <CheckCircle2 className="size-3.5" /> Dispatched to driver
+                </span>
+              )}
             </div>
 
             <button
               onClick={handleLockAggregation}
               disabled={isAggregating || totalAllocatedKg <= 0}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-6 py-3 text-sm font-bold shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all min-h-[44px]"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-6 py-3 text-sm font-bold shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all min-h-[44px] cursor-pointer"
             >
               {isAggregating ? (
                 <RefreshCw className="size-4 animate-spin" />

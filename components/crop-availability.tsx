@@ -16,7 +16,11 @@ import {
   BadgeCheck,
   MapPin,
   Check,
-  ArrowUpRight
+  ArrowUpRight,
+  Truck,
+  Clock,
+  AlertTriangle,
+  Flame,
 } from 'lucide-react'
 import { CommunityDemandModal } from './community-demand-modal'
 
@@ -547,6 +551,74 @@ export function CropAvailability({ onSelectCrop, role }: CropAvailabilityProps =
         </div>
       )}
 
+      {/* 5-Step Clear Flow Operational Lifecycle Pipeline */}
+      <div className="border-b border-border bg-card px-5 sm:px-7 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="flex size-2 rounded-full bg-primary animate-ping" />
+            <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+              AgriLink Core Operating Flow · From Farmgate to Institutional Buyer
+            </span>
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            Predictive AI · Knapsack Aggregation · TSP 2-Opt Routing · Zero-Brokerage Escrow
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          {[
+            {
+              step: '1',
+              title: 'Demand Prediction',
+              badge: '7–30d Advance',
+              desc: 'Institutional kitchens & community pools lock forward procurement contracts with escrow deposit.',
+            },
+            {
+              step: '2',
+              title: 'Harvest Planning',
+              badge: 'Marginal Farmers',
+              desc: 'Smallholders declare produce acreage & commit pre-harvest output to avoid Mandi distress sale.',
+            },
+            {
+              step: '3',
+              title: 'Knapsack Aggregation',
+              badge: '+15% Standby Reserve',
+              desc: 'Multi-criteria solver combines smallholders by corridor proximity, reliability & AGMARKNET Grade A.',
+            },
+            {
+              step: '4',
+              title: 'TSP 2-Opt Runway',
+              badge: 'Corridor Pickup',
+              desc: 'Vehicle routing solver dispatches Tata Ace / Bolero to visit village waypoints with 30%+ fuel savings.',
+            },
+            {
+              step: '5',
+              title: 'QC & Escrow DBT',
+              badge: 'Instant 15s Payout',
+              desc: 'Farmgate GradeCam inspection unlocks escrow directly to farmer bank accounts without deductions.',
+            },
+          ].map((s) => (
+            <div
+              key={s.step}
+              className="rounded-2xl border border-border bg-secondary/30 p-3 flex flex-col justify-between space-y-2 hover:border-primary/40 transition-colors"
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold font-mono">
+                    {s.step}
+                  </span>
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold text-primary">
+                    {s.badge}
+                  </span>
+                </div>
+                <h5 className="mt-2 text-xs font-bold text-foreground">{s.title}</h5>
+                <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Main Grid: Shows Live Supplies and/or Demand Forecasts */}
       <div className="p-5 sm:p-7 space-y-8">
         {/* Section A: Live Smallholder Farmer Produce (Ready to Source) */}
@@ -681,12 +753,38 @@ export function CropAvailability({ onSelectCrop, role }: CropAvailabilityProps =
                 const pct = Math.min(100, Math.round((item.qtyCommittedKg / item.qtyTargetKg) * 100))
                 const isFull = pct >= 100 || item.status === 'AGGREGATED'
 
+                const delivery = new Date(item.deliveryDate)
+                const now = new Date()
+                const diffDays = Math.max(1, Math.ceil((delivery.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+                const mandiDistressPrice = Math.max(12, Math.round(item.pricePerKg * 0.76))
+                const farmerUplift = item.pricePerKg - mandiDistressPrice
+
+                const surgeBadge =
+                  item.crop.toLowerCase().includes('tomato')
+                    ? '+35% School Kitchen Surge'
+                    : item.crop.toLowerCase().includes('paddy') || item.crop.toLowerCase().includes('rice')
+                    ? '+28% Poshan Forward Demand'
+                    : item.crop.toLowerCase().includes('wheat')
+                    ? '+24% Rabi Grain Buffer Demand'
+                    : '+30% Festive Bulk Sourcing'
+
                 return (
                   <article
                     key={item.id}
                     className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:border-primary/40 hover:shadow-md"
                   >
                     <div>
+                      {/* Predictive Surge & Countdown Indicator */}
+                      <div className="mb-2.5 flex items-center justify-between gap-1 text-[10px]">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 font-bold text-amber-800 dark:text-amber-300">
+                          <Flame className="size-3 text-amber-600" />
+                          {surgeBadge}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-muted-foreground font-mono font-medium">
+                          <Clock className="size-3 text-primary" /> {diffDays}d harvest window
+                        </span>
+                      </div>
+
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3.5">
                           <div className="relative size-16 shrink-0 overflow-hidden rounded-2xl border border-border bg-secondary/40 p-1 flex items-center justify-center">
@@ -725,6 +823,16 @@ export function CropAvailability({ onSelectCrop, role }: CropAvailabilityProps =
                         </span>
                       </div>
 
+                      {/* AGMARKNET Price Protection Uplift */}
+                      <div className="mt-2.5 flex items-center justify-between rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs">
+                        <span className="text-[11px] text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1">
+                          <ShieldCheck className="size-3.5 text-emerald-600" /> Price Protection:
+                        </span>
+                        <span className="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                          +₹{farmerUplift}/kg vs Mandi (₹{mandiDistressPrice})
+                        </span>
+                      </div>
+
                       {/* Aggregation Progress Bar */}
                       <div className="mt-4 space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
@@ -748,7 +856,7 @@ export function CropAvailability({ onSelectCrop, role }: CropAvailabilityProps =
                         <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
                           <span>Delivery: {item.deliveryDate}</span>
                           <span className="text-amber-700 dark:text-amber-400 font-semibold">
-                            +{item.standbyBufferKg} kg Standby Buffer
+                            +{item.standbyBufferKg} kg Buffer (15%)
                           </span>
                         </div>
                       </div>

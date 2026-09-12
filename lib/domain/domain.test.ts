@@ -253,3 +253,40 @@ describe('farmer messages', () => {
     expect(renderMessage('CONFIRMATION', { crop: 'TOMATO', date: '2026-09-14', primary: 0, standby: 30 }, 'en')).toMatch(/^You are on standby for 30 kg tomato/)
   })
 })
+
+describe('optimal multi-factor smallholder allocation and route planning', () => {
+  it('allocates primary target and standby buffer with route optimization', async () => {
+    const { allocateFarmersOptimal } = await import('./allocation')
+    const candidates = [
+      { id: 'f1', name: 'Ramesh Kumar', village: 'Kheda', crop: 'TOMATO', availableKg: 300, reliability: 95, qualityGrade: 'A' as const },
+      { id: 'f2', name: 'Savitri Devi', village: 'Borsad', crop: 'TOMATO', availableKg: 400, reliability: 98, qualityGrade: 'A' as const },
+      { id: 'f3', name: 'Mohan Lal', village: 'Vasad', crop: 'TOMATO', availableKg: 350, reliability: 91, qualityGrade: 'A' as const },
+      { id: 'f4', name: 'Lakshmi Bai', village: 'Boriavi', crop: 'TOMATO', availableKg: 200, reliability: 94, qualityGrade: 'B' as const },
+      { id: 'f5', name: 'Jignesh Chauhan', village: 'Petlad', crop: 'TOMATO', availableKg: 250, reliability: 89, qualityGrade: 'A' as const },
+    ]
+
+    const result = allocateFarmersOptimal({
+      targetKg: 1000,
+      crop: 'TOMATO',
+      candidates,
+      standbyPct: 0.15,
+    })
+
+    expect(result.targetKg).toBe(1000)
+    expect(result.standbyTargetKg).toBe(150)
+    expect(result.totalPrimaryKg).toBe(1000)
+    expect(result.totalStandbyKg).toBeGreaterThanOrEqual(150)
+    expect(result.isTargetMet).toBe(true)
+    expect(result.isBufferSecured).toBe(true)
+
+    // Routing plan check
+    expect(result.routePlan.sequence.length).toBeGreaterThan(2)
+    expect(result.routePlan.km).toBeGreaterThan(0)
+
+    // Vehicle assignment check
+    expect(result.vehicle.name).toMatch(/Bolero|Eicher|Tata/)
+    expect(result.vehicle.loadFactorPct).toBeGreaterThan(50)
+    expect(result.summaryText).toContain('Optimized allocation')
+  })
+})
+
