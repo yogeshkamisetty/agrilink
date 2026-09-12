@@ -62,22 +62,28 @@ export async function GET(request: Request) {
   if (rawFarmers.length === 0) {
     try {
       const db = await getDb()
-      const rows = await db.query<{ id: string; name: string; village: string; crop: string; kg: number }>(`
-        select f.id::text, f.name, f.village, fc.crop, fc.kg
-        from agrilink.farmers f
-        join agrilink.farmer_crops fc on fc.farmer_id = f.id
-        where fc.kg > 0
-      `)
+      let rows: any[] = []
+      try {
+        rows = await db.query<any>(`
+          select f.id::text, f.name, f.village,
+                 coalesce(cr.crop, 'PADDY') as crop,
+                 coalesce(cr.expected_qty_kg, 500) as kg
+          from agrilink.farmers f
+          left join agrilink.crop_registry cr on cr.farmer_id = f.id
+        `)
+      } catch {
+        rows = await db.query<any>(`select * from agrilink.farmers`)
+      }
       if (rows && rows.length > 0) {
         rawFarmers = rows.map((r, i) => ({
           id: r.id || `f-${i}`,
           name: r.name,
           village: r.village,
-          crop_name: r.crop,
-          quantity: Number(r.kg),
-          quality_grade: i % 2 === 0 ? 'A' : 'B',
-          harvest_date: new Date(Date.now() + (i + 2) * 86400000).toISOString().slice(0, 10),
-          verified: true,
+          crop_name: r.crop_name || r.crop || 'Paddy',
+          quantity: Number(r.quantity || r.kg || 500),
+          quality_grade: r.quality_grade || (i % 2 === 0 ? 'A' : 'B'),
+          harvest_date: r.harvest_date || new Date(Date.now() + (i + 2) * 86400000).toISOString().slice(0, 10),
+          verified: r.verified ?? true,
         }))
       }
     } catch {

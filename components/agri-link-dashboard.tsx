@@ -462,12 +462,62 @@ export function AgriLinkDashboard({
   const [showExcessModal, setShowExcessModal] = useState(false)
   const [showCommunityModal, setShowCommunityModal] = useState(false)
 
+  // Live sync rosterFarmers with /api/farmers
+  useEffect(() => {
+    let mounted = true
+    const fetchFarmers = async () => {
+      try {
+        const res = await fetch('/api/farmers')
+        if (res.ok) {
+          const data = await res.json()
+          if (data.farmers && Array.isArray(data.farmers) && data.farmers.length > 0 && mounted) {
+            const mapped = data.farmers.map((f: any, idx: number) => ({
+              id: f.id || `FARM-${String(idx + 1).padStart(3, '0')}`,
+              name: f.name || 'Farmer Member',
+              village: f.village || 'Kheda',
+              crop: f.crop_name || f.crop || 'Paddy / Tomato',
+              kg: Number(f.quantity || 500),
+              status: f.verified ? 'Accepted' : 'Standby',
+              reliability: 90 + (idx % 9),
+              color: idx % 3 === 0 ? 'bg-primary' : idx % 3 === 1 ? 'bg-amber-700' : 'bg-sky-700',
+            }))
+            setRosterFarmers((prev) => {
+              const map = new Map<string, any>()
+              for (const m of mapped) map.set(m.id || m.name, m)
+              for (const p of prev) {
+                if (!map.has(p.id) && !map.has(p.name)) map.set(p.id, p)
+              }
+              return Array.from(map.values())
+            })
+          }
+        }
+      } catch {}
+    }
+
+    fetchFarmers()
+    const timer = setInterval(fetchFarmers, 4000)
+    const onHarvest = () => fetchFarmers()
+    window.addEventListener('agrilink:harvest-updated', onHarvest)
+
+    return () => {
+      mounted = false
+      clearInterval(timer)
+      window.removeEventListener('agrilink:harvest-updated', onHarvest)
+    }
+  }, [])
+
   // Listen to open-order events from Crop Availability board
   useEffect(() => {
     const handleOpenOrder = (e: Event) => {
-      const custom = e as CustomEvent<{ crop?: string }>
+      const custom = e as CustomEvent<{ crop?: string; qty?: number; price?: number }>
       if (custom.detail?.crop) {
         setPostedCrop(custom.detail.crop.toUpperCase())
+      }
+      if (custom.detail?.qty) {
+        setPostedQty(String(custom.detail.qty))
+      }
+      if (custom.detail?.price) {
+        setPostedPrice(String(custom.detail.price))
       }
       setShowOrderForm(true)
       setActiveNav('Orders')

@@ -11,19 +11,30 @@ export async function GET() {
     // 1. Try DB first to get rich institutional orders
     try {
       const db = await getDb()
-      const rows = await db.query<any>(`select o.*, b.name as buyer_name from agrilink.orders o left join agrilink.buyers b on b.id = o.buyer_id order by o.created_at desc`)
+      const rows = await db.query<any>(`
+        select o.*, b.name as buyer_name,
+               coalesce((select sum(c.qty_committed_kg) from agrilink.commitments c where c.order_id = o.id), 0) as db_committed_kg
+        from agrilink.orders o
+        left join agrilink.buyers b on b.id = o.buyer_id
+        order by o.created_at desc
+      `)
       if (Array.isArray(rows) && rows.length > 0) {
-        orderList = rows.map((o) => ({
-          ...o,
-          crop: (o.crop || o.crop_required || 'PADDY').toUpperCase(),
-          crop_required: (o.crop_required || o.crop || 'PADDY').toUpperCase(),
-          qty_target_kg: Number(o.qty_target_kg || o.quantity_required || 1000),
-          quantity_required: Number(o.quantity_required || o.qty_target_kg || 1000),
-          price_per_kg: Number(o.price_per_kg || 28),
-          buyer_name: o.buyer_name || 'PM POSHAN Central Kitchen',
-          delivery_location: o.delivery_location || o.buyer_name || 'Central Kitchen Depot',
-          code: o.code || `AG-${String(o.id || '1001').slice(-4).toUpperCase()}`,
-        }))
+        orderList = rows.map((o) => {
+          const target = Number(o.qty_target_kg || o.quantity_required || 1000)
+          const committed = o.status === 'AGGREGATED' ? target : Number(o.db_committed_kg || o.qty_committed_kg || 0)
+          return {
+            ...o,
+            crop: (o.crop || o.crop_required || 'PADDY').toUpperCase(),
+            crop_required: (o.crop_required || o.crop || 'PADDY').toUpperCase(),
+            qty_target_kg: target,
+            quantity_required: target,
+            qty_committed_kg: committed,
+            price_per_kg: Number(o.price_per_kg || 28),
+            buyer_name: o.buyer_name || 'PM POSHAN Central Kitchen',
+            delivery_location: o.delivery_location || o.buyer_name || 'Central Kitchen Depot',
+            code: o.code || `AG-${String(o.id || '1001').slice(-4).toUpperCase()}`,
+          }
+        })
       }
     } catch {}
 
@@ -38,12 +49,15 @@ export async function GET() {
         if (!error && Array.isArray(data) && data.length > 0) {
           for (const item of data) {
             if (!orderList.some((o) => o.id === item.id)) {
+              const target = Number(item.quantity_required || 1000)
+              const committed = item.status === 'AGGREGATED' ? target : 0
               orderList.push({
                 ...item,
                 crop: (item.crop_required || 'PADDY').toUpperCase(),
                 crop_required: item.crop_required,
-                qty_target_kg: Number(item.quantity_required || 1000),
-                quantity_required: Number(item.quantity_required || 1000),
+                qty_target_kg: target,
+                quantity_required: target,
+                qty_committed_kg: committed,
                 price_per_kg: 28,
                 buyer_name: item.delivery_location || 'Institutional Buyer',
                 code: `AG-${String(item.id || '1001').slice(-4).toUpperCase()}`,

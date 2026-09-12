@@ -112,11 +112,9 @@ export function ProtectedPortal() {
   return (
     <>
       <AgriLinkDashboard onSignOut={signOut} verified={verified} userName={userName} userRole={userRole} />
-      {userRole === 'Buyer' && (
-        <main className="mx-auto max-w-[1500px] px-5 pb-10 sm:px-8 lg:pl-[21rem] lg:pr-10">
-          <CropAvailability />
-        </main>
-      )}
+      <main className="mx-auto max-w-[1500px] px-4 pb-12 sm:px-6 lg:pl-[21rem] lg:pr-8">
+        <CropAvailability role={userRole} />
+      </main>
     </>
   )
 }

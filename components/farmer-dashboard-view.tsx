@@ -154,7 +154,16 @@ export function FarmerDashboardView({
               image: img,
             }
           })
-          setLiveDemands(mapped)
+          setLiveDemands(() => {
+            const map = new Map<string, any>()
+            for (const def of buyerDemands) {
+              map.set(def.id, def)
+            }
+            for (const m of mapped) {
+              map.set(m.id, m)
+            }
+            return Array.from(map.values())
+          })
         }
       } catch {}
     }

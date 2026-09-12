@@ -980,49 +980,7 @@ export function AdminPortal() {
         </div>
       </section>
 
-      {/* 7. Institutional Buyer Requests Awaiting Review */}
-      {data && (
-        <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-          <h2 className="font-serif text-xl sm:text-2xl font-bold">Institutional Special Requests Awaiting Review</h2>
-          <div className="mt-4 space-y-3">
-            {data.pending_reviews.length ? (
-              data.pending_reviews.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex flex-col min-[480px]:flex-row min-[480px]:items-center justify-between gap-3 sm:gap-4 rounded-xl bg-muted p-3.5 sm:p-4"
-                >
-                  <div>
-                    <p className="font-semibold text-sm">
-                      {r.quantity_kg} kg · {r.crop}
-                    </p>
-                    <p className="mt-1 text-xs sm:text-sm text-muted-foreground">{r.purpose}</p>
-                  </div>
-                  <div className="flex gap-2 w-full min-[480px]:w-auto">
-                    <button
-                      onClick={() => review(r.id, 'approved')}
-                      className="rounded-lg bg-primary px-3.5 py-2 text-xs sm:text-sm font-semibold text-primary-foreground min-h-[40px] flex-1 min-[480px]:flex-none"
-                    >
-                      Approve Contract
-                    </button>
-                    <button
-                      onClick={() => review(r.id, 'rejected')}
-                      className="rounded-lg border border-border px-3.5 py-2 text-xs sm:text-sm font-semibold min-h-[40px] flex-1 min-[480px]:flex-none"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                All institutional requests have been reviewed and audited.
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* 8. Registered Member Activity */}
+      {/* 7. Registered Member Activity */}
       {data && (
         <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
           <h2 className="font-serif text-xl sm:text-2xl font-bold">Platform Member Directory</h2>
