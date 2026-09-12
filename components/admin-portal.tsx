@@ -99,16 +99,79 @@ export function AdminPortal() {
   }
 
   if (error) {
+    const currentRole = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_role') : null
+    const currentName = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_name') : null
+
     return (
       <main className="grid min-h-screen place-items-center p-5 bg-[#fcfbf7]">
-        <div className="rounded-2xl border border-destructive/20 bg-card p-6 text-center max-w-md shadow-sm">
-          <p className="font-semibold text-destructive">{error}</p>
-          <button
-            onClick={() => router.push('/portal')}
-            className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-          >
-            Return to workspace
-          </button>
+        <div className="rounded-3xl border border-border bg-card p-8 text-center max-w-lg shadow-sm">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive shadow-sm">
+            <AlertCircle className="size-7" />
+          </div>
+
+          <h2 className="mt-4 font-serif text-2xl font-bold text-foreground">
+            FPO Administrator Access Required
+          </h2>
+
+          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+            The AgriLink Control Centre is restricted to authorized FPO Coordinators and Administrators.
+          </p>
+
+          {currentName && (
+            <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/50 px-3.5 py-1.5 text-xs text-muted-foreground">
+              <span className="size-2 rounded-full bg-amber-500 animate-pulse" />
+              <span>
+                Currently logged in as: <strong className="text-foreground">{currentName}</strong> ({currentRole || 'Member'})
+              </span>
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col gap-2.5 sm:flex-row sm:justify-center">
+            <button
+              onClick={async () => {
+                try {
+                  // 1-click switch to FPO Coordinator demo account
+                  const res = await fetch('/api/auth/otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'quick_demo', role: 'admin' }),
+                  })
+                  const json = await res.json()
+                  if (json.ok && json.session) {
+                    localStorage.setItem('agrilink_user_name', json.profile.full_name)
+                    localStorage.setItem('agrilink_user_role', 'Coordinator')
+                    localStorage.setItem('agrilink_user_phone', json.profile.mobile_number)
+                    localStorage.setItem('agrilink_session', JSON.stringify(json.session))
+                    setError('')
+                    window.location.reload()
+                    return
+                  }
+                } catch {}
+                router.push('/login')
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+            >
+              <ShieldCheck className="size-4" />
+              <span>Switch to FPO Admin Account</span>
+            </button>
+
+            <button
+              onClick={() => router.push('/portal')}
+              className="rounded-xl border border-border bg-background px-4 py-2.5 text-sm font-semibold text-foreground hover:bg-secondary transition-colors"
+            >
+              Return to workspace
+            </button>
+          </div>
+
+          <div className="mt-5 border-t border-border/60 pt-4 flex items-center justify-center gap-4 text-xs font-semibold text-primary">
+            <Link href="/" className="hover:underline">
+              ← Main Home
+            </Link>
+            <span className="text-muted-foreground font-normal">·</span>
+            <Link href="/login" className="hover:underline">
+              Sign in with another mobile number
+            </Link>
+          </div>
         </div>
       </main>
     )
