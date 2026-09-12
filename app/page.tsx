@@ -25,12 +25,15 @@ export default function HomePage() {
   const [annualBilling, setAnnualBilling] = useState(true)
   const [monthlyVolumeKg, setMonthlyVolumeKg] = useState(15000)
   const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const cached = localStorage.getItem('agrilink_user_name')
         if (cached) setLoggedInUser(cached)
+        const cachedRole = localStorage.getItem('agrilink_user_role')
+        if (cachedRole) setUserRole(cachedRole)
       } catch {}
     }
 
@@ -46,6 +49,11 @@ export default function HomePage() {
               if (res.profile?.full_name) {
                 setLoggedInUser(res.profile.full_name)
                 try { localStorage.setItem('agrilink_user_name', res.profile.full_name) } catch {}
+              }
+              if (res.profile?.role) {
+                const mappedRole = res.profile.role === 'admin' ? 'Coordinator' : res.profile.role === 'buyer' ? 'Buyer' : 'Farmer'
+                setUserRole(mappedRole)
+                try { localStorage.setItem('agrilink_user_role', mappedRole) } catch {}
               }
             })
             .catch(() => {})
@@ -210,13 +218,16 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1.5 text-xs font-medium backdrop-blur-xs">
                 <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-muted-foreground">Signed in as <strong className="text-foreground">{loggedInUser}</strong></span>
+                <span className="text-muted-foreground">
+                  Signed in as <strong className="text-foreground">{loggedInUser}</strong>
+                  {userRole && <span className="ml-1.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{userRole}</span>}
+                </span>
               </div>
               <Link
-                href="/portal"
+                href={userRole === 'Coordinator' ? '/admin' : '/portal'}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
               >
-                <span>Workspace</span>
+                <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Workspace'}</span>
                 <ArrowRight className="size-4" />
               </Link>
             </div>
@@ -257,10 +268,10 @@ export default function HomePage() {
             {loggedInUser ? (
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link
-                  href="/portal"
+                  href={userRole === 'Coordinator' ? '/admin' : '/portal'}
                   className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
                 >
-                  Welcome back, {loggedInUser} · Open Workspace <ArrowRight className="size-4" />
+                  Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Workspace`} <ArrowRight className="size-4" />
                 </Link>
               </div>
             ) : (

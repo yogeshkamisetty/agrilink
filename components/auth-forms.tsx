@@ -19,7 +19,37 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [notice, setNotice] = useState('')
   const [demoOtp, setDemoOtp] = useState<string | null>(null)
 
+  const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'admin'>('farmer')
+  const [adminPasscode, setAdminPasscode] = useState('')
+  const [passcodeError, setPasscodeError] = useState('')
+  const [recognizedUser, setRecognizedUser] = useState<{ fullName: string | null; role: string | null; verificationStatus: string } | null>(null)
+  const [checkingPhone, setCheckingPhone] = useState(false)
+
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
+
+  // Real-time user recognition lookup when phone number reaches 10 digits
+  const handlePhoneChange = async (val: string) => {
+    const clean = val.replace(/\D/g, '').slice(0, 10)
+    setPhone(clean)
+    setRecognizedUser(null)
+
+    if (clean.length === 10 && /^[6-9]\d{9}$/.test(clean)) {
+      setCheckingPhone(true)
+      try {
+        const res = await fetch('/api/auth/otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'lookup', phone: clean }),
+        })
+        const data = await res.json()
+        if (data.ok && data.exists && data.user) {
+          setRecognizedUser(data.user)
+        }
+      } catch {} finally {
+        setCheckingPhone(false)
+      }
+    }
+  }
 
   async function sendOtp(event: FormEvent) {
     event.preventDefault()
@@ -27,6 +57,15 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setError('')
     setNotice('')
     setDemoOtp(null)
+    setPasscodeError('')
+
+    if (mode === 'signup' && selectedRole === 'admin') {
+      if (adminPasscode.trim() !== 'AGRILINK-FPO-2025') {
+        setPasscodeError('Invalid FPO Coordinator authorization passcode.')
+        setBusy(false)
+        return
+      }
+    }
 
     try {
       if (!/^[6-9]\d{9}$/.test(normalPhone)) {
@@ -36,12 +75,16 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       const res = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'send', phone: normalPhone }),
+        body: JSON.stringify({ action: 'send', phone: normalPhone, role: selectedRole }),
       })
 
       const data = await res.json()
       if (!res.ok || data.error) {
         throw new Error(data.error || 'Unable to send verification code.')
+      }
+
+      if (data.existingUser) {
+        setRecognizedUser(data.existingUser)
       }
 
       setSessionId(data.sessionId || '')
@@ -75,6 +118,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           phone: normalPhone,
           otp,
           sessionId,
+          role: selectedRole,
         }),
       })
 
@@ -95,22 +139,26 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         }
       }
 
+      const userRole = data.profile?.role || (mode === 'signup' ? selectedRole : recognizedUser?.role) || 'farmer'
+      const mappedRole = userRole === 'farmer' ? 'Farmer' : userRole === 'buyer' ? 'Buyer' : 'Coordinator'
+
       if (typeof window !== 'undefined') {
         try {
-          if (data.profile?.full_name) {
-            localStorage.setItem('agrilink_user_name', data.profile.full_name)
+          if (data.profile?.full_name || recognizedUser?.fullName) {
+            localStorage.setItem('agrilink_user_name', data.profile?.full_name || recognizedUser?.fullName || '')
           }
-          if (data.profile?.role) {
-            const mapped = data.profile.role === 'farmer' ? 'Farmer' : data.profile.role === 'buyer' ? 'Buyer' : 'Coordinator'
-            localStorage.setItem('agrilink_user_role', mapped)
-          }
+          localStorage.setItem('agrilink_user_role', mappedRole)
           if (normalPhone) {
             localStorage.setItem('agrilink_user_phone', normalPhone)
+          }
+          if (mode === 'signup') {
+            localStorage.setItem('agrilink_signup_role', selectedRole)
           }
         } catch {}
       }
 
-      router.replace(data.onboardingComplete ? '/portal' : '/onboarding')
+      const destination = data.redirectUrl || (userRole === 'admin' ? '/admin' : data.onboardingComplete ? '/portal' : '/onboarding')
+      router.replace(destination)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to verify the code.')
     } finally {
@@ -144,6 +192,75 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
         {step === 'mobile' ? (
           <form onSubmit={sendOtp} className='mt-6 space-y-4'>
+            {newUser && (
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Select Your Account Role
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('farmer')}
+                    className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
+                      selectedRole === 'farmer'
+                        ? 'border-primary bg-primary/10 text-primary shadow-xs font-semibold ring-1 ring-primary'
+                        : 'border-border bg-card text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Farmer</span>
+                    <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Crops & Payouts</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('buyer')}
+                    className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
+                      selectedRole === 'buyer'
+                        ? 'border-primary bg-primary/10 text-primary shadow-xs font-semibold ring-1 ring-primary'
+                        : 'border-border bg-card text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">Buyer</span>
+                    <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Procurement</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('admin')}
+                    className={`flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all ${
+                      selectedRole === 'admin'
+                        ? 'border-primary bg-primary/10 text-primary shadow-xs font-semibold ring-1 ring-primary'
+                        : 'border-border bg-card text-muted-foreground hover:bg-secondary'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">FPO Admin</span>
+                    <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Coordinator</span>
+                  </button>
+                </div>
+
+                {selectedRole === 'admin' && (
+                  <div className="mt-3 rounded-2xl border border-border bg-secondary/50 p-3.5 space-y-2">
+                    <label className="block text-xs font-medium">
+                      FPO Coordinator Passcode
+                      <input
+                        type="password"
+                        value={adminPasscode}
+                        onChange={(e) => {
+                          setAdminPasscode(e.target.value)
+                          setPasscodeError('')
+                        }}
+                        placeholder="Passcode (Demo: AGRILINK-FPO-2025)"
+                        className="mt-1.5 w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                        required
+                      />
+                    </label>
+                    {passcodeError && <p className="text-[11px] text-destructive font-medium">{passcodeError}</p>}
+                    <p className="text-[10px] text-muted-foreground">
+                      Coordinator access is restricted to verified FPO federation leads.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             <label className='block text-sm font-medium'>
               Mobile number
               <div className='mt-2 flex rounded-xl border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'>
@@ -154,14 +271,43 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                   autoComplete='tel'
                   required
                   value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                  onChange={e => handlePhoneChange(e.target.value)}
                   placeholder='98765 43210'
                 />
               </div>
             </label>
+
+            {checkingPhone && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5 animate-pulse">
+                <Loader2 className="size-3 animate-spin" /> Verifying account in database…
+              </p>
+            )}
+
+            {recognizedUser && (
+              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 flex items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white font-bold text-sm">
+                  {recognizedUser.fullName?.[0]?.toUpperCase() || 'U'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-emerald-950 dark:text-emerald-100 truncate">
+                      {recognizedUser.fullName || 'Registered Member'}
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-emerald-600/20 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700 dark:text-emerald-300">
+                      {recognizedUser.role}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
+                    Recognized from database · Auto-routing to your {recognizedUser.role} workspace
+                  </p>
+                </div>
+                <CheckCircle2 className="size-5 shrink-0 text-emerald-600" />
+              </div>
+            )}
+
             <button
               disabled={busy}
-              className='w-full rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60'
+              className='w-full rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60 shadow-xs'
             >
               {busy && <Loader2 className='mr-2 inline size-4 animate-spin' />}
               Continue with demo OTP

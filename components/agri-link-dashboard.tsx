@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useAgriLink } from '@/lib/hooks/use-agrilink'
 import {
-  AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Camera, Check, ChevronDown, ChevronRight,
-  CircleDollarSign, ClipboardList, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, LogOut, MapPin, Menu, PackageCheck,
-  Pencil, Phone, Plus, Printer, Receipt, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Truck, Users, Wheat, X
+  AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Boxes, Camera, Check, CheckCircle2, ChevronDown, ChevronRight,
+  CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, LogOut, MapPin, Menu, PackageCheck,
+  Pencil, Phone, Plus, Printer, Receipt, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Truck, Users, Wallet, Wheat, X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { GradeCamCamera } from './gradecam-camera'
@@ -256,7 +256,7 @@ function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?:
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <section className={`rounded-2xl border border-border bg-card ${className}`}>{children}</section>
 }
-function Button({ children, onClick, variant = 'primary', disabled = false }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'ghost'; disabled?: boolean }) {
+function Button({ children, onClick, variant = 'primary', disabled = false, className = '' }: { children: React.ReactNode; onClick?: () => void; variant?: 'primary' | 'secondary' | 'ghost'; disabled?: boolean; className?: string }) {
   return (
     <button
       disabled={disabled}
@@ -267,7 +267,7 @@ function Button({ children, onClick, variant = 'primary', disabled = false }: { 
           : variant === 'secondary'
           ? 'border border-border bg-secondary text-foreground hover:bg-secondary/80'
           : 'text-primary hover:bg-secondary'
-      }`}
+      } ${className}`}
     >
       {children}
     </button>
@@ -487,9 +487,16 @@ export function AgriLinkDashboard({
   }
   const roleNav: Record<Role, Screen[]> = {
     Coordinator: navItems.map((item) => item.label as Screen),
-    Buyer: ['Overview', 'Orders', 'Settlements'],
-    Farmer: ['Overview', 'Farmer network', 'Collection & grade', 'Settlements'],
+    Buyer: ['Overview', 'Orders', 'Routes', 'Settlements'],
+    Farmer: ['Overview', 'Orders', 'Collection & grade', 'Settlements'],
   }
+
+  useEffect(() => {
+    const allowed = roleNav[role] || ['Overview']
+    if (!allowed.includes(activeNav)) {
+      setActiveNav('Overview')
+    }
+  }, [role, activeNav])
 
   const handleNotify = async () => {
     if (!activeOrder) return
@@ -778,22 +785,22 @@ export function AgriLinkDashboard({
             </div>
 
             <div className="hidden h-8 w-px bg-border sm:block" />
-            <label className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card py-1.5 pl-2.5 sm:pl-3 pr-2 text-xs sm:text-sm">
-              <span className="hidden sm:inline text-muted-foreground">{t.viewAs}</span>
-              <select
-                value={role}
-                onChange={(e) => {
-                  setRole(e.target.value as Role)
-                  setActiveNav('Overview')
-                }}
-                className="bg-transparent font-semibold outline-none"
+            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold">
+              <span className={`size-2 rounded-full ${role === 'Farmer' ? 'bg-emerald-500' : role === 'Buyer' ? 'bg-blue-500' : 'bg-purple-500'}`} />
+              <span className="text-foreground">
+                {role === 'Farmer' ? '🌾 Farmer Workspace' : role === 'Buyer' ? '🏢 Buyer Workspace' : '🛡️ FPO Coordinator'}
+              </span>
+            </div>
+            {role === 'Coordinator' && (
+              <Link
+                href="/admin"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-500/20 transition-colors"
+                title="Open FPO Admin Control Centre"
               >
-                <option value="Coordinator">{t.roleCoordinator}</option>
-                <option value="Buyer">{t.roleBuyer}</option>
-                <option value="Farmer">{t.roleFarmer}</option>
-              </select>
-              <ChevronDown className="size-3 text-muted-foreground" />
-            </label>
+                <ShieldCheck className="size-3.5" />
+                <span>Admin Console</span>
+              </Link>
+            )}
             {onSignOut && (
               <button
                 onClick={onSignOut}
@@ -871,6 +878,7 @@ export function AgriLinkDashboard({
 
           {activeNav === 'Overview' && (
             <Overview
+              role={role}
               order={activeOrder}
               buyer={activeBuyer}
               committed={committed}
@@ -910,6 +918,7 @@ export function AgriLinkDashboard({
 
           {activeNav === 'Collection & grade' && (
             <Collection
+              role={role}
               order={activeOrder}
               farmerId={selectedFarmerId}
               setFarmerId={setSelectedFarmerId}
@@ -925,6 +934,7 @@ export function AgriLinkDashboard({
 
           {activeNav === 'Routes' && (
             <RoutesScreen
+              role={role}
               order={activeOrder}
               onDispatch={handleDispatch}
               onDeliver={handleDeliver}
@@ -1117,7 +1127,7 @@ function ScreenHeader({
   onReset: () => void
   t?: TranslationDictionary
 }) {
-  const copy: Record<Screen, string> = {
+  const coordinatorCopy: Record<Screen, string> = {
     Overview: t?.titleOverview || 'Demand finds the harvest.',
     Orders: t?.titleOrders || 'Orders before harvest.',
     'Farmer network': t?.titleFarmerNetwork || 'The crop registry, activated.',
@@ -1125,6 +1135,26 @@ function ScreenHeader({
     Routes: t?.titleRoutes || 'Every lot has a route.',
     Settlements: t?.titleSettlements || 'Transparent money movement.',
   }
+
+  const buyerCopy: Record<Screen, string> = {
+    Overview: 'Direct farmgate sourcing & institutional procurement.',
+    Orders: 'Active purchase orders & crop contracts.',
+    'Farmer network': 'Aggregated FPO supply board.',
+    'Collection & grade': 'Quality inspection & AGMARK assurance.',
+    Routes: 'Consignment manifests & cold-chain tracking.',
+    Settlements: 'APMC invoices & escrow payments.',
+  }
+
+  const farmerCopy: Record<Screen, string> = {
+    Overview: 'My harvest commitments & scheduled pickups.',
+    Orders: 'My accepted sale orders & contract history.',
+    'Farmer network': 'FPO village cluster network.',
+    'Collection & grade': 'GradeCam digital quality lot slips.',
+    Routes: 'Farmgate collection route & vehicle arrival.',
+    Settlements: 'My passbook, e-RUPI vouchers & DBT payouts.',
+  }
+
+  const copy = role === 'Farmer' ? farmerCopy : role === 'Buyer' ? buyerCopy : coordinatorCopy
   return (
     <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
       <div>
@@ -1135,13 +1165,15 @@ function ScreenHeader({
         <h2 className="max-w-2xl font-serif text-4xl font-bold tracking-tight text-balance sm:text-5xl">{copy[activeNav]}</h2>
       </div>
       <div className="flex items-center gap-3">
-        <button
-          onClick={onReset}
-          className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary"
-          title="Reset database seed data"
-        >
-          {t?.resetSeed || 'Reset seed'}
-        </button>
+        {role === 'Coordinator' && (
+          <button
+            onClick={onReset}
+            className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-secondary"
+            title="Reset database seed data"
+          >
+            {t?.resetSeed || 'Reset seed'}
+          </button>
+        )}
         {(role === 'Buyer' || role === 'Coordinator') && (
           <Button onClick={onNew}>
             <Plus className="size-4" /> {t?.newOrder || 'New order'}
@@ -1153,6 +1185,7 @@ function ScreenHeader({
 }
 
 function Overview({
+  role,
   order,
   buyer,
   committed,
@@ -1165,6 +1198,7 @@ function Overview({
   busy,
   t,
 }: {
+  role: Role
   order: any
   buyer: any
   committed: number
@@ -1179,32 +1213,84 @@ function Overview({
 }) {
   const crop = order?.crop || 'PADDY'
   const price = order?.pricePerKg || 28
+  const farmerCommittedKg = 500
+  const farmerGrossPayout = farmerCommittedKg * price
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-3">
-        <Stat
-          title={t?.statActiveOrderValue || 'Active order value'}
-          value={`₹${(target * price).toLocaleString()}`}
-          detail={`${buyer?.name || 'School Kitchen'} · ${target} kg`}
-          trend="Live order"
-          icon={<CircleDollarSign className="size-5" />}
-        />
-        <Stat
-          title={t?.statCommittedVolume || 'Committed volume'}
-          value={`${committed} kg`}
-          detail={`${target} kg target · 15% buffer`}
-          trend={`${progress}% filled`}
-          icon={<Wheat className="size-5" />}
-        />
-        <Stat
-          title={t?.statFarmerRealised || 'Farmer realised'}
-          value={`₹${price}/kg`}
-          detail="vs ₹22 AGMARKNET mandi price"
-          trend="+27.2%"
-          icon={<Leaf className="size-5" />}
-        />
-      </div>
+      {role === 'Farmer' ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Stat
+            title="My Committed Harvest"
+            value={`${farmerCommittedKg} kg`}
+            detail={`${crop} · Grade A Standard`}
+            trend="Offer Confirmed"
+            icon={<Wheat className="size-5" />}
+          />
+          <Stat
+            title="Agreed Mandi Premium"
+            value={`₹${price}/kg`}
+            detail="vs ₹22 AGMARKNET mandi price"
+            trend="+27.2% uplift"
+            icon={<Leaf className="size-5" />}
+          />
+          <Stat
+            title="Projected Direct Payout"
+            value={`₹${farmerGrossPayout.toLocaleString()}`}
+            detail="Direct to Jan Dhan DBT account"
+            trend="e-RUPI Escrow"
+            icon={<CircleDollarSign className="size-5" />}
+          />
+        </div>
+      ) : role === 'Buyer' ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Stat
+            title="Total Order Value"
+            value={`₹${(target * price).toLocaleString()}`}
+            detail={`${buyer?.name || 'Institutional Kitchen'} · ${target} kg`}
+            trend="Active Contract"
+            icon={<CircleDollarSign className="size-5" />}
+          />
+          <Stat
+            title="FPO Aggregated Volume"
+            value={`${committed} kg`}
+            detail={`${target} kg target · 15% buffer included`}
+            trend={`${progress}% fulfilled`}
+            icon={<Boxes className="size-5" />}
+          />
+          <Stat
+            title="Escrow Advance Reserved"
+            value={`₹${Math.round(target * price * 0.15).toLocaleString()}`}
+            detail="Protected by NPCI digital escrow"
+            trend="Funds Secured"
+            icon={<Wallet className="size-5" />}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          <Stat
+            title={t?.statActiveOrderValue || 'Active order value'}
+            value={`₹${(target * price).toLocaleString()}`}
+            detail={`${buyer?.name || 'School Kitchen'} · ${target} kg`}
+            trend="Live order"
+            icon={<CircleDollarSign className="size-5" />}
+          />
+          <Stat
+            title={t?.statCommittedVolume || 'Committed volume'}
+            value={`${committed} kg`}
+            detail={`${target} kg target · 15% buffer`}
+            trend={`${progress}% filled`}
+            icon={<Wheat className="size-5" />}
+          />
+          <Stat
+            title={t?.statFarmerRealised || 'Farmer realised'}
+            value={`₹${price}/kg`}
+            detail="vs ₹22 AGMARKNET mandi price"
+            trend="+27.2%"
+            icon={<Leaf className="size-5" />}
+          />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]">
         <Card>
@@ -1220,58 +1306,179 @@ function Overview({
               <div>
                 <div className="mb-1.5 flex items-center gap-2">
                   <Badge>{order?.code || '#AG-1001'}</Badge>
-                  <Badge tone="live">{order?.status || 'POSTED'}</Badge>
+                  <Badge tone="live">
+                    {role === 'Farmer' ? 'MY COMMITTED LOT' : role === 'Buyer' ? 'ACTIVE PURCHASE DEMAND' : order?.status || 'POSTED'}
+                  </Badge>
                 </div>
-                <h3 className="font-serif text-2xl font-bold">{crop} · {buyer?.name || 'Institutional Kitchen'}</h3>
+                <h3 className="font-serif text-2xl font-bold">
+                  {role === 'Farmer' ? `${crop} Harvest Lot · Kheda Village` : `${crop} · ${buyer?.name || 'Institutional Kitchen'}`}
+                </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Delivery {order?.deliveryDate || '2025-10-20'} · {target} kg at ₹{price}/kg
+                  {role === 'Farmer'
+                    ? `Collection scheduled for ${order?.deliveryDate || '2025-10-20'} · ${farmerCommittedKg} kg at ₹${price}/kg`
+                    : `Delivery ${order?.deliveryDate || '2025-10-20'} · ${target} kg at ₹${price}/kg`}
                 </p>
               </div>
             </div>
-            <Button onClick={onNotify} disabled={notified || busy}>
-              {notified ? (
-                <>
-                  <Check className="size-4" /> {t?.actionFarmersNotified || 'Farmers notified'}
-                </>
-              ) : (
-                <>
-                  <Send className="size-4" /> {t?.actionNotifyFarmers || 'Notify matched farmers'}
-                </>
-              )}
-            </Button>
+
+            {role === 'Farmer' ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-semibold text-emerald-700">
+                  <Check className="size-4" /> Commitment Confirmed
+                </span>
+              </div>
+            ) : role === 'Buyer' ? (
+              <Button onClick={onOrder}>
+                <Plus className="size-4" /> Post New Demand
+              </Button>
+            ) : (
+              <Button onClick={onNotify} disabled={notified || busy}>
+                {notified ? (
+                  <>
+                    <Check className="size-4" /> {t?.actionFarmersNotified || 'Farmers notified'}
+                  </>
+                ) : (
+                  <>
+                    <Send className="size-4" /> {t?.actionNotifyFarmers || 'Notify matched farmers'}
+                  </>
+                )}
+              </Button>
+            )}
           </div>
+
           <div className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">Commitment tracker</p>
-                <p className="mt-1 text-xs text-muted-foreground">Target volume with 15% standby buffer</p>
+                <p className="text-sm font-semibold">
+                  {role === 'Farmer' ? 'Personal lot commitment status' : 'Commitment tracker'}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {role === 'Farmer' ? 'Pre-harvest agreement with 15% standby reserve' : 'Target volume with 15% standby buffer'}
+                </p>
               </div>
               <span className="font-mono text-sm font-semibold text-primary">
-                {committed} / {target} kg
+                {role === 'Farmer' ? `${farmerCommittedKg} / ${farmerCommittedKg} kg` : `${committed} / ${target} kg`}
               </span>
             </div>
             <div className="relative h-3 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${progress}%` }} />
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-700"
+                style={{ width: `${role === 'Farmer' ? 100 : progress}%` }}
+              />
             </div>
             <div className="mt-2 flex justify-between font-mono text-[10px] text-muted-foreground">
               <span>0 kg</span>
-              <span>Target {target}</span>
-              <span>Buffer {Math.round(target * 1.15)}</span>
+              <span>{role === 'Farmer' ? 'Committed 500 kg' : `Target ${target}`}</span>
+              <span>Buffer {Math.round((role === 'Farmer' ? farmerCommittedKg : target) * 1.15)}</span>
             </div>
             <div className="mt-7 grid gap-3 sm:grid-cols-3">
-              <Mini label="Accepted" value={`${committed} kg`} />
-              <Mini label="Standby buffer" value={`${Math.round(target * 0.15)} kg`} />
-              <Mini label="Cascade response" value="94%" />
+              <Mini label="Accepted" value={`${role === 'Farmer' ? farmerCommittedKg : committed} kg`} />
+              <Mini label="Standby buffer" value={`${Math.round((role === 'Farmer' ? farmerCommittedKg : target) * 0.15)} kg`} />
+              <Mini label={role === 'Farmer' ? 'Lot ID' : 'Cascade response'} value={role === 'Farmer' ? 'LOT-1001' : '94%'} />
             </div>
           </div>
         </Card>
 
-        <Cascade notified={notified} onNotify={onNotify} busy={busy} />
+        {role === 'Farmer' ? (
+          <div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Notification Channels</p>
+                  <h3 className="mt-1 font-serif text-xl font-bold">Direct SMS & WhatsApp Alerts</h3>
+                </div>
+                <Smartphone className="size-6 text-primary" />
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                You receive order notifications in your vernacular language without needing a smartphone app.
+              </p>
+              <div className="mt-5 space-y-2.5">
+                <div className="flex items-center justify-between rounded-xl bg-secondary/60 p-3 text-xs">
+                  <span className="font-medium">GSM SMS Alerts</span>
+                  <span className="font-semibold text-emerald-600">Active</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-secondary/60 p-3 text-xs">
+                  <span className="font-medium">WhatsApp Updates</span>
+                  <span className="font-semibold text-emerald-600">Verified</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-secondary/60 p-3 text-xs">
+                  <span className="font-medium">IVR Voice Call Alert</span>
+                  <span className="font-semibold text-emerald-600">Enabled</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 rounded-xl border border-primary/20 bg-primary/10 p-3 text-xs text-primary font-medium">
+              Reply &apos;1&apos; via SMS or WhatsApp to confirm harvest availability anytime.
+            </div>
+          </div>
+        ) : role === 'Buyer' ? (
+          <div className="rounded-2xl border border-border bg-card p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Quality & Trust</p>
+                  <h3 className="mt-1 font-serif text-xl font-bold">Procurement Guarantee</h3>
+                </div>
+                <ShieldCheck className="size-6 text-primary" />
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span><strong>AI GradeCam:</strong> 98.4% visual accuracy against AGMARKNET Grade A standards.</span>
+                </div>
+                <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span><strong>Zero Middleman Markups:</strong> 27.2% fair value shift directly to farming clusters.</span>
+                </div>
+                <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span><strong>Escrow Auto-Settlement:</strong> Funds released only upon buyer drop-point acceptance.</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 rounded-xl border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+              Direct-from-farm contracts legally backed under APMC model bylaws.
+            </div>
+          </div>
+        ) : (
+          <Cascade notified={notified} onNotify={onNotify} busy={busy} />
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <PriceProof crop={crop} price={price} />
-        <CollectionRunway onRoute={onRoute} />
+        {role === 'Farmer' ? (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Logistics Schedule</p>
+                <h3 className="mt-1 font-serif text-xl font-bold">Next Farmgate Pickup</h3>
+              </div>
+              <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">
+                <Clock className="size-3.5" /> 07:15 AM
+              </div>
+            </div>
+            <div className="space-y-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Collection Vehicle</span>
+                <span className="font-semibold">Tata Ace (GJ-07-TY-4912)</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Pickup Location</span>
+                <span className="font-semibold">Kheda Village Collection Center</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Scheduled Weight</span>
+                <span className="font-semibold">500 kg {crop}</span>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
+              FPO collection driver will inspect produce with GradeCam visual scanner and disburse 30% advance on bag handover.
+            </p>
+          </Card>
+        ) : (
+          <CollectionRunway onRoute={onRoute} />
+        )}
       </div>
     </>
   )
@@ -1521,15 +1728,24 @@ function Orders({ role, order, buyer, onNew, notified, onNotify, busy, t }: any)
               <div>
                 <div className="flex items-center gap-2">
                   <Badge tone="live">{order?.code || 'Order #AG-1001'}</Badge>
-                  <Badge tone="good">Aadhaar Verified</Badge>
+                  <Badge tone="good">{role === 'Farmer' ? 'Personal Commitment' : 'Aadhaar Verified'}</Badge>
                 </div>
-                <h3 className="mt-1.5 font-serif text-2xl font-bold">{crop} · {buyer?.name || 'School Kitchen'}</h3>
+                <h3 className="mt-1.5 font-serif text-2xl font-bold">
+                  {role === 'Farmer' ? `${crop} Sale Contract` : `${crop} · ${buyer?.name || 'School Kitchen'}`}
+                </h3>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                  {target} kg · delivery {order?.deliveryDate || '2025-10-20'} · ₹{price}/kg
+                  {role === 'Farmer'
+                    ? `500 kg committed · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg guaranteed`
+                    : `${target} kg · delivery ${order?.deliveryDate || '2025-10-20'} · ₹${price}/kg`}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {role === 'Buyer' && (
+                <Button onClick={onNew}>
+                  <Plus className="size-4" /> New Order
+                </Button>
+              )}
               <Button
                 variant="secondary"
                 onClick={() => {
@@ -1547,9 +1763,9 @@ function Orders({ role, order, buyer, onNew, notified, onNotify, busy, t }: any)
                     [
                       order?.code || 'AG-1001',
                       crop,
-                      target,
+                      role === 'Farmer' ? 500 : target,
                       price,
-                      target * price,
+                      (role === 'Farmer' ? 500 : target) * price,
                       buyer?.name || 'PM POSHAN Kitchen',
                       order?.deliveryDate || '2025-10-20',
                       order?.status || 'POSTED',
@@ -1564,27 +1780,51 @@ function Orders({ role, order, buyer, onNew, notified, onNotify, busy, t }: any)
           </div>
         </div>
         <div className="space-y-4 p-6">
-          <Step done={true} title="Demand committed" detail="Buyer contract posted & 15% advance reserved" />
-          <Step
-            done={notified}
-            title="Farmers notified"
-            detail={notified ? 'Four-tier notification cascade completed' : 'Trigger SMS, WhatsApp & IVR to nearby registered farmers'}
-            action={!notified ? <Button onClick={onNotify} disabled={busy}><Send className="size-4" /> Notify</Button> : undefined}
-          />
-          <Step done={false} title="GradeCam inspection" detail="Collection point visual quality assessment" />
-          <Step done={false} title="Delivery inspection" detail="Binding buyer acceptance at drop point" />
+          {role === 'Farmer' ? (
+            <>
+              <Step done={true} title="Demand contract locked" detail="Institutional buyer contract committed before harvest" />
+              <Step done={true} title="Commitment confirmed" detail="Your 500 kg allocation confirmed via WhatsApp / SMS" />
+              <Step done={false} title="Farmgate GradeCam inspection" detail="Visual QC and weight confirmation during pickup" />
+              <Step done={false} title="e-RUPI direct bank payout" detail="Final balance credited directly to bank account upon delivery" />
+            </>
+          ) : role === 'Buyer' ? (
+            <>
+              <Step done={true} title="Purchase demand posted" detail="Contract locked with 15% escrow deposit reserved" />
+              <Step done={true} title="Supply matched & aggregated" detail="1,200 kg committed across verified smallholder clusters" />
+              <Step done={true} title="GradeCam inspection passed" detail="Visual computer vision verified against AGMARKNET Grade A" />
+              <Step done={false} title="Consignment delivery & escrow release" detail="Track delivery in Routes and release payment on drop-off" />
+            </>
+          ) : (
+            <>
+              <Step done={true} title="Demand committed" detail="Buyer contract posted & 15% advance reserved" />
+              <Step
+                done={notified}
+                title="Farmers notified"
+                detail={notified ? 'Four-tier notification cascade completed' : 'Trigger SMS, WhatsApp & IVR to nearby registered farmers'}
+                action={!notified ? <Button onClick={onNotify} disabled={busy}><Send className="size-4" /> Notify</Button> : undefined}
+              />
+              <Step done={false} title="GradeCam inspection" detail="Collection point visual quality assessment" />
+              <Step done={false} title="Delivery inspection" detail="Binding buyer acceptance at drop point" />
+            </>
+          )}
         </div>
       </Card>
 
       <Card className="p-6">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Order details</p>
-        <h3 className="mt-2 font-serif text-xl font-bold">Demand before harvest</h3>
+        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          {role === 'Farmer' ? 'Contract Protections' : 'Order details'}
+        </p>
+        <h3 className="mt-2 font-serif text-xl font-bold">
+          {role === 'Farmer' ? 'Guaranteed Farmgate Price' : 'Demand before harvest'}
+        </h3>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          AgriLink matches buyer commitments to smallholder plot harvest windows before produce is picked.
+          {role === 'Farmer'
+            ? 'Your agreed price of ₹28/kg is protected against mandi spot-market crashes. The FPO collection vehicle arrives directly at your village center.'
+            : 'AgriLink matches buyer commitments to smallholder plot harvest windows before produce is picked, cutting transit spoilage to 3.8%.'}
         </p>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Mini label="Buyer type" value={buyer?.type || 'Institutional'} />
-          <Mini label="Status" value={order?.status || 'POSTED'} />
+          <Mini label={role === 'Farmer' ? 'Advance on loading' : 'Buyer type'} value={role === 'Farmer' ? '₹4,200 (30%)' : (buyer?.type || 'Institutional')} />
+          <Mini label={role === 'Farmer' ? 'Net balance payable' : 'Status'} value={role === 'Farmer' ? '₹9,240' : (order?.status || 'POSTED')} />
         </div>
       </Card>
     </div>
@@ -1717,8 +1957,110 @@ function Network({ notified, onNotify, busy, t, order }: any) {
   )
 }
 
-function Collection({ order, farmerId, setFarmerId, weighedKg, setWeighedKg, aiResult, onCapturePhoto, onCollect, busy, t }: any) {
+function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedKg, aiResult, onCapturePhoto, onCollect, busy, t }: any) {
   const crop = order?.crop || 'PADDY'
+
+  if (role === 'Farmer') {
+    return (
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+        <Card className="p-6">
+          <div className="flex items-start justify-between mb-6">
+            <div className="flex items-center gap-3.5">
+              <div className="relative size-14 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
+                <img
+                  src={cropImages[crop.toLowerCase()] || '/hero-produce.png'}
+                  alt={crop}
+                  className="size-full object-contain drop-shadow-sm"
+                />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <Badge tone="live">Lot #LOT-1001</Badge>
+                  <Badge tone="good">AGMARKNET Grade A</Badge>
+                </div>
+                <h3 className="mt-1 font-serif text-2xl font-bold">My GradeCam Quality Slip</h3>
+                <p className="text-xs text-muted-foreground">Kheda collection depot · 500 kg weighed · Verified</p>
+              </div>
+            </div>
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <BadgeCheck className="size-5" />
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-secondary/30 p-5">
+            <div className="flex items-center justify-between border-b border-border/80 pb-3">
+              <div>
+                <p className="text-xs font-semibold text-foreground">Visual Quality Assessment Record</p>
+                <p className="text-[11px] text-muted-foreground">Inspected by Lead QC Inspector Anita Desai</p>
+              </div>
+              <span className="font-mono text-xs font-bold text-emerald-600">PASSED · 98.4% SCORE</span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
+              <div className="rounded-xl bg-card p-3 border border-border">
+                <span className="text-muted-foreground">Skin Defect Perimeter</span>
+                <p className="mt-1 font-mono text-sm font-semibold">0.8% (Allowed max 2.0%)</p>
+              </div>
+              <div className="rounded-xl bg-card p-3 border border-border">
+                <span className="text-muted-foreground">Color Uniformity</span>
+                <p className="mt-1 font-mono text-sm font-semibold">96.2% Homogeneous</p>
+              </div>
+              <div className="rounded-xl bg-card p-3 border border-border">
+                <span className="text-muted-foreground">Moisture Content</span>
+                <p className="mt-1 font-mono text-sm font-semibold">13.4% Standard Grade</p>
+              </div>
+              <div className="rounded-xl bg-card p-3 border border-border">
+                <span className="text-muted-foreground">Net Weighed Volume</span>
+                <p className="mt-1 font-mono text-sm font-semibold text-primary">500 kg Confirmed</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="size-5 text-emerald-600 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-emerald-800">Quality Certificate Attached</p>
+                <p className="text-[11px] text-emerald-700/80">30% advance of ₹4,200 released instantly on weighment.</p>
+              </div>
+            </div>
+            <span className="font-mono text-xs font-bold text-emerald-700">₹4,200 Paid</span>
+          </div>
+        </Card>
+
+        <Card className="p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">GradeCam verdict</p>
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                AI Vision 4.2
+              </span>
+            </div>
+            <h3 className="mt-2 font-serif text-xl font-bold">Grade A Quality Assured</h3>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <Mini label="Model Confidence" value="98.4%" />
+              <Mini label="Certificate Status" value="OFFICIALLY SEALED" />
+            </div>
+            <p className="mt-4 rounded-xl bg-secondary p-4 text-xs text-muted-foreground leading-relaxed">
+              Optical inspection confirms Grade A produce. No middleman deduction for moisture or grading disputes.
+            </p>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border bg-secondary/50 p-4 flex items-center gap-3.5">
+            <div className="relative size-14 shrink-0 rounded-xl bg-card p-1 border border-border flex items-center justify-center overflow-hidden">
+              <img src="/features/ai-gradecam.png" alt="AI GradeCam" className="size-full object-contain" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold">Immutable Digital Slip</p>
+              <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                Quality record permanently linked to your e-RUPI passbook voucher.
+              </p>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
       <Card className="p-6">
@@ -1797,7 +2139,7 @@ function Collection({ order, farmerId, setFarmerId, weighedKg, setWeighedKg, aiR
   )
 }
 
-function RoutesScreen({ order, onDispatch, onDeliver, busy, onPrintWaybill, t }: any) {
+function RoutesScreen({ role, order, onDispatch, onDeliver, busy, onPrintWaybill, t }: any) {
   const crop = order?.crop || 'PADDY'
   const routeStops = [
     { id: 'depot', kind: 'DEPOT' as const, label: 'Kheda FPO Depot', detail: 'Collection Depot', lat: 22.75, lng: 72.68 },
@@ -1814,7 +2156,9 @@ function RoutesScreen({ order, onDispatch, onDeliver, busy, onPrintWaybill, t }:
               <Badge tone="good">Optimised Route · 18.4 km</Badge>
               <Badge tone="muted">Tata Ace GJ-07-TY-4912</Badge>
             </div>
-            <h3 className="mt-2 font-serif text-2xl font-bold">Consignment manifest</h3>
+            <h3 className="mt-2 font-serif text-2xl font-bold">
+              {role === 'Buyer' ? 'Consignment live tracking' : 'Consignment manifest'}
+            </h3>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" onClick={onPrintWaybill}>
@@ -1851,15 +2195,45 @@ function RoutesScreen({ order, onDispatch, onDeliver, busy, onPrintWaybill, t }:
       </Card>
       <Card className="p-6 flex flex-col justify-between">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Dispatch & Delivery</p>
-          <h3 className="mt-2 font-serif text-xl font-bold">Consignment actions</h3>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            {role === 'Buyer' ? 'Shipment Verification' : 'Dispatch & Delivery'}
+          </p>
+          <h3 className="mt-2 font-serif text-xl font-bold">
+            {role === 'Buyer' ? 'Consignment arrival actions' : 'Consignment actions'}
+          </h3>
           <div className="mt-6 space-y-3">
-            <Button onClick={onDispatch} disabled={busy}>
-              <Truck className="size-4" /> {t?.actionDispatch || 'Dispatch vehicle (₹1,200)'}
-            </Button>
-            <Button variant="secondary" onClick={onDeliver} disabled={busy}>
-              <Check className="size-4" /> {t?.actionConfirmDelivery || 'Confirm buyer delivery & settle'}
-            </Button>
+            {role === 'Buyer' ? (
+              <>
+                <div className="rounded-xl border border-border bg-secondary/50 p-4 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Carrier Status</span>
+                    <span className="font-semibold text-emerald-600 flex items-center gap-1.5">
+                      <Truck className="size-3.5" /> En Route to Destination
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Vehicle Assigned</span>
+                    <span className="font-mono font-medium">Tata Ace (GJ-07-TY-4912)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Estimated Drop-Off</span>
+                    <span className="font-semibold">09:15 AM (On Schedule)</span>
+                  </div>
+                </div>
+                <Button onClick={onDeliver} disabled={busy} className="w-full">
+                  <Check className="size-4" /> Confirm Buyer Delivery & Release Escrow
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={onDispatch} disabled={busy}>
+                  <Truck className="size-4" /> {t?.actionDispatch || 'Dispatch vehicle (₹1,200)'}
+                </Button>
+                <Button variant="secondary" onClick={onDeliver} disabled={busy}>
+                  <Check className="size-4" /> {t?.actionConfirmDelivery || 'Confirm buyer delivery & settle'}
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -1882,11 +2256,16 @@ function RoutesScreen({ order, onDispatch, onDeliver, busy, onPrintWaybill, t }:
 function Settlements({ role, order, buyer, onPrintInvoice, t }: any) {
   const crop = order?.crop || 'PADDY'
   const price = order?.pricePerKg || 28
-  const qty = 500
-  const gross = qty * price
-  const advance = Math.round(gross * 0.3)
-  const transport = Math.round(gross * 0.04)
-  const net = gross - advance - transport
+  const farmerQty = 500
+  const farmerGross = farmerQty * price
+  const farmerAdvance = Math.round(farmerGross * 0.3)
+  const farmerTransport = Math.round(farmerGross * 0.04)
+  const farmerNet = farmerGross - farmerAdvance - farmerTransport
+
+  const buyerQty = 1200
+  const buyerSubtotal = buyerQty * price
+  const fpoMargin = Math.round(buyerSubtotal * 0.04)
+  const buyerTotal = buyerSubtotal + fpoMargin
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -1895,11 +2274,17 @@ function Settlements({ role, order, buyer, onPrintInvoice, t }: any) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <Badge tone="good">Official Sale Receipt</Badge>
+                <Badge tone="good">{role === 'Buyer' ? 'APMC Tax Invoice' : 'Official Sale Receipt'}</Badge>
                 <Badge tone="muted">NPCI Escrow Cleared</Badge>
               </div>
-              <h3 className="mt-2 font-serif text-2xl font-bold">Farmer Receipt · Ramesh Kumar</h3>
-              <p className="mt-1 text-sm text-muted-foreground">LOT-1001 · Grade A · {qty} kg {crop} · Verified e-RUPI Payout</p>
+              <h3 className="mt-2 font-serif text-2xl font-bold">
+                {role === 'Buyer' ? `APMC Invoice · ${buyer?.name || 'School Kitchen'}` : 'Farmer Receipt · Ramesh Kumar'}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {role === 'Buyer'
+                  ? `INV-2025-0891 · ${buyerQty} kg ${crop} · Direct Farm Sourcing`
+                  : `LOT-1001 · Grade A · ${farmerQty} kg ${crop} · Verified e-RUPI Payout`}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" onClick={onPrintInvoice}>
@@ -1911,21 +2296,17 @@ function Settlements({ role, order, buyer, onPrintInvoice, t }: any) {
                   downloadCsv(`agrilink-settlement-ledger-${order?.code || 'AG-1001'}.csv`, [
                     'Order Reference',
                     'Lot ID',
-                    'Farmer Name',
-                    'Village',
+                    'Entity',
                     'Crop',
                     'Grade',
-                    'Accepted Weight (kg)',
-                    'Agreed Unit Price (INR)',
-                    'Gross Lot Value (INR)',
-                    'Advance Paid 30% (INR)',
-                    'Transport Allocated (INR)',
-                    'Net Balance Payable (INR)',
-                    'Clearing Rail',
+                    'Weight (kg)',
+                    'Unit Rate (INR)',
+                    'Gross Value (INR)',
+                    'Advance / Escrow (INR)',
+                    'Net Settlement (INR)',
                     'Status',
                   ], [
-                    [order?.code || 'AG-1001', 'LOT-1001-KHD', 'Ramesh Kumar', 'Kheda', crop, 'Grade A', qty, price, gross, advance, transport, net, 'NPCI / e-RUPI', 'Settled & Cleared'],
-                    [order?.code || 'AG-1001', 'LOT-1002-BRS', 'Savitri Devi', 'Borsad', crop, 'Grade A', 700, price, 700 * price, Math.round(700 * price * 0.3), Math.round(700 * price * 0.04), Math.round(700 * price * 0.66), 'DBT Direct Credit', 'Settled & Cleared'],
+                    [order?.code || 'AG-1001', 'LOT-1001-KHD', role === 'Buyer' ? (buyer?.name || 'PM POSHAN Kitchen') : 'Ramesh Kumar', crop, 'Grade A', role === 'Buyer' ? buyerQty : farmerQty, price, role === 'Buyer' ? buyerTotal : farmerGross, role === 'Buyer' ? buyerTotal : farmerAdvance, role === 'Buyer' ? 0 : farmerNet, 'Settled & Cleared'],
                   ])
                 }}
               >
@@ -1934,17 +2315,35 @@ function Settlements({ role, order, buyer, onPrintInvoice, t }: any) {
             </div>
           </div>
         </div>
-        <div className="space-y-4 p-6">
-          <Line label="Accepted weight" value={`${qty} kg`} />
-          <Line label="Agreed price" value={`× ₹${price}/kg`} />
-          <Line label="Gross lot value" value={`₹${gross.toLocaleString()}`} strong />
-          <Line label="Collection advance paid (30%)" value={`− ₹${advance.toLocaleString()}`} />
-          <Line label="Transport share allocated" value={`− ₹${transport.toLocaleString()}`} />
-          <div className="border-t border-border pt-4">
-            <Line label="Net final payable to farmer" value={`₹${net.toLocaleString()}`} strong />
+
+        {role === 'Buyer' ? (
+          <div className="space-y-4 p-6">
+            <Line label="Billed produce quantity" value={`${buyerQty} kg`} />
+            <Line label="Direct farm contract rate" value={`× ₹${price}/kg`} />
+            <Line label="Produce subtotal" value={`₹${buyerSubtotal.toLocaleString()}`} strong />
+            <Line label="FPO collection & grading service fee (4%)" value={`+ ₹${fpoMargin.toLocaleString()}`} />
+            <div className="border-t border-border pt-4">
+              <Line label="Total invoice amount payable" value={`₹${buyerTotal.toLocaleString()}`} strong />
+            </div>
+            <Line label="Advance escrow deposit locked" value={`− ₹${buyerTotal.toLocaleString()}`} />
+            <div className="border-t border-border pt-4">
+              <Line label="Outstanding buyer balance" value="₹0 (Fully Funded in Escrow)" strong />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4 p-6">
+            <Line label="Accepted weight" value={`${farmerQty} kg`} />
+            <Line label="Agreed price" value={`× ₹${price}/kg`} />
+            <Line label="Gross lot value" value={`₹${farmerGross.toLocaleString()}`} strong />
+            <Line label="Collection advance paid (30%)" value={`− ₹${farmerAdvance.toLocaleString()}`} />
+            <Line label="Transport share allocated" value={`− ₹${farmerTransport.toLocaleString()}`} />
+            <div className="border-t border-border pt-4">
+              <Line label="Net final payable to farmer" value={`₹${farmerNet.toLocaleString()}`} strong />
+            </div>
+          </div>
+        )}
       </Card>
+
       <div className="space-y-6">
         <PriceProof crop={crop} price={price} />
         <Card className="p-6">
@@ -1956,9 +2355,13 @@ function Settlements({ role, order, buyer, onPrintInvoice, t }: any) {
               <div className="flex items-center gap-2">
                 <Badge tone="live">NPCI Auto-Clearing</Badge>
               </div>
-              <h4 className="mt-1.5 font-serif text-lg font-bold">Instant e-RUPI Settlement</h4>
+              <h4 className="mt-1.5 font-serif text-lg font-bold">
+                {role === 'Buyer' ? 'Escrow Protected Payment' : 'Instant e-RUPI Settlement'}
+              </h4>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Funds unlock from escrow upon buyer drop-point acceptance. Zero middleman float.
+                {role === 'Buyer'
+                  ? 'Buyer funds remain locked in digital escrow until delivery acceptance sign-off. Zero counterparty risk.'
+                  : 'Funds unlock from escrow upon buyer drop-point acceptance. Zero middleman float.'}
               </p>
             </div>
           </div>

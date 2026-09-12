@@ -31,15 +31,70 @@ function checkRateLimit(key: string, maxRequests: number, windowMs: number): { a
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      action?: 'send' | 'verify'
+    const body = (await request.json()) as {
+      action?: 'send' | 'verify' | 'lookup'
       phone?: string
       otp?: string
       sessionId?: string
+      role?: string
     }
 
     const phone = body.phone ? String(body.phone).replace(/\D/g, '').slice(-10) : ''
     const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown_ip'
+
+    if (body.action === 'lookup') {
+      if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+        return NextResponse.json({ ok: false, error: 'Enter a valid 10-digit Indian mobile number.' }, { status: 400 })
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!supabaseUrl || !anonKey || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const demoProfiles: Record<string, { fullName: string; role: string; verificationStatus: string }> = {
+          '9825144102': { fullName: 'Ramesh Kumar', role: 'farmer', verificationStatus: 'verified' },
+          '9825277103': { fullName: 'Meera Patel', role: 'buyer', verificationStatus: 'verified' },
+          '9825000000': { fullName: 'Anita Sharma', role: 'admin', verificationStatus: 'verified' },
+        }
+        const demo = demoProfiles[phone]
+        if (demo) {
+          return NextResponse.json({
+            ok: true,
+            exists: true,
+            user: {
+              fullName: demo.fullName,
+              role: demo.role,
+              verificationStatus: demo.verificationStatus,
+              onboardingComplete: true,
+            },
+          })
+        }
+        return NextResponse.json({ ok: true, exists: false })
+      }
+
+      try {
+        const db = requireSupabaseAdmin()
+        const { data: profile } = await db
+          .from('user_profiles')
+          .select('full_name, role, verification_status, onboarding_complete')
+          .eq('mobile_number', phone)
+          .maybeSingle()
+
+        if (profile) {
+          return NextResponse.json({
+            ok: true,
+            exists: true,
+            user: {
+              fullName: profile.full_name,
+              role: profile.role,
+              verificationStatus: profile.verification_status,
+              onboardingComplete: profile.onboarding_complete,
+            },
+          })
+        }
+      } catch {}
+
+      return NextResponse.json({ ok: true, exists: false })
+    }
 
     if (body.action === 'send') {
       if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
@@ -64,7 +119,19 @@ export async function POST(request: Request) {
       }
 
       const result = await sendOtp(phone)
-      return NextResponse.json(result)
+
+      // Query database to see if this user is recognized
+      let existingUser: { fullName: string | null; role: string | null } | null = null
+      try {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+        if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          const db = requireSupabaseAdmin()
+          const { data: p } = await db.from('user_profiles').select('full_name, role').eq('mobile_number', phone).maybeSingle()
+          if (p) existingUser = { fullName: p.full_name, role: p.role }
+        }
+      } catch {}
+
+      return NextResponse.json({ ...result, existingUser })
     }
 
     if (body.action === 'verify') {
@@ -93,10 +160,21 @@ export async function POST(request: Request) {
         if (process.env.NODE_ENV === 'production') {
           return NextResponse.json({ error: 'Authentication backend is not configured. Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY in Vercel.' }, { status: 503 })
         }
+
+        const demoRole = phone === '9825277103' ? 'buyer' : phone === '9825000000' ? 'admin' : (body.role || 'farmer')
+        const demoName = phone === '9825277103' ? 'Meera Patel' : phone === '9825000000' ? 'Anita Sharma' : 'Ramesh Kumar'
         return NextResponse.json({
           ok: true,
           isMock: true,
           user: { id: `mock-${phone}`, phone: `+91${phone}` },
+          profile: {
+            full_name: demoName,
+            role: demoRole,
+            onboarding_complete: true,
+            verification_status: 'verified',
+          },
+          redirectUrl: demoRole === 'admin' ? '/admin' : '/portal',
+          onboardingComplete: true,
         })
       }
       const supabaseAdmin = requireSupabaseAdmin()
@@ -177,11 +255,18 @@ export async function POST(request: Request) {
         .eq('id', authData.user.id)
         .maybeSingle()
 
+      const redirectUrl = profile?.role === 'admin'
+        ? '/admin'
+        : profile?.onboarding_complete
+        ? '/portal'
+        : '/onboarding'
+
       return NextResponse.json({
         ok: true,
         session: authData.session,
         user: authData.user,
         profile: profile ?? null,
+        redirectUrl,
         onboardingComplete: profile?.onboarding_complete ?? false,
       })
     }

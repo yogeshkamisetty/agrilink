@@ -55,7 +55,11 @@ export function ProtectedPortal() {
           try { localStorage.setItem('agrilink_user_name', resolvedName) } catch {}
         }
         if (profile.role) {
-          const mappedRole = profile.role === 'farmer' ? 'Farmer' : profile.role === 'buyer' ? 'Buyer' : 'Coordinator'
+          if (profile.role === 'admin') {
+            router.replace('/admin')
+            return
+          }
+          const mappedRole = profile.role === 'farmer' ? 'Farmer' : 'Buyer'
           setUserRole(mappedRole)
           try { localStorage.setItem('agrilink_user_role', mappedRole) } catch {}
         }
@@ -107,9 +111,11 @@ export function ProtectedPortal() {
   return (
     <>
       <AgriLinkDashboard onSignOut={signOut} verified={verified} userName={userName} userRole={userRole} />
-      <main className="mx-auto max-w-[1500px] px-5 pb-10 sm:px-8 lg:pl-[21rem] lg:pr-10">
-        <CropAvailability />
-      </main>
+      {userRole === 'Buyer' && (
+        <main className="mx-auto max-w-[1500px] px-5 pb-10 sm:px-8 lg:pl-[21rem] lg:pr-10">
+          <CropAvailability />
+        </main>
+      )}
     </>
   )
 }

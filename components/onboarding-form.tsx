@@ -10,7 +10,7 @@ const input = 'mt-2 w-full rounded-xl border border-border bg-background px-4 py
 export function OnboardingForm() {
   const router = useRouter()
   const [userId, setUserId] = useState<string | null>(null)
-  const [role, setRole] = useState<'farmer' | 'buyer'>('farmer')
+  const [role, setRole] = useState<'farmer' | 'buyer' | 'admin'>('farmer')
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -27,6 +27,13 @@ export function OnboardingForm() {
   })
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const signupRole = localStorage.getItem('agrilink_signup_role')
+      if (signupRole === 'Buyer') setRole('buyer')
+      else if (signupRole === 'Admin') setRole('admin')
+      else if (signupRole === 'Farmer') setRole('farmer')
+    }
+
     getAuthClient().auth.getSession().then(({ data }) => {
       if (!data.session) {
         router.replace('/login')
@@ -71,7 +78,7 @@ export function OnboardingForm() {
           if (form.full_name) {
             localStorage.setItem('agrilink_user_name', form.full_name.trim())
           }
-          const mappedRole = role === 'farmer' ? 'Farmer' : 'Buyer'
+          const mappedRole = role === 'farmer' ? 'Farmer' : role === 'buyer' ? 'Buyer' : 'Coordinator'
           localStorage.setItem('agrilink_user_role', mappedRole)
         } catch {}
       }
@@ -101,11 +108,12 @@ export function OnboardingForm() {
   }
 
   if (saved) {
-    router.replace('/portal')
+    const dest = role === 'admin' ? '/admin' : '/portal'
+    router.replace(dest)
     return (
       <main className='grid min-h-screen place-items-center text-sm text-muted-foreground'>
         <Loader2 className='mr-2 inline size-4 animate-spin text-primary' />
-        Opening your workspace…
+        Opening your {role === 'admin' ? 'FPO Admin Console' : role === 'buyer' ? 'Buyer Portal' : 'Farmer Portal'}…
       </main>
     )
   }
@@ -122,7 +130,7 @@ export function OnboardingForm() {
         <div
           role="radiogroup"
           aria-label="Select your role in the supply network"
-          className="mt-6 grid grid-cols-2 gap-3"
+          className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3"
         >
           <button
             type="button"
@@ -133,8 +141,8 @@ export function OnboardingForm() {
               role === 'farmer' ? 'border-primary bg-primary/10 shadow-sm' : 'border-border hover:bg-muted'
             }`}
           >
-            <b className="text-base font-semibold">Farmer</b>
-            <span className="mt-1 block text-xs text-muted-foreground">Crops, location and FPO details</span>
+            <b className="text-base font-semibold">🌾 Farmer</b>
+            <span className="mt-1 block text-xs text-muted-foreground">Crops, village & lot slips</span>
           </button>
           <button
             type="button"
@@ -145,8 +153,20 @@ export function OnboardingForm() {
               role === 'buyer' ? 'border-primary bg-primary/10 shadow-sm' : 'border-border hover:bg-muted'
             }`}
           >
-            <b className="text-base font-semibold">Buyer</b>
-            <span className="mt-1 block text-xs text-muted-foreground">Organization and purchase profile</span>
+            <b className="text-base font-semibold">🏢 Buyer</b>
+            <span className="mt-1 block text-xs text-muted-foreground">Purchase orders & tracking</span>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={role === 'admin'}
+            onClick={() => setRole('admin')}
+            className={`rounded-xl border p-4 text-left transition-colors ${
+              role === 'admin' ? 'border-primary bg-primary/10 shadow-sm' : 'border-border hover:bg-muted'
+            }`}
+          >
+            <b className="text-base font-semibold">🛡️ FPO Admin</b>
+            <span className="mt-1 block text-xs text-muted-foreground">Fleet routes & hub ops</span>
           </button>
         </div>
 
@@ -158,7 +178,7 @@ export function OnboardingForm() {
               className={input}
               value={form.full_name}
               onChange={e => setForm({ ...form, full_name: e.target.value })}
-              placeholder='e.g. Ramesh Patel or Sruthi Katru'
+              placeholder='e.g. Ramesh Patel or Priya Sharma'
             />
           </label>
 
@@ -174,7 +194,7 @@ export function OnboardingForm() {
             />
           </label>
 
-          {role === 'farmer' ? (
+          {role === 'farmer' && (
             <>
               <label className='text-sm font-medium'>
                 Village
@@ -216,7 +236,9 @@ export function OnboardingForm() {
                 />
               </label>
             </>
-          ) : (
+          )}
+
+          {role === 'buyer' && (
             <>
               <label className='text-sm font-medium'>
                 Organization name
@@ -225,7 +247,7 @@ export function OnboardingForm() {
                   className={input}
                   value={form.organization_name}
                   onChange={e => setForm({ ...form, organization_name: e.target.value })}
-                  placeholder='Company, hotel, or store name'
+                  placeholder='Company, hotel, or retail store'
                 />
               </label>
               <label className='text-sm font-medium'>
@@ -242,6 +264,41 @@ export function OnboardingForm() {
                   <option>Processor</option>
                   <option>Individual consumer</option>
                 </select>
+              </label>
+            </>
+          )}
+
+          {role === 'admin' && (
+            <>
+              <label className='text-sm font-medium'>
+                FPO Federation / Society Name
+                <input
+                  required
+                  className={input}
+                  value={form.fpo_name}
+                  onChange={e => setForm({ ...form, fpo_name: e.target.value })}
+                  placeholder='e.g. Nashik Farmer Producer Company'
+                />
+              </label>
+              <label className='text-sm font-medium'>
+                District Central Hub
+                <input
+                  required
+                  className={input}
+                  value={form.district}
+                  onChange={e => setForm({ ...form, district: e.target.value })}
+                  placeholder='e.g. Nashik Ag Hub'
+                />
+              </label>
+              <label className='text-sm font-medium sm:col-span-2'>
+                State Office
+                <input
+                  required
+                  className={input}
+                  value={form.state}
+                  onChange={e => setForm({ ...form, state: e.target.value })}
+                  placeholder='e.g. Maharashtra'
+                />
               </label>
             </>
           )}

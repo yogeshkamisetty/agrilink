@@ -18,11 +18,11 @@ export async function POST(request: Request) {
     const requestedRole = body.role
 
     const fullName = sanitizeText(body.full_name, 100)
-    if ((requestedRole !== 'farmer' && requestedRole !== 'buyer') || !fullName) {
+    if ((requestedRole !== 'farmer' && requestedRole !== 'buyer' && requestedRole !== 'admin') || !fullName) {
       return NextResponse.json({ error: 'Choose a role and enter your name.' }, { status: 400 })
     }
 
-    const role: 'farmer' | 'buyer' = requestedRole
+    const role: 'farmer' | 'buyer' | 'admin' = requestedRole
     const village = sanitizeText(body.village, 100)
     const district = sanitizeText(body.district, 100)
     const state = sanitizeText(body.state, 100)
@@ -35,6 +35,9 @@ export async function POST(request: Request) {
     }
     if (role === 'buyer' && (!organizationName || !organizationType)) {
       return NextResponse.json({ error: 'Organization name and business type are required for buyers.' }, { status: 400 })
+    }
+    if (role === 'admin' && (!district || !fpoName)) {
+      return NextResponse.json({ error: 'FPO Federation name and District hub are required for admins.' }, { status: 400 })
     }
 
     const db = requireSupabaseAdmin()
