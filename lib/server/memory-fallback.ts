@@ -75,12 +75,17 @@ export function createMemoryFallbackDb(): Db {
     { id: 'f-bhavna-109', fpo_id: 'fpo-anand-001', name: 'Bhavnaben Thakor', phone: '+91 90000 10109', language: 'gu', land_hectares: 1.8, village: 'Borsad', lat: 22.4078, lng: 72.8988, completed_orders: 22, failed_orders: 1, reliability_score: 95, created_at: new Date().toISOString() },
   ]
 
+  const nowMs = Date.now()
+  const winStart = new Date(nowMs - 86400000 * 7).toISOString().split('T')[0]
+  const winEnd = new Date(nowMs + 86400000 * 60).toISOString().split('T')[0]
+
   const cropRegistry: Row[] = [
-    { id: 'reg-paddy-01', farmer_id: 'f-ramesh-101', crop: 'PADDY', expected_qty_kg: 500, harvest_window_start: '2025-10-15', harvest_window_end: '2025-10-25', status: 'ACTIVE', created_at: new Date().toISOString() },
-    { id: 'reg-paddy-02', farmer_id: 'f-savita-102', crop: 'PADDY', expected_qty_kg: 700, harvest_window_start: '2025-10-15', harvest_window_end: '2025-10-25', status: 'ACTIVE', created_at: new Date().toISOString() },
-    { id: 'reg-tomato-01', farmer_id: 'f-mohan-103', crop: 'TOMATO', expected_qty_kg: 800, harvest_window_start: '2025-10-14', harvest_window_end: '2025-10-24', status: 'ACTIVE', created_at: new Date().toISOString() },
-    { id: 'reg-wheat-01', farmer_id: 'f-jignesh-104', crop: 'WHEAT', expected_qty_kg: 1000, harvest_window_start: '2025-10-18', harvest_window_end: '2025-10-28', status: 'ACTIVE', created_at: new Date().toISOString() },
-    { id: 'reg-onion-01', farmer_id: 'f-bhavna-109', crop: 'ONION', expected_qty_kg: 600, harvest_window_start: '2025-10-16', harvest_window_end: '2025-10-26', status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-paddy-01', farmer_id: 'f-ramesh-101', crop: 'PADDY', expected_qty_kg: 500, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-paddy-02', farmer_id: 'f-savita-102', crop: 'PADDY', expected_qty_kg: 700, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-tomato-01', farmer_id: 'f-mohan-103', crop: 'TOMATO', expected_qty_kg: 800, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-wheat-01', farmer_id: 'f-jignesh-104', crop: 'WHEAT', expected_qty_kg: 1000, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-onion-01', farmer_id: 'f-bhavna-109', crop: 'ONION', expected_qty_kg: 600, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
+    { id: 'reg-potato-01', farmer_id: 'f-savita-102', crop: 'POTATO', expected_qty_kg: 500, harvest_window_start: winStart, harvest_window_end: winEnd, status: 'ACTIVE', created_at: new Date().toISOString() },
   ]
 
   const orders: Row[] = [

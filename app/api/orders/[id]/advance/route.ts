@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/server/db'
 import { commitAdvance } from '@/lib/server/sourcing'
+import { getOrder } from '@/lib/server/repo'
 
 export async function POST(
   request: Request,
@@ -7,12 +8,13 @@ export async function POST(
 ) {
   try {
     const { id } = await params
-    const body = await request.json()
-    const buyerId = body.buyerId || body.buyer_id
-    if (!buyerId) {
-      return Response.json({ error: 'buyerId is required' }, { status: 400 })
-    }
+    const body = await request.json().catch(() => ({}))
     const db = await getDb()
+    let buyerId = body.buyerId || body.buyer_id
+    if (!buyerId) {
+      const order = await getOrder(db, id)
+      buyerId = order.buyerId
+    }
     const order = await commitAdvance(db, id, buyerId)
     return Response.json({ order })
   } catch (error) {

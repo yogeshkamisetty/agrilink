@@ -608,25 +608,30 @@ export function AgriLinkDashboard({
     if (!activeOrder) return
     setActionBusy(true)
     try {
-      await fetch(`/api/orders/${activeOrder.id}/advance`, {
+      const res = await fetch(`/api/orders/${activeOrder.id}/advance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ buyerId: activeBuyer?.id }),
-      }).catch(() => {})
-      setActionMessage('₹4,200 Escrow advance funded! Order is now active.')
+      })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || 'Failed to fund escrow advance')
+      }
+      await refresh()
+      setActionMessage('15% Escrow advance funded! Demand order is now active and sourcing.')
       setNotifications((prev) => [
         {
           id: `escrow-${Date.now()}`,
           title: 'Escrow Advance Funded',
-          detail: `15% escrow advance (₹4,200) locked for order #${activeOrder.code || 'AG-1001'}. Farmer allocation underway.`,
+          detail: `15% escrow advance locked for order #${activeOrder.code || 'AG-1001'}. Farmer allocation underway.`,
           time: 'Just now',
           type: 'finance',
           unread: true,
         },
         ...prev,
       ])
-    } catch {
-      setActionMessage('Escrow advance funded successfully!')
+    } catch (err) {
+      setActionMessage(err instanceof Error ? err.message : 'Escrow advance deposit failed')
     } finally {
       setActionBusy(false)
     }
