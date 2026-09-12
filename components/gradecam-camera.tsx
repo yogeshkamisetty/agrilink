@@ -110,12 +110,12 @@ export function GradeCamCamera({ onCapture, disabled }: Props) {
             <p className="mt-1 max-w-xs text-xs text-muted-foreground">
               {error || 'Capture optical produce image at collection depot. Verified jointly by Coordinator & Buyer.'}
             </p>
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-4 flex flex-col min-[420px]:flex-row justify-center gap-2">
               <button
                 type="button"
                 onClick={startCamera}
                 disabled={disabled}
-                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-60 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:opacity-60 cursor-pointer min-h-[40px]"
               >
                 <Camera className="size-4" /> Start Device Camera
               </button>
@@ -123,9 +123,9 @@ export function GradeCamCamera({ onCapture, disabled }: Props) {
                 type="button"
                 onClick={capturePhoto}
                 disabled={disabled}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60 cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-foreground hover:bg-secondary disabled:opacity-60 cursor-pointer min-h-[40px]"
               >
-                <Eye className="size-4 text-primary" /> Capture Verification Photo
+                <Eye className="size-4 text-primary" /> Capture Photo
               </button>
             </div>
           </div>
@@ -141,11 +141,11 @@ export function GradeCamCamera({ onCapture, disabled }: Props) {
                 type="button"
                 onClick={capturePhoto}
                 disabled={disabled}
-                className="rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground shadow"
+                className="rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground shadow min-h-[36px]"
               >
                 Snap photo
               </button>
-              <button type="button" onClick={stopCamera} className="rounded-lg bg-secondary p-1.5 text-muted-foreground hover:text-foreground">
+              <button type="button" onClick={stopCamera} className="rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground min-h-[36px] min-w-[36px] flex items-center justify-center">
                 <VideoOff className="size-4" />
               </button>
             </div>
@@ -154,7 +154,7 @@ export function GradeCamCamera({ onCapture, disabled }: Props) {
       </div>
 
       {/* Dual Review Protocol Badges */}
-      <div className="mt-3.5 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
+      <div className="mt-3.5 grid grid-cols-1 min-[420px]:grid-cols-2 gap-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-1.5 rounded-xl bg-secondary/50 p-2 border border-border/60">
           <ShieldCheck className="size-3.5 text-emerald-600 shrink-0" />
           <span>FPO QC Sign-off: Physical Check</span>

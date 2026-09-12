@@ -114,27 +114,27 @@ export function VoiceAssistantModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-4">
-      <Card className="relative w-full max-w-xl overflow-hidden border-primary/30 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <Card className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto border-primary/30 p-4 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
         <button
           onClick={handleClose}
-          className="absolute right-4 top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="absolute right-3.5 top-3.5 sm:right-4 sm:top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
         >
           <X className="size-4" />
         </button>
 
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
-            <Mic className="size-5 animate-pulse" />
+        <div className="flex items-start sm:items-center gap-2.5 sm:gap-3">
+          <div className="flex size-9 sm:size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
+            <Mic className="size-4 sm:size-5 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="font-mono text-xs font-bold text-primary">BHASHINI VERNACULAR AI</span>
               <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                 Voice Assistant
               </span>
             </div>
-            <h3 className="font-serif text-xl font-bold text-foreground">
+            <h3 className="font-serif text-lg sm:text-xl font-bold text-foreground">
               Voice-Based Digital Assistant
             </h3>
           </div>
@@ -145,14 +145,14 @@ export function VoiceAssistantModal({
         </p>
 
         {/* Current Active Response Card */}
-        <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-4 relative">
+        <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/5 p-3.5 sm:p-4 relative">
           <div className="flex items-start justify-between gap-2">
             <p className="font-serif text-sm font-bold text-foreground">
               &quot;{activeQuestion.prompt}&quot;
             </p>
             <button
               onClick={() => handleSpeak(activeQuestion.answer)}
-              className={`shrink-0 rounded-xl p-2 transition-all ${
+              className={`shrink-0 rounded-xl p-2 transition-all min-h-[38px] min-w-[38px] flex items-center justify-center ${
                 isSpeaking
                   ? 'bg-primary text-primary-foreground shadow-sm animate-pulse'
                   : 'bg-card text-muted-foreground hover:text-foreground border border-border'
@@ -200,7 +200,7 @@ export function VoiceAssistantModal({
         </div>
 
         <div className="mt-5 flex items-center justify-end">
-          <Button onClick={handleClose} size="sm" variant="secondary">
+          <Button onClick={handleClose} size="sm" variant="secondary" className="min-h-[40px] w-full sm:w-auto">
             Close Assistant
           </Button>
         </div>

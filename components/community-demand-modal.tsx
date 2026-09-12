@@ -65,22 +65,22 @@ export function CommunityDemandModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-4">
-      <Card className="relative w-full max-w-xl overflow-hidden border-primary/30 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <Card className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto border-primary/30 p-4 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="absolute right-3.5 top-3.5 sm:right-4 sm:top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
         >
           <X className="size-4" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
-            <Users2 className="size-5" />
+        <div className="flex items-start sm:items-center gap-2.5">
+          <div className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
+            <Users2 className="size-4 sm:size-5" />
           </div>
           <div>
             <span className="font-mono text-xs font-bold text-primary">COMMUNITY DEMAND POOL</span>
-            <h3 className="font-serif text-xl font-bold text-foreground">
+            <h3 className="font-serif text-lg sm:text-xl font-bold text-foreground">
               Post Bulk Event Produce Demand
             </h3>
           </div>
@@ -93,7 +93,7 @@ export function CommunityDemandModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-3.5 text-xs">
           <div>
             <label className="block font-medium text-foreground mb-1.5">Event Category</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {EVENT_TYPES.map((ev) => {
                 const isSelected = eventType === ev.id
                 const Icon = ev.icon
@@ -130,7 +130,7 @@ export function CommunityDemandModal({
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
             <div>
               <label className="block font-medium text-foreground mb-1">Required Produce</label>
               <select
@@ -171,7 +171,7 @@ export function CommunityDemandModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
             <div>
               <label className="block font-medium text-foreground mb-1">Organizer Contact Name</label>
               <input
@@ -210,11 +210,11 @@ export function CommunityDemandModal({
               <CheckCircle2 className="size-4" /> Community Demand posted! Regional farmers notified.
             </div>
           ) : (
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <Button type="button" variant="secondary" onClick={onClose} size="sm">
+            <div className="flex flex-col-reverse min-[380px]:flex-row items-stretch min-[380px]:items-center justify-end gap-2 sm:gap-2.5 pt-2">
+              <Button type="button" variant="secondary" onClick={onClose} size="sm" className="min-h-[40px]">
                 Cancel
               </Button>
-              <Button type="submit" size="sm" className="gap-2">
+              <Button type="submit" size="sm" className="gap-2 min-h-[40px]">
                 <Users2 className="size-4" /> Broadcast to Nearby Farmers
               </Button>
             </div>

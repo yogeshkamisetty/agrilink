@@ -169,13 +169,13 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
   return (
     <section className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
       {/* Header Banner */}
-      <div className="border-b border-border bg-secondary/40 p-6">
+      <div className="border-b border-border bg-secondary/40 p-4 sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-primary">
               <TrendingUp className="h-4 w-4" /> Demand Prediction & Supply Planning Board
             </div>
-            <h2 className="font-serif text-3xl text-foreground font-bold">Upcoming Produce Demand Forecast</h2>
+            <h2 className="font-serif text-2xl sm:text-3xl text-foreground font-bold">Upcoming Produce Demand Forecast</h2>
             <p className="mt-1.5 max-w-2xl text-xs text-muted-foreground leading-relaxed">
               Institutional buyers & community pools forecast their culinary requirements 7–30 days in advance.
               Smallholders lock in production contracts before harvest, eliminating market uncertainty.
@@ -185,14 +185,14 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowCommunityModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 text-xs font-semibold transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 text-xs font-semibold transition-colors shadow-xs min-h-[38px]"
             >
               <Plus className="size-3.5" /> Post Community Event Demand
             </button>
             <select
               value={cropFilter}
               onChange={(e) => setCropFilter(e.target.value)}
-              className="h-9 rounded-xl border border-border bg-background px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
+              className="h-9.5 rounded-xl border border-border bg-background px-3 text-xs outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="all">All Crops</option>
               <option value="paddy">Paddy (Rice)</option>
@@ -205,7 +205,7 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
         </div>
 
         {/* View Tabs */}
-        <div className="mt-5 flex items-center gap-2 border-t border-border/60 pt-4 text-xs font-semibold">
+        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-border/60 pt-4 text-xs font-semibold">
           <button
             onClick={() => setActiveTab('ALL')}
             className={`rounded-xl px-3.5 py-1.5 transition-all ${
@@ -247,7 +247,7 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
       )}
 
       {/* Demand Cards Grid */}
-      <div className="p-6">
+      <div className="p-4 sm:p-6">
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {filteredDemands.map((item) => {
             const imageSrc = cropImages[item.crop.toLowerCase()] || '/crops/tomato.png'
@@ -257,7 +257,7 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
             return (
               <article
                 key={item.id}
-                className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:border-primary/40 hover:shadow-md"
+                className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-primary/40 hover:shadow-md"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3">
@@ -325,16 +325,16 @@ export function CropAvailability({ onSelectCrop }: { onSelectCrop?: (crop: strin
                 </div>
 
                 {/* Footer Actions */}
-                <div className="mt-5 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                <div className="mt-5 flex flex-col min-[380px]:flex-row min-[380px]:items-center justify-between gap-2.5 border-t border-border/60 pt-3">
                   <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                    <CalendarDays className="size-3 text-primary" /> Harvest by {item.deliveryDate}
+                    <CalendarDays className="size-3 text-primary shrink-0" /> Harvest by {item.deliveryDate}
                   </span>
 
                   <button
                     type="button"
                     onClick={() => handleCommitDemand(item)}
                     disabled={isFull}
-                    className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-xs transition-all ${
+                    className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 min-h-[38px] text-xs font-semibold shadow-xs transition-all w-full min-[380px]:w-auto ${
                       isFull
                         ? 'bg-emerald-500/20 text-emerald-700 cursor-default'
                         : 'bg-primary hover:bg-primary/90 text-primary-foreground hover:scale-105 active:scale-95 cursor-pointer'

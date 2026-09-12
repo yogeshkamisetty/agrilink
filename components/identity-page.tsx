@@ -74,7 +74,7 @@ export function IdentityPage() {
   }
 
   return (
-    <main className='mx-auto max-w-4xl p-5 py-12'>
+    <main className='mx-auto max-w-4xl p-3.5 py-6 sm:p-5 sm:py-12'>
       <IdentityVerification subjectType={profile.role} subjectId={profile.id} />
     </main>
   )

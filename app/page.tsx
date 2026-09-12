@@ -6,7 +6,7 @@ import {
   ArrowRight, BadgeCheck, Boxes, Check, CheckCircle2, ChevronRight,
   CircleDollarSign, Clock, HelpCircle, Layers, Leaf, MapPin, PhoneCall,
   QrCode, RefreshCw, Route, ShieldCheck, Smartphone, Sparkles, Sprout,
-  Star, TrendingUp, Truck, Users, Wallet, Zap
+  Star, TrendingUp, Truck, Users, Wallet, Zap, Menu, X
 } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 
@@ -26,6 +26,7 @@ export default function HomePage() {
   const [monthlyVolumeKg, setMonthlyVolumeKg] = useState(15000)
   const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -182,10 +183,10 @@ export default function HomePage() {
 
       {/* Main SaaS Navigation */}
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <Link href="/" className="flex items-center gap-2.5 font-serif text-2xl font-bold tracking-tight">
-            <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Sprout className="size-6" />
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-8 sm:py-4">
+          <Link href="/" className="flex items-center gap-2 sm:gap-2.5 font-serif text-xl sm:text-2xl font-bold tracking-tight shrink-0">
+            <span className="grid size-9 sm:size-10 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <Sprout className="size-5 sm:size-6" />
             </span>
             <span className="text-foreground">AgriLink</span>
             <span className="hidden rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide uppercase text-emerald-800 sm:inline-block">
@@ -214,60 +215,177 @@ export default function HomePage() {
             </Link>
           </nav>
 
-          {loggedInUser ? (
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card/80 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-medium backdrop-blur-xs">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <span className="text-muted-foreground truncate max-w-[130px] sm:max-w-none">
-                  Signed in as <strong className="text-foreground">{loggedInUser}</strong>
-                  {userRole && <span className="ml-1.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{userRole}</span>}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      const auth = getAuthClient()
-                      auth.auth.signOut()
-                    } catch {}
-                    localStorage.removeItem('agrilink_user_name')
-                    localStorage.removeItem('agrilink_user_role')
-                    localStorage.removeItem('agrilink_user_phone')
-                    localStorage.removeItem('agrilink_session')
-                    setLoggedInUser(null)
-                    setUserRole(null)
-                    window.location.href = '/'
-                  }}
-                  className="ml-1 text-[11px] text-muted-foreground hover:text-destructive underline transition-colors shrink-0"
-                  title="Sign out"
+          <div className="flex items-center gap-2 sm:gap-3">
+            {loggedInUser ? (
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card/80 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-medium backdrop-blur-xs">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-muted-foreground truncate max-w-[130px] md:max-w-none">
+                    Signed in as <strong className="text-foreground">{loggedInUser}</strong>
+                    {userRole && <span className="ml-1.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{userRole}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        const auth = getAuthClient()
+                        auth.auth.signOut()
+                      } catch {}
+                      localStorage.removeItem('agrilink_user_name')
+                      localStorage.removeItem('agrilink_user_role')
+                      localStorage.removeItem('agrilink_user_phone')
+                      localStorage.removeItem('agrilink_session')
+                      setLoggedInUser(null)
+                      setUserRole(null)
+                      window.location.href = '/'
+                    }}
+                    className="ml-1 text-[11px] text-muted-foreground hover:text-destructive underline transition-colors shrink-0"
+                    title="Sign out"
+                  >
+                    Logout
+                  </button>
+                </div>
+                <Link
+                  href={userRole === 'Coordinator' ? '/admin' : '/portal'}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
                 >
-                  Logout
-                </button>
+                  <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Workspace'}</span>
+                  <ArrowRight className="size-4" />
+                </Link>
               </div>
-              <Link
-                href={userRole === 'Coordinator' ? '/admin' : '/portal'}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
-              >
-                <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Workspace'}</span>
-                <ArrowRight className="size-4" />
-              </Link>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <Link
-                href="/login"
-                className="rounded-xl border border-border px-4 py-2 text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                Sign in
-              </Link>
-              <Link
-                href="/signup"
-                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
-              >
-                Get started free
-              </Link>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Link
+                  href="/login"
+                  className="rounded-xl border border-border px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold hover:bg-muted transition-colors"
+                >
+                  Sign in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="rounded-xl bg-primary px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+                >
+                  <span className="hidden min-[400px]:inline">Get started free</span>
+                  <span className="min-[400px]:hidden">Get started</span>
+                </Link>
+              </div>
+            )}
+
+            {/* Mobile Hamburger Menu Button */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden rounded-xl border border-border bg-card p-2 text-foreground hover:bg-muted transition-colors"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="size-5" />
+            </button>
+          </div>
         </div>
+
+        {/* Mobile Navigation Drawer Sheet */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-xs lg:hidden" onClick={() => setMobileMenuOpen(false)}>
+            <div
+              className="h-full w-72 max-w-[85vw] border-r border-border bg-card p-5 shadow-2xl flex flex-col justify-between overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div>
+                <div className="flex items-center justify-between border-b border-border pb-4">
+                  <div className="flex items-center gap-2 font-serif text-xl font-bold">
+                    <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
+                      <Sprout className="size-5" />
+                    </span>
+                    AgriLink
+                  </div>
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
+                    aria-label="Close navigation menu"
+                  >
+                    <X className="size-5" />
+                  </button>
+                </div>
+
+                <nav className="mt-6 flex flex-col gap-1 text-sm font-medium">
+                  {[
+                    { href: '#features', label: 'Platform Capabilities' },
+                    { href: '#verified-supply', label: 'Live Supply Registry' },
+                    { href: '#roi-calculator', label: 'ROI & Spoilage Calculator' },
+                    { href: '#how-it-works', label: 'How AgriLink Works' },
+                    { href: '#pricing', label: 'Commercial Plans' },
+                    { href: '#testimonials', label: 'Field Case Studies' },
+                  ].map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="rounded-xl px-3.5 py-2.5 text-foreground hover:bg-muted transition-colors"
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
+
+              <div className="mt-8 border-t border-border pt-4 space-y-3">
+                {loggedInUser ? (
+                  <div className="space-y-2.5">
+                    <div className="rounded-xl bg-muted/60 p-3 text-xs">
+                      <p className="font-semibold text-foreground truncate">{loggedInUser}</p>
+                      <p className="text-[11px] text-muted-foreground">{userRole || 'Member'}</p>
+                    </div>
+                    <Link
+                      href={userRole === 'Coordinator' ? '/admin' : '/portal'}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground"
+                    >
+                      <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Open Workspace'}</span>
+                      <ArrowRight className="size-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const auth = getAuthClient()
+                          auth.auth.signOut()
+                        } catch {}
+                        localStorage.removeItem('agrilink_user_name')
+                        localStorage.removeItem('agrilink_user_role')
+                        localStorage.removeItem('agrilink_user_phone')
+                        localStorage.removeItem('agrilink_session')
+                        setLoggedInUser(null)
+                        setUserRole(null)
+                        setMobileMenuOpen(false)
+                        window.location.href = '/'
+                      }}
+                      className="w-full rounded-xl border border-border py-2 text-center text-xs font-semibold text-muted-foreground hover:text-destructive"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full rounded-xl border border-border py-2.5 text-center text-xs font-semibold hover:bg-muted"
+                    >
+                      Sign in
+                    </Link>
+                    <Link
+                      href="/signup"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="w-full rounded-xl bg-primary py-2.5 text-center text-xs font-semibold text-primary-foreground"
+                    >
+                      Get started free
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Hero Section */}
@@ -286,12 +404,13 @@ export default function HomePage() {
             </p>
 
             {loggedInUser ? (
-              <div className="mt-8 flex flex-wrap items-center gap-4">
+              <div className="mt-8 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
                 <Link
                   href={userRole === 'Coordinator' ? '/admin' : '/portal'}
-                  className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-primary px-5 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity text-center"
                 >
-                  Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Workspace`} <ArrowRight className="size-4" />
+                  <span>Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Workspace`}</span>
+                  <ArrowRight className="size-4 shrink-0" />
                 </Link>
                 <button
                   type="button"
@@ -308,39 +427,40 @@ export default function HomePage() {
                     setUserRole(null)
                     window.location.href = '/'
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 sm:py-3.5 text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shadow-2xs"
                 >
                   Sign out
                 </button>
               </div>
             ) : (
-              <div className="mt-8 flex flex-wrap items-center gap-4">
+              <div className="mt-8 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
                 <Link
                   href="/signup"
-                  className="inline-flex items-center gap-2.5 rounded-xl bg-primary px-6 py-3.5 text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-primary px-5 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity"
                 >
-                  Create free FPO / Buyer account <ArrowRight className="size-4" />
+                  <span>Create free FPO / Buyer account</span>
+                  <ArrowRight className="size-4 shrink-0" />
                 </Link>
                 <Link
                   href="/login"
-                  className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3.5 text-base font-semibold hover:bg-muted transition-colors shadow-2xs"
+                  className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold hover:bg-muted transition-colors shadow-2xs"
                 >
                   Open live workspace
                 </Link>
               </div>
             )}
 
-            <div className="mt-10 grid grid-cols-3 gap-6 border-t border-border pt-8 text-left">
+            <div className="mt-10 grid grid-cols-1 min-[380px]:grid-cols-3 gap-4 sm:gap-6 border-t border-border pt-8 text-left">
               <div>
-                <strong className="font-serif text-3xl font-bold text-foreground sm:text-4xl">₹1.8Cr+</strong>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">₹1.8Cr+</strong>
                 <p className="mt-1 text-xs text-muted-foreground">Settled directly to farmers</p>
               </div>
               <div>
-                <strong className="font-serif text-3xl font-bold text-foreground sm:text-4xl">3.8%</strong>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">3.8%</strong>
                 <p className="mt-1 text-xs text-muted-foreground">Average transit spoilage</p>
               </div>
               <div>
-                <strong className="font-serif text-3xl font-bold text-foreground sm:text-4xl">100%</strong>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">100%</strong>
                 <p className="mt-1 text-xs text-muted-foreground">Aadhaar verified roster</p>
               </div>
             </div>
@@ -410,25 +530,25 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-10 grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {verifiedCrops.map((crop) => (
               <div
                 key={crop.name}
-                className="group relative flex flex-col items-center rounded-2xl border border-[#e0d8c9] bg-white p-5 text-center shadow-xs transition-all hover:border-emerald-700/40 hover:shadow-md"
+                className="group relative flex flex-col items-center rounded-2xl border border-[#e0d8c9] bg-white p-3.5 sm:p-5 text-center shadow-xs transition-all hover:border-emerald-700/40 hover:shadow-md"
               >
-                <div className="relative mb-3 flex size-28 items-center justify-center p-1">
+                <div className="relative mb-2 sm:mb-3 flex size-20 sm:size-28 items-center justify-center p-1">
                   <img
                     src={crop.img}
                     alt={crop.name}
                     className="size-full object-contain drop-shadow-sm group-hover:scale-110 transition-transform duration-300"
                   />
                 </div>
-                <h3 className="font-serif text-lg font-semibold text-[#173b2b]">{crop.name}</h3>
-                <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-900">
+                <h3 className="font-serif text-base sm:text-lg font-semibold text-[#173b2b]">{crop.name}</h3>
+                <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-semibold text-emerald-900">
                   {crop.grade}
                 </span>
-                <p className="mt-2 text-xs font-semibold text-foreground">{crop.volume} committed</p>
-                <p className="text-[11px] text-[#68736c] mt-0.5">{crop.region}</p>
+                <p className="mt-1.5 sm:mt-2 text-[11px] sm:text-xs font-semibold text-foreground">{crop.volume} committed</p>
+                <p className="text-[10px] sm:text-[11px] text-[#68736c] mt-0.5 truncate max-w-full">{crop.region}</p>
               </div>
             ))}
           </div>
@@ -449,7 +569,7 @@ export default function HomePage() {
           </div>
 
           {/* Feature Tab Switchers */}
-          <div className="mt-12 flex flex-wrap justify-center gap-2">
+          <div className="mt-8 sm:mt-12 flex flex-wrap justify-center gap-1.5 sm:gap-2">
             {[
               { id: 'gradecam', label: 'AI GradeCam™', icon: Smartphone },
               { id: 'logistics', label: 'Smart Logistics', icon: Truck },
@@ -459,19 +579,19 @@ export default function HomePage() {
               <button
                 key={id}
                 onClick={() => setActiveTab(id as FeatureTab)}
-                className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-all ${
+                className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-2xl px-3.5 sm:px-5 py-2.5 sm:py-3 text-xs sm:text-sm font-semibold transition-all ${
                   activeTab === id
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'border border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
-                <Icon className="size-4" /> {label}
+                <Icon className="size-3.5 sm:size-4" /> {label}
               </button>
             ))}
           </div>
 
           {/* Active Tab Panel */}
-          <div className="mt-10 overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-10 lg:p-12">
+          <div className="mt-10 overflow-hidden rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-10 lg:p-12">
             <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
               <div>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
@@ -498,21 +618,21 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                <div className="mt-10 grid grid-cols-3 gap-4 border-t border-border pt-6">
+                <div className="mt-8 sm:mt-10 grid grid-cols-1 min-[360px]:grid-cols-3 gap-3 sm:gap-4 border-t border-border pt-6">
                   {featureDetails[activeTab].stats.map((s) => (
                     <div key={s.label}>
-                      <span className="font-serif text-2xl font-bold text-foreground">{s.val}</span>
+                      <span className="font-serif text-xl sm:text-2xl font-bold text-foreground">{s.val}</span>
                       <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="relative flex items-center justify-center rounded-3xl border border-border/80 bg-gradient-to-b from-muted/40 to-muted/10 p-8 min-h-[380px]">
+              <div className="relative flex items-center justify-center rounded-3xl border border-border/80 bg-gradient-to-b from-muted/40 to-muted/10 p-4 sm:p-8 min-h-[240px] sm:min-h-[380px]">
                 <img
                   src={featureDetails[activeTab].img}
                   alt={featureDetails[activeTab].title}
-                  className="max-h-80 w-auto object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300"
+                  className="max-h-60 sm:max-h-80 w-auto object-contain drop-shadow-xl hover:scale-105 transition-transform duration-300"
                 />
               </div>
             </div>
@@ -563,7 +683,7 @@ export default function HomePage() {
             </div>
 
             {/* Interactive Calculator Widget */}
-            <div className="rounded-3xl border border-[#d8cfbd] bg-white p-7 sm:p-9 shadow-sm">
+            <div className="rounded-3xl border border-[#d8cfbd] bg-white p-5 sm:p-9 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
                   Interactive Simulator
@@ -598,34 +718,34 @@ export default function HomePage() {
               </div>
 
               {/* Dynamic ROI Metrics Display */}
-              <div className="mt-8 grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <div className="mt-8 grid grid-cols-1 min-[380px]:grid-cols-2 gap-3 sm:gap-4">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 sm:p-4">
                   <p className="text-xs text-emerald-900 font-medium">Monthly Produce Saved</p>
-                  <strong className="mt-1.5 block font-serif text-2xl font-bold text-emerald-900 sm:text-3xl">
+                  <strong className="mt-1.5 block font-serif text-xl min-[400px]:text-2xl sm:text-3xl font-bold text-emerald-900">
                     {roi.savedProduceKg.toLocaleString()} kg
                   </strong>
                   <span className="text-[11px] text-emerald-700">Food rot avoided</span>
                 </div>
 
-                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 sm:p-4">
                   <p className="text-xs text-emerald-900 font-medium">Estimated Cost Savings</p>
-                  <strong className="mt-1.5 block font-serif text-2xl font-bold text-emerald-900 sm:text-3xl">
+                  <strong className="mt-1.5 block font-serif text-xl min-[400px]:text-2xl sm:text-3xl font-bold text-emerald-900">
                     ₹{roi.monthlyCostSavings.toLocaleString()}
                   </strong>
                   <span className="text-[11px] text-emerald-700">Per month saved</span>
                 </div>
 
-                <div className="rounded-2xl border border-[#e8dfcf] bg-[#fbf9f4] p-4">
+                <div className="rounded-2xl border border-[#e8dfcf] bg-[#fbf9f4] p-3.5 sm:p-4">
                   <p className="text-xs text-[#5f675f] font-medium">Farmer Direct Uplift</p>
-                  <strong className="mt-1.5 block font-serif text-2xl font-bold text-[#173b2b] sm:text-3xl">
+                  <strong className="mt-1.5 block font-serif text-xl min-[400px]:text-2xl sm:text-3xl font-bold text-[#173b2b]">
                     ₹{roi.farmerIncomeUplift.toLocaleString()}
                   </strong>
                   <span className="text-[11px] text-[#748078]">+18.2% vs Mandi cut</span>
                 </div>
 
-                <div className="rounded-2xl border border-[#e8dfcf] bg-[#fbf9f4] p-4">
+                <div className="rounded-2xl border border-[#e8dfcf] bg-[#fbf9f4] p-3.5 sm:p-4">
                   <p className="text-xs text-[#5f675f] font-medium">CO₂e Emissions Prevented</p>
-                  <strong className="mt-1.5 block font-serif text-2xl font-bold text-[#173b2b] sm:text-3xl">
+                  <strong className="mt-1.5 block font-serif text-xl min-[400px]:text-2xl sm:text-3xl font-bold text-[#173b2b]">
                     {roi.co2AvoidedKg.toLocaleString()} kg
                   </strong>
                   <span className="text-[11px] text-[#748078]">From spoilage landfill</span>
@@ -682,9 +802,9 @@ export default function HomePage() {
           </div>
 
           {/* Pricing Grid */}
-          <div className="mt-14 grid gap-8 lg:grid-cols-3 lg:items-stretch">
+          <div className="mt-10 sm:mt-14 grid gap-6 sm:gap-8 lg:grid-cols-3 lg:items-stretch">
             {/* Tier 1: FPO Community */}
-            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-8 shadow-xs">
+            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-5 sm:p-8 shadow-xs">
               <div>
                 <h3 className="font-serif text-2xl font-bold">FPO Community</h3>
                 <p className="mt-1 text-xs text-muted-foreground">For budding FPOs & cooperative pilot hubs</p>
@@ -711,14 +831,14 @@ export default function HomePage() {
 
               <Link
                 href="/signup"
-                className="mt-8 block rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
+                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
               >
                 Start free pilot
               </Link>
             </div>
 
             {/* Tier 2: Growth Aggregator (Featured) */}
-            <div className="relative flex flex-col justify-between rounded-3xl border-2 border-primary bg-card p-8 shadow-md">
+            <div className="relative flex flex-col justify-between rounded-3xl border-2 border-primary bg-card p-5 sm:p-8 shadow-md">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground shadow-xs">
                 Most Popular
               </div>
@@ -753,14 +873,14 @@ export default function HomePage() {
 
               <Link
                 href="/signup"
-                className="mt-8 block rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
+                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
               >
                 Start 14-day free trial
               </Link>
             </div>
 
             {/* Tier 3: Enterprise Buyer */}
-            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-8 shadow-xs">
+            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-5 sm:p-8 shadow-xs">
               <div>
                 <h3 className="font-serif text-2xl font-bold">Enterprise Buyer</h3>
                 <p className="mt-1 text-xs text-muted-foreground">For institutional kitchens, retail chains & processors</p>
@@ -791,7 +911,7 @@ export default function HomePage() {
 
               <Link
                 href="/signup"
-                className="mt-8 block rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
+                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
               >
                 Contact Enterprise Sales
               </Link>

@@ -73,26 +73,26 @@ export function TeamManagementModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm">
-      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden text-left">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden text-left my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-6 py-4 bg-secondary/40">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <ShieldCheck className="size-5" />
+        <div className="flex items-center justify-between border-b border-border px-4 sm:px-6 py-3.5 sm:py-4 bg-secondary/40">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <ShieldCheck className="size-4 sm:size-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-base">FPO Team & Access Control (RBAC)</h3>
-              <p className="text-xs text-muted-foreground">Manage staff authorization across collection hubs and dispatch depots</p>
+              <h3 className="font-semibold text-sm sm:text-base">FPO Team & Access Control (RBAC)</h3>
+              <p className="text-[11px] sm:text-xs text-muted-foreground">Manage staff authorization across collection hubs and dispatch depots</p>
             </div>
           </div>
-          <button onClick={onClose} className="rounded-xl p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
+          <button onClick={onClose} className="rounded-xl p-1.5 sm:p-2 text-muted-foreground hover:bg-secondary hover:text-foreground">
             <X className="size-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="overflow-y-auto p-6 space-y-6">
+        <div className="overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
           {invitedMessage && (
             <div className="rounded-xl border border-primary/20 bg-primary/10 p-3 text-xs text-primary font-medium flex items-center gap-2">
               <Check className="size-4" />
@@ -101,31 +101,31 @@ export function TeamManagementModal({
           )}
 
           {/* Role Permissions Matrix Preview */}
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+            <div className="rounded-xl border border-border bg-secondary/20 p-2.5 sm:p-3 text-xs">
               <p className="font-semibold flex items-center gap-1.5 text-foreground"><Users className="size-3.5 text-primary" /> Coordinator</p>
-              <p className="text-[11px] text-muted-foreground mt-1">Orders, cascades, member registry</p>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1">Orders, cascades, member registry</p>
             </div>
-            <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+            <div className="rounded-xl border border-border bg-secondary/20 p-2.5 sm:p-3 text-xs">
               <p className="font-semibold flex items-center gap-1.5 text-foreground"><Camera className="size-3.5 text-amber-600" /> QC Inspector</p>
-              <p className="text-[11px] text-muted-foreground mt-1">AI GradeCam, weighing, lot acceptance</p>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1">AI GradeCam, weighing, lot acceptance</p>
             </div>
-            <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+            <div className="rounded-xl border border-border bg-secondary/20 p-2.5 sm:p-3 text-xs">
               <p className="font-semibold flex items-center gap-1.5 text-foreground"><Truck className="size-3.5 text-blue-600" /> Fleet Lead</p>
-              <p className="text-[11px] text-muted-foreground mt-1">Route clustering, vehicle dispatch</p>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1">Route clustering, vehicle dispatch</p>
             </div>
-            <div className="rounded-xl border border-border bg-secondary/20 p-3 text-xs">
+            <div className="rounded-xl border border-border bg-secondary/20 p-2.5 sm:p-3 text-xs">
               <p className="font-semibold flex items-center gap-1.5 text-foreground"><CircleDollarSign className="size-3.5 text-emerald-600" /> Accounts</p>
-              <p className="text-[11px] text-muted-foreground mt-1">30% advances, escrow & APMC bills</p>
+              <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1">30% advances, escrow & APMC bills</p>
             </div>
           </div>
 
           {/* Action button */}
           <div className="flex items-center justify-between">
-            <h4 className="font-serif text-lg font-bold">Authorized Staff ({team.length})</h4>
+            <h4 className="font-serif text-base sm:text-lg font-bold">Authorized Staff ({team.length})</h4>
             <button
               onClick={() => setShowInviteForm((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-opacity"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-opacity min-h-[38px]"
             >
               <UserPlus className="size-3.5" /> {showInviteForm ? 'Cancel' : 'Invite Member'}
             </button>

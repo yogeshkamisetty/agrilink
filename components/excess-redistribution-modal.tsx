@@ -84,27 +84,27 @@ export function ExcessRedistributionModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-4">
-      <Card className="relative w-full max-w-xl overflow-hidden border-primary/30 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/30 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+      <Card className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto border-primary/30 p-4 sm:p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200 my-auto">
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="absolute right-3.5 top-3.5 sm:right-4 sm:top-4 rounded-xl p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
         >
           <X className="size-4" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-            <Sparkles className="size-5" />
+        <div className="flex items-start sm:items-center gap-2.5">
+          <div className="flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+            <Sparkles className="size-4 sm:size-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="font-mono text-xs font-bold text-emerald-600">SDG 12.3 ZERO-WASTE</span>
               <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
                 Order {orderCode}
               </span>
             </div>
-            <h3 className="font-serif text-xl font-bold text-foreground">
+            <h3 className="font-serif text-lg sm:text-xl font-bold text-foreground">
               Excess Crop Redistribution Engine
             </h3>
           </div>
@@ -115,7 +115,7 @@ export function ExcessRedistributionModal({
         </p>
 
         {/* Surplus Metric Card */}
-        <div className="mt-4 grid grid-cols-3 gap-3 rounded-2xl border border-border bg-secondary/40 p-3.5 text-center">
+        <div className="mt-4 grid grid-cols-1 min-[420px]:grid-cols-3 gap-2 sm:gap-3 rounded-2xl border border-border bg-secondary/40 p-3 sm:p-3.5 text-center">
           <div>
             <span className="text-[10px] font-mono text-muted-foreground uppercase">Surplus Crop</span>
             <p className="font-semibold text-sm text-foreground">{crop}</p>
@@ -169,7 +169,7 @@ export function ExcessRedistributionModal({
         </div>
 
         {/* Financial Summary & Dispatch */}
-        <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 flex items-center justify-between text-xs">
+        <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 sm:p-3.5 flex flex-col min-[420px]:flex-row min-[420px]:items-center justify-between gap-2 text-xs">
           <div>
             <span className="text-muted-foreground">Redistributed Rate:</span>
             <span className="ml-1 font-mono font-bold text-emerald-700">₹{discountedPrice}/kg</span>
@@ -186,11 +186,11 @@ export function ExcessRedistributionModal({
             <CheckCircle2 className="size-4" /> Surplus allocated successfully! Delivery waybill updated.
           </div>
         ) : (
-          <div className="mt-5 flex items-center justify-end gap-2.5">
-            <Button variant="secondary" onClick={onClose} size="sm">
+          <div className="mt-5 flex flex-col-reverse min-[380px]:flex-row items-stretch min-[380px]:items-center justify-end gap-2 sm:gap-2.5">
+            <Button variant="secondary" onClick={onClose} size="sm" className="min-h-[40px]">
               Cancel
             </Button>
-            <Button onClick={handleConfirm} size="sm" className="gap-2">
+            <Button onClick={handleConfirm} size="sm" className="gap-2 min-h-[40px]">
               <CheckCircle2 className="size-4" /> Confirm & Dispatch Surplus
             </Button>
           </div>

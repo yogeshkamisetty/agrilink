@@ -40,28 +40,30 @@ export function PrintableReceiptModal({
       {/* Container Dialog */}
       <div className="relative flex max-h-[92vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-card shadow-2xl overflow-hidden print:max-h-none print:w-full print:border-none print:shadow-none">
         {/* Modal Header Controls (Hidden during print) */}
-        <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-6 py-4 print:hidden">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              {type === 'receipt' ? <FileText className="size-5" /> : <Truck className="size-5" />}
+        <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-3.5 sm:px-6 py-3 sm:py-4 print:hidden">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 pr-2">
+            <div className="flex size-8 sm:size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              {type === 'receipt' ? <FileText className="size-4 sm:size-5" /> : <Truck className="size-4 sm:size-5" />}
             </div>
-            <div>
-              <h3 className="font-semibold text-sm">
-                {type === 'receipt' ? 'APMC Mandi Sale & Settlement Certificate' : 'Consignment Bill of Lading (Waybill)'}
+            <div className="min-w-0">
+              <h3 className="font-semibold text-xs sm:text-sm truncate">
+                {type === 'receipt' ? 'APMC Sale & Settlement Certificate' : 'Consignment Bill of Lading'}
               </h3>
-              <p className="text-xs text-muted-foreground">Official certified documentation for compliance & audit</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Official certified documentation for audit</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-opacity"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-opacity min-h-[36px]"
             >
-              <Printer className="size-3.5" /> Print / Save as PDF
+              <Printer className="size-3.5" />
+              <span className="hidden min-[480px]:inline">Print / Save as PDF</span>
+              <span className="min-[480px]:hidden">Print</span>
             </button>
             <button
               onClick={onClose}
-              className="rounded-xl p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="rounded-xl p-1.5 sm:p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
               aria-label="Close"
             >
               <X className="size-4" />
@@ -70,7 +72,7 @@ export function PrintableReceiptModal({
         </div>
 
         {/* Scrollable Printable Document Canvas */}
-        <div className="overflow-y-auto p-6 sm:p-10 bg-background text-foreground print:p-0 print:overflow-visible">
+        <div className="overflow-y-auto p-3.5 sm:p-10 bg-background text-foreground print:p-0 print:overflow-visible">
           {type === 'receipt' ? (
             /* =================== APMC SALE RECEIPT =================== */
             <div className="printable-document-sheet space-y-6 text-xs sm:text-sm">
@@ -143,7 +145,7 @@ export function PrintableReceiptModal({
               </div>
 
               {/* Itemized Table */}
-              <div className="overflow-hidden rounded-xl border border-border">
+              <div className="overflow-x-auto rounded-xl border border-border">
                 <table className="w-full text-left">
                   <thead className="bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     <tr>
@@ -261,7 +263,7 @@ export function PrintableReceiptModal({
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-3">
                   Waypoint Routing Sequence (Total Distance: 18.4 km)
                 </p>
-                <div className="overflow-hidden rounded-xl border border-border">
+                <div className="overflow-x-auto rounded-xl border border-border">
                   <table className="w-full text-left text-xs sm:text-sm">
                     <thead className="bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       <tr>

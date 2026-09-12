@@ -31,15 +31,15 @@ export function DeclareHarvestModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-lg rounded-3xl border border-border bg-card p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-border bg-card p-4 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
         <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-              <Sprout className="size-6" />
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="flex size-9 sm:size-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+              <Sprout className="size-5 sm:size-6" />
             </div>
             <div>
-              <h3 className="font-serif text-2xl font-bold text-foreground">Declare Harvest Produce</h3>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-foreground">Declare Harvest Produce</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Register upcoming yield for direct institutional buyers</p>
             </div>
           </div>
@@ -64,7 +64,7 @@ export function DeclareHarvestModal({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-foreground">Expected Harvest (kg)</label>
               <input
@@ -104,11 +104,11 @@ export function DeclareHarvestModal({
             ✓ <strong>AgriLink Farmgate Guarantee:</strong> 30% advance paid instantly upon loading into the FPO vehicle, with balance settled directly to your bank account via e-RUPI DBT upon weighment clearance.
           </div>
 
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
-            <Button variant="secondary" type="button" onClick={onClose}>
+          <div className="flex flex-col-reverse min-[380px]:flex-row items-stretch min-[380px]:items-center justify-end gap-2 sm:gap-2.5 pt-3 border-t border-border">
+            <Button variant="secondary" type="button" onClick={onClose} className="min-h-[40px]">
               Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" className="min-h-[40px] gap-2">
               <Sprout className="size-4" /> Declare Harvest
             </Button>
           </div>

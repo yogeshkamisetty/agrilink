@@ -194,8 +194,8 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-background p-4 sm:p-6">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-sm">
+    <main className="grid min-h-screen place-items-center bg-background p-3 sm:p-6">
+      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-4 sm:p-8 shadow-sm">
         {/* Brand Header */}
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 font-serif text-2xl font-bold">
@@ -251,42 +251,42 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Account Type
               </label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => setSelectedRole('farmer')}
-                  className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
+                  className={`flex flex-col items-center justify-center rounded-2xl border p-2 sm:p-2.5 text-center transition-all ${
                     selectedRole === 'farmer'
                       ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">🌾 Farmer</span>
-                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Sell Produce</span>
+                  <span className="text-[11px] sm:text-xs font-bold">🌾 Farmer</span>
+                  <span className="mt-0.5 text-[9px] sm:text-[10px] leading-tight text-muted-foreground">Sell Produce</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedRole('buyer')}
-                  className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
+                  className={`flex flex-col items-center justify-center rounded-2xl border p-2 sm:p-2.5 text-center transition-all ${
                     selectedRole === 'buyer'
                       ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">🛒 Buyer</span>
-                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Procure Food</span>
+                  <span className="text-[11px] sm:text-xs font-bold">🛒 Buyer</span>
+                  <span className="mt-0.5 text-[9px] sm:text-[10px] leading-tight text-muted-foreground">Procure Food</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedRole('admin')}
-                  className={`flex flex-col items-center justify-center rounded-2xl border p-2.5 text-center transition-all ${
+                  className={`flex flex-col items-center justify-center rounded-2xl border p-2 sm:p-2.5 text-center transition-all ${
                     selectedRole === 'admin'
                       ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary shadow-xs'
                       : 'border-border bg-card text-muted-foreground hover:bg-secondary'
                   }`}
                 >
-                  <span className="text-xs font-bold">🏢 FPO Admin</span>
-                  <span className="mt-0.5 text-[10px] leading-tight text-muted-foreground">Coordinator</span>
+                  <span className="text-[11px] sm:text-xs font-bold">🏢 Admin</span>
+                  <span className="mt-0.5 text-[9px] sm:text-[10px] leading-tight text-muted-foreground">Coordinator</span>
                 </button>
               </div>
 

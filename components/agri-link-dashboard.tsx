@@ -19,6 +19,7 @@ import { SmartAggregationCard } from './aggregation-engine-card'
 import { ExcessRedistributionModal } from './excess-redistribution-modal'
 import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
+import { FarmerDashboardView } from './farmer-dashboard-view'
 import { getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -805,7 +806,7 @@ export function AgriLinkDashboard({
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
         <Brand t={t} />
-        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} />
+        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} />
       </aside>
       <main className="lg:pl-64">
         <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur-md sm:px-8 lg:px-10">
@@ -859,12 +860,12 @@ export function AgriLinkDashboard({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Indic Language Switcher */}
             <div className="flex items-center rounded-full border border-border bg-card p-0.5 text-xs font-semibold">
               <button
                 onClick={() => setLang('en')}
-                className={`rounded-full px-2 py-1 text-[11px] font-mono transition-colors ${
+                className={`rounded-full px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-mono transition-colors ${
                   lang === 'en' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="English"
@@ -873,7 +874,7 @@ export function AgriLinkDashboard({
               </button>
               <button
                 onClick={() => setLang('hi')}
-                className={`rounded-full px-2 py-1 text-[11px] font-sans transition-colors ${
+                className={`rounded-full px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-sans transition-colors ${
                   lang === 'hi' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="हिंदी (Hindi)"
@@ -882,7 +883,7 @@ export function AgriLinkDashboard({
               </button>
               <button
                 onClick={() => setLang('te')}
-                className={`rounded-full px-2 py-1 text-[11px] font-sans transition-colors ${
+                className={`rounded-full px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-[11px] font-sans transition-colors ${
                   lang === 'te' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="తెలుగు (Telugu)"
@@ -904,14 +905,14 @@ export function AgriLinkDashboard({
             {/* Voice-Based Digital Assistant */}
             <button
               onClick={() => setShowVoiceModal(true)}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-primary transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 hover:bg-primary/20 px-2 sm:px-3 py-1.5 text-xs font-semibold text-primary transition-colors cursor-pointer shadow-xs min-h-[32px]"
               title="Open Voice-Based Digital Assistant (Bhashini AI)"
             >
               <Mic className="size-3.5 animate-pulse text-primary" />
-              <span className="hidden sm:inline">Voice Assistant</span>
+              <span className="hidden lg:inline">Voice Assistant</span>
             </button>
 
-            <button onClick={() => refresh()} className="rounded-full p-2 text-muted-foreground hover:bg-secondary" title={t.refresh}>
+            <button onClick={() => refresh()} className="rounded-full p-1.5 sm:p-2 text-muted-foreground hover:bg-secondary" title={t.refresh}>
               <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
 
@@ -919,7 +920,7 @@ export function AgriLinkDashboard({
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen((prev) => !prev)}
-                className="relative rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                className="relative rounded-full p-1.5 sm:p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
                 title={t.notifications}
                 aria-label="Toggle notifications"
               >
@@ -943,38 +944,41 @@ export function AgriLinkDashboard({
               )}
             </div>
 
-            <div className="hidden h-8 w-px bg-border sm:block" />
-            <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-semibold">
+            <div className="hidden h-6 w-px bg-border sm:block" />
+            <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold" title={role === 'Farmer' ? 'Farmer Workspace' : role === 'Buyer' ? 'Buyer Workspace' : 'FPO Coordinator'}>
               <span className={`size-2 rounded-full ${role === 'Farmer' ? 'bg-emerald-500' : role === 'Buyer' ? 'bg-blue-500' : 'bg-purple-500'}`} />
-              <span className="text-foreground">
-                {role === 'Farmer' ? '🌾 Farmer Workspace' : role === 'Buyer' ? '🏢 Buyer Workspace' : '🛡️ FPO Coordinator'}
+              <span className="hidden sm:inline text-foreground">
+                {role === 'Farmer' ? '🌾 Farmer' : role === 'Buyer' ? '🏢 Buyer' : '🛡️ Coordinator'}
+              </span>
+              <span className="sm:hidden text-foreground text-xs">
+                {role === 'Farmer' ? '🌾' : role === 'Buyer' ? '🏢' : '🛡️'}
               </span>
             </div>
             {role === 'Coordinator' && (
               <Link
                 href="/admin"
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-500/20 transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-500/20 transition-colors"
                 title="Open FPO Admin Control Centre"
               >
                 <ShieldCheck className="size-3.5" />
-                <span>Admin Console</span>
+                <span className="hidden md:inline">Admin Console</span>
               </Link>
             )}
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
               title="Return to Main Landing Page"
             >
-              <span>Main Home</span>
+              <span>Home</span>
             </Link>
             {onSignOut && (
               <button
                 onClick={onSignOut}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 sm:px-3 py-1.5 text-xs font-semibold hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors"
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors"
                 title="Sign out of workspace"
               >
                 <LogOut className="size-3.5" />
-                <span className="hidden md:inline">{t.signOut}</span>
+                <span className="hidden xl:inline">{t.signOut}</span>
               </button>
             )}
           </div>
@@ -1008,30 +1012,20 @@ export function AgriLinkDashboard({
         )}
 
         {menuOpen && (
-          <div className="fixed inset-0 z-50 bg-foreground/20 lg:hidden" onClick={() => setMenuOpen(false)}>
-            <div className="h-full w-72 border-r border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-xs lg:hidden" onClick={() => setMenuOpen(false)}>
+            <div className="h-full w-72 max-w-[85vw] overflow-y-auto border-r border-border bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
               <div className="mb-8 flex items-center gap-3">
                 <Brand t={t} />
                 <button className="ml-auto" onClick={() => setMenuOpen(false)} aria-label="Close menu">
                   <X className="size-5" />
                 </button>
               </div>
-              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} />
+              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} />
             </div>
           </div>
         )}
 
         <div className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 lg:px-10">
-          <ScreenHeader
-            role={role}
-            activeNav={activeNav}
-            onNew={() => setShowOrderForm(true)}
-            onDeclareHarvest={() => setShowHarvestModal(true)}
-            onOnboardFarmer={() => setShowOnboardFarmerModal(true)}
-            onReset={resetData}
-            t={t}
-          />
-
           <DeclareHarvestModal
             isOpen={showHarvestModal}
             onClose={() => setShowHarvestModal(false)}
@@ -1080,98 +1074,135 @@ export function AgriLinkDashboard({
             />
           )}
 
-          {activeNav === 'Overview' && (
-            <Overview
-              role={role}
+          {role === 'Farmer' ? (
+            <FarmerDashboardView
               order={activeOrder}
               buyer={activeBuyer}
-              committed={committed}
-              target={target}
-              progress={progress}
-              notified={activeOrder?.status !== 'POSTED'}
-              onNotify={handleNotify}
-              onOrder={() => setShowOrderForm(true)}
-              onDeclareHarvest={() => setShowHarvestModal(true)}
-              onRoute={() => go('Routes')}
-              busy={actionBusy}
-              t={t}
-            />
-          )}
-
-          {activeNav === 'Orders' && (
-            <Orders
-              role={role}
-              order={activeOrder}
-              buyer={activeBuyer}
-              onNew={() => setShowOrderForm(true)}
-              onDeclareHarvest={() => setShowHarvestModal(true)}
-              onFundAdvance={handleFundAdvance}
-              onAcceptCommitment={handleAcceptCommitment}
-              onRedistributeExcess={() => setShowExcessModal(true)}
+              currentUserName={currentUserName}
+              lang={lang}
+              activeNav={activeNav}
+              onNavigate={(tab) => go(tab)}
               farmerOfferAccepted={farmerOfferAccepted}
-              notified={activeOrder?.status !== 'POSTED'}
-              onNotify={handleNotify}
-              busy={actionBusy}
-              t={t}
-            />
-          )}
-
-          {activeNav === 'Farmer network' && (
-            <Network
-              order={activeOrder}
-              notified={activeOrder?.status !== 'POSTED'}
-              onNotify={handleNotify}
-              onOnboard={() => setShowOnboardFarmerModal(true)}
-              farmers={rosterFarmers}
-              busy={actionBusy}
-              t={t}
-            />
-          )}
-
-          {activeNav === 'Collection & grade' && (
-            <Collection
-              role={role}
-              order={activeOrder}
-              farmerId={selectedFarmerId}
-              setFarmerId={setSelectedFarmerId}
-              weighedKg={weighedKg}
-              setWeighedKg={setWeighedKg}
-              aiResult={aiResult}
-              onCapturePhoto={handleGradePhoto}
-              onCollect={handleCollectLot}
-              farmerTab={farmerCollectionTab}
-              setFarmerTab={setFarmerCollectionTab}
-              busy={actionBusy}
-              t={t}
-            />
-          )}
-
-          {activeNav === 'Routes' && (
-            <RoutesScreen
-              role={role}
-              order={activeOrder}
-              onDispatch={handleDispatch}
-              onDeliver={handleDeliver}
-              busy={actionBusy}
-              onPrintWaybill={() => {
-                setPrintableDocType('waybill')
-                setPrintableModalOpen(true)
-              }}
-              t={t}
-            />
-          )}
-
-          {activeNav === 'Settlements' && (
-            <Settlements
-              role={role}
-              order={activeOrder}
-              buyer={activeBuyer}
-              onPrintInvoice={() => {
+              onAcceptCommitment={handleAcceptCommitment}
+              onDeclareHarvest={() => setShowHarvestModal(true)}
+              onOpenVoice={() => setShowVoiceModal(true)}
+              onOpenReceipt={() => {
                 setPrintableDocType('receipt')
                 setPrintableModalOpen(true)
               }}
-              t={t}
+              onRedistributeExcess={() => setShowExcessModal(true)}
+              onCapturePhoto={handleGradePhoto}
+              aiResult={aiResult}
+              busy={actionBusy}
+              farmerTab={farmerCollectionTab}
+              setFarmerTab={setFarmerCollectionTab}
             />
+          ) : (
+            <>
+              <ScreenHeader
+                role={role}
+                activeNav={activeNav}
+                onNew={() => setShowOrderForm(true)}
+                onDeclareHarvest={() => setShowHarvestModal(true)}
+                onOnboardFarmer={() => setShowOnboardFarmerModal(true)}
+                onReset={resetData}
+                t={t}
+              />
+
+              {activeNav === 'Overview' && (
+                <Overview
+                  role={role}
+                  order={activeOrder}
+                  buyer={activeBuyer}
+                  committed={committed}
+                  target={target}
+                  progress={progress}
+                  notified={activeOrder?.status !== 'POSTED'}
+                  onNotify={handleNotify}
+                  onOrder={() => setShowOrderForm(true)}
+                  onDeclareHarvest={() => setShowHarvestModal(true)}
+                  onRoute={() => go('Routes')}
+                  busy={actionBusy}
+                  t={t}
+                />
+              )}
+
+              {activeNav === 'Orders' && (
+                <Orders
+                  role={role}
+                  order={activeOrder}
+                  buyer={activeBuyer}
+                  onNew={() => setShowOrderForm(true)}
+                  onDeclareHarvest={() => setShowHarvestModal(true)}
+                  onFundAdvance={handleFundAdvance}
+                  onAcceptCommitment={handleAcceptCommitment}
+                  onRedistributeExcess={() => setShowExcessModal(true)}
+                  farmerOfferAccepted={farmerOfferAccepted}
+                  notified={activeOrder?.status !== 'POSTED'}
+                  onNotify={handleNotify}
+                  busy={actionBusy}
+                  t={t}
+                />
+              )}
+
+              {activeNav === 'Farmer network' && (
+                <Network
+                  order={activeOrder}
+                  notified={activeOrder?.status !== 'POSTED'}
+                  onNotify={handleNotify}
+                  onOnboard={() => setShowOnboardFarmerModal(true)}
+                  farmers={rosterFarmers}
+                  busy={actionBusy}
+                  t={t}
+                />
+              )}
+
+              {activeNav === 'Collection & grade' && (
+                <Collection
+                  role={role}
+                  order={activeOrder}
+                  farmerId={selectedFarmerId}
+                  setFarmerId={setSelectedFarmerId}
+                  weighedKg={weighedKg}
+                  setWeighedKg={setWeighedKg}
+                  aiResult={aiResult}
+                  onCapturePhoto={handleGradePhoto}
+                  onCollect={handleCollectLot}
+                  farmerTab={farmerCollectionTab}
+                  setFarmerTab={setFarmerCollectionTab}
+                  busy={actionBusy}
+                  t={t}
+                />
+              )}
+
+              {activeNav === 'Routes' && (
+                <RoutesScreen
+                  role={role}
+                  order={activeOrder}
+                  onDispatch={handleDispatch}
+                  onDeliver={handleDeliver}
+                  busy={actionBusy}
+                  onPrintWaybill={() => {
+                    setPrintableDocType('waybill')
+                    setPrintableModalOpen(true)
+                  }}
+                  t={t}
+                />
+              )}
+
+              {activeNav === 'Settlements' && (
+                <Settlements
+                  role={role}
+                  order={activeOrder}
+                  buyer={activeBuyer}
+                  onPrintInvoice={() => {
+                    setPrintableDocType('receipt')
+                    setPrintableModalOpen(true)
+                  }}
+                  t={t}
+                />
+              )}
+            </>
           )}
         </div>
 
@@ -1242,6 +1273,7 @@ function Sidebar({
   t,
   userName,
   verified = true,
+  lang = 'en',
 }: {
   activeNav: Screen
   role: Role
@@ -1253,20 +1285,34 @@ function Sidebar({
   t?: TranslationDictionary
   userName?: string | null
   verified?: boolean
+  lang?: Language
 }) {
   const [ordersExpanded, setOrdersExpanded] = useState(false)
+
+  const farmerNavLabels: Partial<Record<Screen, { en: string; hi: string; te: string }>> = {
+    Overview: { en: 'My Harvest & Pickup', hi: 'मेरी फसल और उठाव', te: 'నా పంట & పికప్' },
+    Orders: { en: 'Buyer Demands', hi: 'खरीदार मांग', te: 'కొనుగోలుదారు డిమాండ్లు' },
+    'Farmer network': { en: 'Farmer network', hi: 'किसान नेटवर्क', te: 'రైతు నెట్‌వర్క్' },
+    'Collection & grade': { en: 'Quality Check', hi: 'क्वालिटी जांच', te: 'నాణ్యత తనిఖీ' },
+    Routes: { en: 'Routes', hi: 'वाहन मार्ग', te: 'వాహన మార్గాలు' },
+    Settlements: { en: 'Passbook & Payments', hi: 'खाता पासबुक', te: 'పాస్‌బుక్ & చెల్లింపులు' },
+  }
 
   return (
     <div className={`flex ${mobile ? 'flex-col' : 'flex-1 flex-col justify-between'} px-3 py-6`}>
       <nav className="space-y-1">
         <div className="mb-4 px-3 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          {role} workspace
+          {role === 'Farmer' ? '🌾 Kisan Portal' : `${role} workspace`}
         </div>
         {navItems
           .filter((item) => roleNav[role].includes(item.label as Screen))
           .map(({ label, key, icon: Icon, count }) => {
             const isBuyerOrders = role === 'Buyer' && label === 'Orders'
-            const displayLabel = (t && t[key]) ? t[key] : label
+            let displayLabel = (t && t[key]) ? t[key] : label
+            if (role === 'Farmer' && farmerNavLabels[label as Screen]) {
+              const fL = farmerNavLabels[label as Screen]!
+              displayLabel = lang === 'hi' ? fL.hi : lang === 'te' ? fL.te : fL.en
+            }
             return (
               <div key={label}>
                 <button
@@ -1313,17 +1359,35 @@ function Sidebar({
 
       <div className="mt-auto space-y-4 pt-6">
         {!mobile && (
-          <div className="rounded-2xl border border-border bg-secondary/60 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t?.statPilotVolume || 'Pilot volume'}</span>
-              <span className="size-2 rounded-full bg-primary" />
+          role === 'Farmer' ? (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-primary font-bold">FPO Sahayak Help</span>
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <p className="text-xs font-bold text-foreground">Anita Desai</p>
+              <p className="text-[11px] text-muted-foreground">Kheda Village Coordinator</p>
+              <a
+                href="tel:+919825012345"
+                className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-primary/10 border border-primary/20 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
+              >
+                <Phone className="size-3.5 text-emerald-600" />
+                <span>Call +91 98250 12345</span>
+              </a>
             </div>
-            <div className="mb-2 text-2xl font-semibold tracking-tight">{volumePct}%</div>
-            <p className="text-xs leading-5 text-muted-foreground">of weekly FPO produce volume moved through AgriLink.</p>
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-border">
-              <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${volumePct}%` }} />
+          ) : (
+            <div className="rounded-2xl border border-border bg-secondary/60 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{t?.statPilotVolume || 'Pilot volume'}</span>
+                <span className="size-2 rounded-full bg-primary" />
+              </div>
+              <div className="mb-2 text-2xl font-semibold tracking-tight">{volumePct}%</div>
+              <p className="text-xs leading-5 text-muted-foreground">of weekly FPO produce volume moved through AgriLink.</p>
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-border">
+                <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: `${volumePct}%` }} />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {userName && (
@@ -1333,7 +1397,9 @@ function Sidebar({
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-foreground">{userName}</p>
-              <p className="truncate text-[10px] text-muted-foreground font-mono">{role} Account</p>
+              <p className="truncate text-[10px] text-muted-foreground font-mono">
+                {role === 'Farmer' ? '🌾 Verified Farmer' : `${role} Account`}
+              </p>
             </div>
             {verified && <ShieldCheck className="size-4 shrink-0 text-primary" />}
           </div>
@@ -1907,7 +1973,7 @@ function OrderForm({
   error?: string | null
 }) {
   return (
-    <Card className="mb-8 border-primary/40 p-6 shadow-md">
+    <Card className="mb-8 border-primary/40 p-4 sm:p-6 shadow-md">
       <div className="flex items-start justify-between">
         <div>
           <Badge tone="live">AGMARKNET live adapter</Badge>
@@ -1926,7 +1992,7 @@ function OrderForm({
         </div>
       )}
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:gap-5 sm:grid-cols-3">
         <label className="text-sm font-medium">
           Crop
           <div className="mt-2 flex items-center gap-2">
@@ -1955,11 +2021,11 @@ function OrderForm({
           <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" min="1" className="mt-2 min-h-11 w-full rounded-xl border border-border bg-background px-3.5 outline-none focus:border-primary" />
         </label>
       </div>
-      <div className="mt-6 flex justify-end gap-3">
-        <Button variant="secondary" onClick={onClose}>
+      <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3">
+        <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto min-h-[44px]">
           Cancel
         </Button>
-        <Button onClick={onPost} disabled={busy}>
+        <Button onClick={onPost} disabled={busy} className="w-full sm:w-auto min-h-[44px]">
           <ClipboardList className="size-4" /> {busy ? 'Posting order…' : 'Post order to registry'}
         </Button>
       </div>
@@ -1990,10 +2056,10 @@ function Orders({
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
         <Card>
-          <div className="border-b border-border p-6">
+          <div className="border-b border-border p-4 sm:p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="relative size-16 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="relative size-14 sm:size-16 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
                   <img
                     src={cropImages[crop.toLowerCase()] || '/hero-produce.png'}
                     alt={crop}
@@ -2227,7 +2293,7 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
   return (
     <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
       <Card>
-        <div className="flex flex-col gap-3 border-b border-border p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-border p-4 sm:p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Smallholder Cluster · 12 members</p>
             <h3 className="mt-1 font-serif text-2xl font-bold">Aggregated Farmer Roster</h3>
@@ -2279,22 +2345,22 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
         </div>
         <div className="divide-y divide-border">
           {farmerList.map((farmer: any) => (
-            <div key={farmer.id || farmer.name} className="flex items-center gap-4 p-4.5">
-              <div className={`flex size-10 items-center justify-center rounded-full ${farmer.color} font-mono text-xs font-bold text-primary-foreground`}>
+            <div key={farmer.id || farmer.name} className="flex items-center gap-2.5 sm:gap-4 p-3 sm:p-4.5">
+              <div className={`flex size-9 sm:size-10 shrink-0 items-center justify-center rounded-full ${farmer.color} font-mono text-xs font-bold text-primary-foreground`}>
                 {farmer.name.split(' ').map((n: string) => n[0]).join('')}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold">{farmer.name}</p>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <p className="text-xs sm:text-sm font-semibold truncate">{farmer.name}</p>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-emerald-700">
                     <Star className="size-2.5 fill-emerald-600 text-emerald-600" />
-                    {farmer.reliability || 94}% Reliability
+                    {farmer.reliability || 94}%
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground truncate">{farmer.village} · {farmer.crop} · harvest window 17–19 Oct</p>
+                <p className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs text-muted-foreground truncate">{farmer.village} · {farmer.crop} · harvest window 17–19 Oct</p>
               </div>
               <div className="text-right shrink-0">
-                <p className="font-mono text-sm font-semibold">{farmer.kg} kg</p>
+                <p className="font-mono text-xs sm:text-sm font-semibold">{farmer.kg} kg</p>
                 <Badge tone={farmer.status === 'Standby' ? 'warn' : 'good'}>{farmer.status}</Badge>
               </div>
             </div>
@@ -2302,7 +2368,7 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
         </div>
       </Card>
 
-      <Card className="p-6 flex flex-col justify-between">
+      <Card className="p-4 sm:p-6 flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between">
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Notification Engine</p>
@@ -2316,36 +2382,36 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers }: any
           </p>
 
           {/* Cascade Tier Selector Tabs */}
-          <div className="mt-4 flex rounded-xl bg-secondary/80 p-1 text-xs font-semibold">
+          <div className="mt-4 flex rounded-xl bg-secondary/80 p-1 text-[11px] sm:text-xs font-semibold gap-0.5">
             <button
               type="button"
               onClick={() => setCascadeTier('sms')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 px-1 rounded-lg transition-all ${
                 cascadeTier === 'sms' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Smartphone className="size-3.5" />
-              <span>1. GSM SMS</span>
+              <Smartphone className="size-3.5 shrink-0" />
+              <span className="truncate">1. SMS</span>
             </button>
             <button
               type="button"
               onClick={() => setCascadeTier('whatsapp')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 px-1 rounded-lg transition-all ${
                 cascadeTier === 'whatsapp' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <MessageSquare className="size-3.5 text-emerald-600" />
-              <span>2. WhatsApp</span>
+              <MessageSquare className="size-3.5 text-emerald-600 shrink-0" />
+              <span className="truncate">2. WhatsApp</span>
             </button>
             <button
               type="button"
               onClick={() => setCascadeTier('call')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg transition-all ${
+              className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 py-1.5 px-1 rounded-lg transition-all ${
                 cascadeTier === 'call' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <PhoneCall className="size-3.5 text-primary" />
-              <span>3. AI Voice Call</span>
+              <PhoneCall className="size-3.5 text-primary shrink-0" />
+              <span className="truncate">3. Voice Call</span>
             </button>
           </div>
 

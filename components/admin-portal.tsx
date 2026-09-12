@@ -240,7 +240,7 @@ export function AdminPortal() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl p-5 py-10 sm:p-8 space-y-8">
+    <main className="mx-auto max-w-7xl p-3.5 py-6 sm:p-8 space-y-6 sm:space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -266,26 +266,26 @@ export function AdminPortal() {
               Sign out
             </button>
           </div>
-          <h1 className="mt-2 font-serif text-4xl">Admin portal</h1>
+          <h1 className="mt-2 font-serif text-2xl sm:text-4xl">Admin portal</h1>
         </div>
-        <ShieldCheck className="size-10 text-primary" />
+        <ShieldCheck className="size-8 sm:size-10 text-primary shrink-0" />
       </div>
 
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-3 sm:gap-5">
         <Card label="Registered users" value={String(data.profiles.length)} />
         <Card label="Verified profiles" value={String(data.profiles.filter((p) => p.verification_status === 'verified').length)} />
         <Card label="Large-order reviews" value={String(data.pending_reviews.length)} />
       </div>
 
       {/* Database & Cloud Infrastructure Health Card */}
-      <section className="rounded-2xl border border-border bg-card p-6">
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-5">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0">
               <Database className="size-5" />
             </div>
             <div>
-              <h2 className="font-serif text-2xl font-bold">Database & Cloud Health</h2>
+              <h2 className="font-serif text-xl sm:text-2xl font-bold">Database & Cloud Health</h2>
               <p className="text-xs text-muted-foreground">
                 Driver: <span className="font-mono font-semibold text-foreground uppercase">{diag?.driver || 'Detecting…'}</span> · Schema Version: <span className="font-mono font-semibold text-primary">{diag?.schemaVersion || '1.0'}</span>
               </p>
@@ -295,7 +295,7 @@ export function AdminPortal() {
             <button
               onClick={handleResetSchema}
               disabled={diagBusy}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3.5 py-2 text-xs font-semibold hover:bg-secondary/80 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3.5 py-2 text-xs font-semibold hover:bg-secondary/80 disabled:opacity-50 min-h-[38px]"
             >
               <RefreshCw className={`size-3.5 ${diagBusy ? 'animate-spin' : ''}`} /> Verify & Sync Schema
             </button>
@@ -309,15 +309,15 @@ export function AdminPortal() {
         )}
 
         {diag && (
-          <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mt-5 grid grid-cols-2 min-[480px]:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
             {Object.entries(diag.tables).map(([tbl, info]) => (
-              <div key={tbl} className="rounded-xl border border-border bg-secondary/30 p-3 text-xs">
+              <div key={tbl} className="rounded-xl border border-border bg-secondary/30 p-2.5 sm:p-3 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-semibold text-foreground">{tbl}</span>
+                  <span className="font-mono font-semibold text-foreground truncate">{tbl}</span>
                   {info.exists ? (
-                    <CheckCircle2 className="size-3.5 text-primary" />
+                    <CheckCircle2 className="size-3.5 text-primary shrink-0 ml-1" />
                   ) : (
-                    <AlertCircle className="size-3.5 text-destructive" />
+                    <AlertCircle className="size-3.5 text-destructive shrink-0 ml-1" />
                   )}
                 </div>
                 <p className="mt-1 font-mono text-sm font-bold">{info.count} rows</p>
@@ -328,23 +328,23 @@ export function AdminPortal() {
         )}
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-serif text-2xl">Buyer requests awaiting review</h2>
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <h2 className="font-serif text-xl sm:text-2xl">Buyer requests awaiting review</h2>
         <div className="mt-4 space-y-3">
           {data.pending_reviews.length ? (
             data.pending_reviews.map((r) => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-muted p-4">
+              <div key={r.id} className="flex flex-col min-[480px]:flex-row min-[480px]:items-center justify-between gap-3 sm:gap-4 rounded-xl bg-muted p-3.5 sm:p-4">
                 <div>
-                  <p className="font-semibold">
+                  <p className="font-semibold text-sm">
                     {r.quantity_kg} kg · {r.crop}
                   </p>
-                  <p className="mt-1 text-sm text-muted-foreground">{r.purpose}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground">{r.purpose}</p>
                 </div>
-                <div className="flex gap-2">
-                  <button onClick={() => review(r.id, 'approved')} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">
+                <div className="flex gap-2 w-full min-[480px]:w-auto">
+                  <button onClick={() => review(r.id, 'approved')} className="rounded-lg bg-primary px-3.5 py-2 text-xs sm:text-sm font-semibold text-primary-foreground min-h-[40px] flex-1 min-[480px]:flex-none">
                     Approve
                   </button>
-                  <button onClick={() => review(r.id, 'rejected')} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold">
+                  <button onClick={() => review(r.id, 'rejected')} className="rounded-lg border border-border px-3.5 py-2 text-xs sm:text-sm font-semibold min-h-[40px] flex-1 min-[480px]:flex-none">
                     Reject
                   </button>
                 </div>
@@ -356,8 +356,8 @@ export function AdminPortal() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-serif text-2xl">User activity</h2>
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <h2 className="font-serif text-xl sm:text-2xl">User activity</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="text-muted-foreground">
@@ -387,9 +387,9 @@ export function AdminPortal() {
 
 function Card({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 font-serif text-4xl font-bold">{value}</p>
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <p className="text-xs sm:text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1.5 sm:mt-2 font-serif text-2xl sm:text-4xl font-bold">{value}</p>
     </div>
   )
 }

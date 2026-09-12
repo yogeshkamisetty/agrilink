@@ -54,24 +54,24 @@ export function SmartAggregationCard({
   const pctFilled = Math.min(100, Math.round((activeSum / targetKg) * 100))
 
   return (
-    <Card className="overflow-hidden border border-border/80 bg-card p-6 shadow-sm">
+    <Card className="overflow-hidden border border-border/80 bg-card p-4 sm:p-6 shadow-sm">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 pb-5">
-        <div className="flex items-center gap-3">
-          <div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
-            <Boxes className="size-6" />
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="flex size-10 sm:size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary border border-primary/20">
+            <Boxes className="size-5 sm:size-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="font-mono text-xs font-bold text-primary">{orderCode}</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-emerald-700">
                 <CheckCircle2 className="size-3" /> Smart Aggregated
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">
                 {activeContributors.length} Smallholders Pooled
               </span>
             </div>
-            <h3 className="mt-1 font-serif text-xl font-bold text-foreground">
+            <h3 className="mt-1 font-serif text-lg sm:text-xl font-bold text-foreground">
               Smart Aggregation Engine: {crop} ({targetKg.toLocaleString()} kg)
             </h3>
             <p className="text-xs text-muted-foreground">
@@ -80,9 +80,9 @@ export function SmartAggregationCard({
           </div>
         </div>
 
-        <div className="text-right">
+        <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-border/40 sm:border-0">
           <p className="font-mono text-xs text-muted-foreground">Active Pool Fulfillment</p>
-          <p className="font-mono text-2xl font-bold text-primary">
+          <p className="font-mono text-xl sm:text-2xl font-bold text-primary">
             {activeSum} / {targetKg} kg
             <span className="ml-1 text-xs text-muted-foreground font-normal">({pctFilled}%)</span>
           </p>
@@ -127,7 +127,7 @@ export function SmartAggregationCard({
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-1 text-[11px] text-muted-foreground">
           {activeContributors.map((farmer, idx) => {
             const dotColors = ['bg-emerald-600', 'bg-teal-500', 'bg-emerald-400', 'bg-cyan-500']
             return (
@@ -146,7 +146,7 @@ export function SmartAggregationCard({
 
       {/* Roster of Contributing Smallholders with Reliability Scores */}
       <div className="mt-6 divide-y divide-border/60 rounded-2xl border border-border bg-secondary/30">
-        <div className="p-3 bg-secondary/60 flex items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
+        <div className="hidden sm:flex p-3 bg-secondary/60 items-center justify-between text-xs font-semibold text-muted-foreground uppercase tracking-wider font-mono">
           <span>Smallholder Partner</span>
           <div className="flex items-center gap-8">
             <span>Reliability Score</span>
@@ -156,55 +156,108 @@ export function SmartAggregationCard({
         </div>
 
         {contributors.map((c) => (
-          <div key={c.farmerId} className="p-3.5 flex items-center justify-between text-xs hover:bg-card/60 transition-colors">
-            <div className="flex items-center gap-3">
-              <div className={`flex size-8 items-center justify-center rounded-xl font-mono text-xs font-bold ${c.isStandby ? 'bg-amber-500/10 text-amber-700' : 'bg-primary/10 text-primary'}`}>
-                {c.name.split(' ').map((n) => n[0]).join('')}
+          <div key={c.farmerId} className="p-3 sm:p-3.5 hover:bg-card/60 transition-colors">
+            {/* Desktop Row View (sm and up) */}
+            <div className="hidden sm:flex items-center justify-between text-xs">
+              <div className="flex items-center gap-3">
+                <div className={`flex size-8 items-center justify-center rounded-xl font-mono text-xs font-bold ${c.isStandby ? 'bg-amber-500/10 text-amber-700' : 'bg-primary/10 text-primary'}`}>
+                  {c.name.split(' ').map((n) => n[0]).join('')}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-foreground">{c.name}</span>
+                    {c.isStandby && (
+                      <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
+                        Standby Buffer
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">{c.village} · 8.4 km from hub</span>
+                </div>
               </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-foreground">{c.name}</span>
-                  {c.isStandby && (
-                    <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-800">
-                      Standby Buffer
+
+              <div className="flex items-center gap-8">
+                {/* Reliability Score */}
+                <div className="text-right">
+                  <div className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-mono font-semibold text-emerald-700 text-[11px]">
+                    <ShieldCheck className="size-3" /> {c.reliabilityScore}%
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">High Trust</p>
+                </div>
+
+                {/* Volume */}
+                <div className="text-right min-w-[70px]">
+                  <span className="font-mono text-sm font-bold text-foreground">{c.committedKg} kg</span>
+                  <p className="text-[10px] text-muted-foreground">₹{(c.committedKg * pricePerKg).toLocaleString()}</p>
+                </div>
+
+                {/* Action */}
+                <div className="min-w-[80px] text-right">
+                  {c.isStandby ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[10px] border-amber-500/40 text-amber-700 hover:bg-amber-500/10"
+                      onClick={() => onPromoteStandby?.(c.farmerId)}
+                    >
+                      Promote
+                    </Button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                      <CheckCircle2 className="size-3.5" /> Locked
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground">{c.village} · 8.4 km from hub</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-8">
-              {/* Reliability Score */}
-              <div className="text-right">
-                <div className="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-0.5 font-mono font-semibold text-emerald-700 text-[11px]">
-                  <ShieldCheck className="size-3" /> {c.reliabilityScore}%
+            {/* Mobile Stacked View (< sm) */}
+            <div className="flex flex-col gap-2.5 sm:hidden text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`flex size-8 shrink-0 items-center justify-center rounded-xl font-mono text-xs font-bold ${c.isStandby ? 'bg-amber-500/10 text-amber-700' : 'bg-primary/10 text-primary'}`}>
+                    {c.name.split(' ').map((n) => n[0]).join('')}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1">
+                      <span className="font-semibold text-foreground truncate">{c.name}</span>
+                      {c.isStandby && (
+                        <span className="rounded bg-amber-500/15 px-1 py-0.2 text-[9px] font-semibold text-amber-800">
+                          Standby
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground truncate block">{c.village} · 8.4 km from hub</span>
+                  </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5">High Trust</p>
+
+                <div className="shrink-0 text-right">
+                  <span className="font-mono text-sm font-bold text-foreground">{c.committedKg} kg</span>
+                  <p className="text-[10px] text-muted-foreground">₹{(c.committedKg * pricePerKg).toLocaleString()}</p>
+                </div>
               </div>
 
-              {/* Volume */}
-              <div className="text-right min-w-[70px]">
-                <span className="font-mono text-sm font-bold text-foreground">{c.committedKg} kg</span>
-                <p className="text-[10px] text-muted-foreground">₹{(c.committedKg * pricePerKg).toLocaleString()}</p>
-              </div>
+              <div className="flex items-center justify-between border-t border-border/40 pt-2">
+                <div className="inline-flex items-center gap-1 rounded bg-emerald-500/10 px-2 py-0.5 font-mono font-semibold text-emerald-700 text-[10px]">
+                  <ShieldCheck className="size-3" /> {c.reliabilityScore}% Trust
+                </div>
 
-              {/* Action */}
-              <div className="min-w-[80px] text-right">
-                {c.isStandby ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-[10px] border-amber-500/40 text-amber-700 hover:bg-amber-500/10"
-                    onClick={() => onPromoteStandby?.(c.farmerId)}
-                  >
-                    Promote
-                  </Button>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                    <CheckCircle2 className="size-3.5" /> Locked
-                  </span>
-                )}
+                <div>
+                  {c.isStandby ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 min-w-[70px] text-[10px] border-amber-500/40 text-amber-700 hover:bg-amber-500/10"
+                      onClick={() => onPromoteStandby?.(c.farmerId)}
+                    >
+                      Promote
+                    </Button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
+                      <CheckCircle2 className="size-3.5" /> Locked
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

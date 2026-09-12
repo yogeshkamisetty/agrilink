@@ -78,5 +78,13 @@
 }
 
 * { @apply border-border outline-ring/50; }
-html { background: var(--background); }
-body { @apply bg-background text-foreground font-sans; }
+html {
+  background: var(--background);
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+body {
+  @apply bg-background text-foreground font-sans;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
