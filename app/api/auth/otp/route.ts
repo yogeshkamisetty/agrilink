@@ -8,6 +8,7 @@ import {
   createSessionToken,
   findUserByPhone,
   recordFailedAttempt,
+  recordUserLogin,
   registerUser,
   resetFailedAttempts,
   verifyPin,
@@ -70,6 +71,8 @@ export async function POST(request: Request) {
       if (!user) {
         return NextResponse.json({ error: 'Demo account not available.' }, { status: 404 })
       }
+
+      await recordUserLogin(targetPhone)
 
       const sessionToken = createSessionToken(user)
       const redirectUrl = user.role === 'admin' ? '/admin' : '/'
@@ -164,6 +167,7 @@ export async function POST(request: Request) {
       }
 
       resetFailedAttempts(phone)
+      await recordUserLogin(phone)
 
       const sessionToken = createSessionToken(user)
       const redirectUrl = user.role === 'admin' ? '/admin' : '/'

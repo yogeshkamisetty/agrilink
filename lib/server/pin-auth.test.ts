@@ -93,4 +93,45 @@ describe('Zero-API MPIN & Session Engine', () => {
     resetFailedAttempts(testPhone)
     expect(checkBruteForce(testPhone).allowed).toBe(true)
   })
+
+  it('records user login timestamps and retrieves users via getAllUsers', async () => {
+    const { getAllUsers, recordUserLogin } = await import('./pin-auth')
+    const phone = '9825144102'
+    await recordUserLogin(phone)
+
+    const all = await getAllUsers()
+    expect(all.length).toBeGreaterThanOrEqual(3)
+
+    const farmer = all.find((u) => u.phone === phone)
+    expect(farmer).toBeDefined()
+    expect(farmer?.lastLoginAt).toBeDefined()
+  })
+
+  it('updates user profile via updateUserProfile', async () => {
+    const { registerUser, updateUserProfile, findUserByPhone } = await import('./pin-auth')
+    const testPhone = '9876543210'
+    await registerUser({
+      phone: testPhone,
+      fullName: 'Vikram Singh',
+      role: 'farmer',
+      pin: '1234',
+    })
+
+    const updated = await updateUserProfile({
+      phone: testPhone,
+      fullName: 'Vikram Singh Patel',
+      village: 'Petlad',
+      district: 'Anand',
+      state: 'Gujarat',
+    })
+
+    expect(updated).toBeDefined()
+    expect(updated?.fullName).toBe('Vikram Singh Patel')
+    expect(updated?.metadata?.village).toBe('Petlad')
+
+    const reFetched = await findUserByPhone(testPhone)
+    expect(reFetched?.fullName).toBe('Vikram Singh Patel')
+    expect(reFetched?.metadata?.village).toBe('Petlad')
+  })
 })
+

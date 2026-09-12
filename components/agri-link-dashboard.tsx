@@ -728,6 +728,11 @@ export function AgriLinkDashboard({
       await refresh()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'harvest-updated' })
+          bc.close()
+        } catch {}
       }
     } catch (err) {
       console.warn('Harvest declare non-fatal error:', err)
@@ -798,6 +803,11 @@ export function AgriLinkDashboard({
       await refresh()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'harvest-updated' })
+          bc.close()
+        } catch {}
       }
     } catch {}
 

@@ -98,6 +98,19 @@ type LiveFarmer = {
   harvest_date?: string | null
   verified?: boolean
   reliability_score?: number
+  is_live_account?: boolean
+  last_login_at?: string
+}
+
+function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return 'recently'
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 type AggregationBatch = {
@@ -125,6 +138,19 @@ export function AdminPortal() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
+  // Section 6 Filter Tabs
+  const [farmerFilterTab, setFarmerFilterTab] = useState<'all' | 'live' | 'preseeded'>('all')
+  const liveFarmersCount = useMemo(() => farmers.filter((f) => f.is_live_account).length, [farmers])
+  const displayedFarmers = useMemo(() => {
+    if (farmerFilterTab === 'live') {
+      return farmers.filter((f) => f.is_live_account)
+    }
+    if (farmerFilterTab === 'preseeded') {
+      return farmers.filter((f) => !f.is_live_account)
+    }
+    return farmers
+  }, [farmers, farmerFilterTab])
+
   // Smart Aggregation Engine States
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
   const [farmerAllocations, setFarmerAllocations] = useState<Record<string, number>>({})
@@ -136,6 +162,7 @@ export function AdminPortal() {
   const [selectedCallFarmer, setSelectedCallFarmer] = useState<LiveFarmer | null>(null)
   const [selectedCallAllocatedKg, setSelectedCallAllocatedKg] = useState<number>(300)
   const [confirmedFarmers, setConfirmedFarmers] = useState<Record<string, boolean>>({})
+
 
   // Auto-heal session for Anita Sharma (Coordinator / Admin)
   async function ensureSession(): Promise<string | null> {
@@ -228,7 +255,7 @@ export function AdminPortal() {
     }
   }
 
-  // Setup auto-polling every 4 seconds + custom events
+  // Setup auto-polling every 4 seconds + custom events + cross-tab synchronization
   useEffect(() => {
     fetchLiveFeeds()
     const interval = setInterval(() => {
@@ -237,14 +264,28 @@ export function AdminPortal() {
 
     const handleOrderCreated = () => fetchLiveFeeds(false)
     const handleHarvestUpdated = () => fetchLiveFeeds(false)
+    const handleStorage = () => fetchLiveFeeds(false)
 
     window.addEventListener('agrilink:order-created', handleOrderCreated)
     window.addEventListener('agrilink:harvest-updated', handleHarvestUpdated)
+    window.addEventListener('storage', handleStorage)
+
+    let bc: BroadcastChannel | null = null
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('agrilink_sync')
+        bc.onmessage = () => fetchLiveFeeds(false)
+      }
+    } catch {}
 
     return () => {
       clearInterval(interval)
       window.removeEventListener('agrilink:order-created', handleOrderCreated)
       window.removeEventListener('agrilink:harvest-updated', handleHarvestUpdated)
+      window.removeEventListener('storage', handleStorage)
+      try {
+        bc?.close()
+      } catch {}
     }
   }, [])
 
@@ -877,7 +918,14 @@ export function AdminPortal() {
                           />
                         </td>
                         <td className="p-3.5 sm:px-4 font-semibold text-foreground">
-                          {f.name}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{f.name}</span>
+                            {f.is_live_account && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
+                                <span className="size-1 rounded-full bg-emerald-500 animate-pulse" /> Live
+                              </span>
+                            )}
+                          </div>
                           <span className="block text-[11px] font-normal text-muted-foreground">
                             {f.mobile_number || '+91 98251 44102'}
                           </span>
@@ -1276,65 +1324,185 @@ export function AdminPortal() {
       </section>
 
       {/* 6. Live Smallholder Farmer Harvest Produce Feed */}
-      <section className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-border">
+      <section className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-border">
           <div>
             <h3 className="font-serif text-xl font-bold flex items-center gap-2">
               <Sprout className="size-5 text-emerald-600" />
               Live Farmer Harvest Declarations Feed
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Incoming produce reported by smallholder farmers across village clusters.
+              Incoming produce reported by smallholder farmers across village clusters, synchronized with live accounts.
             </p>
           </div>
-          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-            {farmers.length} Declared Harvests
-          </span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFarmerFilterTab('all')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                farmerFilterTab === 'all'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'border border-border bg-secondary hover:bg-secondary/80 text-foreground'
+              }`}
+            >
+              All Declared Harvests ({farmers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFarmerFilterTab('live')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+                farmerFilterTab === 'live'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
+              }`}
+            >
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live Logins Only ({liveFarmersCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFarmerFilterTab('preseeded')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                farmerFilterTab === 'preseeded'
+                  ? 'bg-primary text-primary-foreground shadow-xs'
+                  : 'border border-border bg-secondary hover:bg-secondary/80 text-foreground'
+              }`}
+            >
+              Cluster Pre-Registered ({farmers.length - liveFarmersCount})
+            </button>
+          </div>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="text-muted-foreground border-b border-border">
-              <tr>
-                <th className="pb-3">Farmer Name</th>
-                <th className="pb-3">Mobile Contact</th>
-                <th className="pb-3">Village</th>
-                <th className="pb-3">Produce Crop</th>
-                <th className="pb-3">Available Quantity</th>
-                <th className="pb-3">Quality Grade</th>
-                <th className="pb-3">Harvest Window</th>
-                <th className="pb-3">KYC Verification</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {farmers.map((f) => (
-                <tr key={f.id} className="hover:bg-secondary/30">
-                  <td className="py-3 font-semibold text-foreground">{f.name}</td>
-                  <td className="py-3 font-mono text-xs text-muted-foreground">
-                    {f.mobile_number || '+91 98251 44102'}
-                  </td>
-                  <td className="py-3 text-muted-foreground">{f.village}</td>
-                  <td className="py-3">
-                    <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
-                      {f.crop_name || f.crop || 'PADDY'}
-                    </span>
-                  </td>
-                  <td className="py-3 font-mono font-bold text-foreground">{f.quantity || 500} KG</td>
-                  <td className="py-3">
-                    <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                      Grade {f.quality_grade || 'A'}
-                    </span>
-                  </td>
-                  <td className="py-3 text-muted-foreground text-xs">{f.harvest_date || 'Oct 2025'}</td>
-                  <td className="py-3">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                      <ShieldCheck className="size-3" /> Aadhaar KYC
-                    </span>
-                  </td>
+        {/* Live sync banner if active accounts exist */}
+        {liveFarmersCount > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+            <div className="flex items-center gap-2">
+              <span className="relative flex size-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full size-2.5 bg-emerald-500"></span>
+              </span>
+              <span>
+                <strong>{liveFarmersCount} Live Active Smallholder Account{liveFarmersCount > 1 ? 's' : ''}</strong> connected. Harvest declarations and logins sync automatically across devices and tabs.
+              </span>
+            </div>
+            {farmerFilterTab !== 'live' && (
+              <button
+                type="button"
+                onClick={() => setFarmerFilterTab('live')}
+                className="text-[11px] font-bold underline hover:text-emerald-900 dark:hover:text-emerald-100 shrink-0 cursor-pointer self-start sm:self-auto"
+              >
+                Filter Live Accounts Only →
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="overflow-x-auto">
+          {displayedFarmers.length > 0 ? (
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="text-muted-foreground border-b border-border">
+                <tr>
+                  <th className="pb-3">Farmer Name & Status</th>
+                  <th className="pb-3">Mobile Contact</th>
+                  <th className="pb-3">Village Cluster</th>
+                  <th className="pb-3">Produce Crop</th>
+                  <th className="pb-3">Available Quantity</th>
+                  <th className="pb-3">Quality Grade</th>
+                  <th className="pb-3">Harvest Window</th>
+                  <th className="pb-3">KYC Verification</th>
+                  <th className="pb-3 text-right">Voice Agent</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {displayedFarmers.map((f) => (
+                  <tr
+                    key={f.id}
+                    className={`transition-colors ${
+                      f.is_live_account
+                        ? 'bg-emerald-500/5 hover:bg-emerald-500/10'
+                        : 'hover:bg-secondary/30'
+                    }`}
+                  >
+                    <td className="py-3 font-semibold text-foreground">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{f.name}</span>
+                        {f.is_live_account ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 shadow-2xs">
+                            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Live Login
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.2 text-[9px] text-muted-foreground font-medium">
+                            Cluster Member
+                          </span>
+                        )}
+                      </div>
+                      {f.last_login_at && (
+                        <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+                          Active {formatRelativeTime(f.last_login_at)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 font-mono text-xs text-muted-foreground">
+                      {f.mobile_number || '+91 98251 44102'}
+                    </td>
+                    <td className="py-3 text-muted-foreground">{f.village}</td>
+                    <td className="py-3">
+                      <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
+                        {f.crop_name || f.crop || 'PADDY'}
+                      </span>
+                    </td>
+                    <td className="py-3 font-mono font-bold text-foreground">{f.quantity || 500} KG</td>
+                    <td className="py-3">
+                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
+                        Grade {f.quality_grade || 'A'}
+                      </span>
+                    </td>
+                    <td className="py-3 text-muted-foreground text-xs">
+                      <div>{f.harvest_date || 'Oct 2025'}</div>
+                      {f.is_live_account && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Live Registered</span>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        <ShieldCheck className="size-3" /> Aadhaar KYC
+                      </span>
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCallFarmer(f)
+                          setSelectedCallAllocatedKg(Number(f.quantity || 300))
+                          setBolnaModalOpen(true)
+                        }}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                          confirmedFarmers[f.id]
+                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            : 'border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary hover:scale-105'
+                        }`}
+                        title="Trigger Bolna AI Outbound Voice Call to Farmer"
+                      >
+                        <PhoneCall className="size-3" />
+                        <span>{confirmedFarmers[f.id] ? 'Confirmed ✓' : 'Call AI Agent'}</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="py-8 text-center text-xs text-muted-foreground space-y-2">
+              <p>No farmers match the &quot;{farmerFilterTab}&quot; filter.</p>
+              {farmerFilterTab === 'live' && (
+                <p className="text-[11px] text-muted-foreground">
+                  Open another tab or window, sign up or log in as a farmer at <Link href="/login" className="text-primary underline">/login</Link>, and the live farmer record will appear here in real time.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireRole } from '@/lib/server/auth'
 import { getDb } from '@/lib/server/db'
 import { supabaseAdmin } from '@/lib/supabase-admin'
+import { getAllUsers } from '@/lib/server/pin-auth'
 
 export async function GET(request: Request) {
   try {
@@ -62,8 +63,37 @@ export async function GET(request: Request) {
       )
       .catch(() => [])
 
-    if (!profiles || profiles.length === 0) {
-      profiles = [
+    // 3. Integrate all live registered and logged-in user accounts from auth registry
+    const allUsers = await getAllUsers().catch(() => [])
+    let mappedProfiles: Array<{
+      id: string
+      full_name: string
+      role: string
+      mobile_number: string | null
+      verification_status: string
+      last_login_at: string | null
+      last_logout_at: string | null
+    }> = allUsers.map((u) => ({
+      id: u.id,
+      full_name: u.fullName,
+      role: u.role,
+      mobile_number: u.phone,
+      verification_status: u.verificationStatus || 'verified',
+      last_login_at: u.lastLoginAt || u.createdAt,
+      last_logout_at: null,
+    }))
+
+    if (Array.isArray(profiles) && profiles.length > 0) {
+      for (const p of profiles) {
+        const pPhone = (p.mobile_number || '').replace(/\D/g, '').slice(-10)
+        if (!mappedProfiles.some((m) => (m.mobile_number || '').replace(/\D/g, '').slice(-10) === pPhone)) {
+          mappedProfiles.push(p)
+        }
+      }
+    }
+
+    if (mappedProfiles.length === 0) {
+      mappedProfiles = [
         {
           id: 'usr_9825000000',
           full_name: 'Anita Sharma',
@@ -94,6 +124,15 @@ export async function GET(request: Request) {
       ]
     }
 
+    // Sort profiles by most recently active
+    mappedProfiles.sort((a, b) => {
+      const timeA = a.last_login_at ? new Date(a.last_login_at).getTime() : 0
+      const timeB = b.last_login_at ? new Date(b.last_login_at).getTime() : 0
+      return timeB - timeA
+    })
+
+    profiles = mappedProfiles
+
     let activities = await db
       .query<{
         id: string
@@ -113,11 +152,15 @@ export async function GET(request: Request) {
       .catch(() => [])
 
     if (!activities || activities.length === 0) {
-      activities = [
-        { id: 'act_1', user_id: 'usr_9825000000', event_type: 'login', created_at: new Date().toISOString() },
-        { id: 'act_2', user_id: 'usr_9825144102', event_type: 'produce_commitment', created_at: new Date(Date.now() - 1800000).toISOString() },
-        { id: 'act_3', user_id: 'usr_9825277103', event_type: 'order_post', created_at: new Date(Date.now() - 3600000).toISOString() },
-      ]
+      activities = mappedProfiles
+        .filter((u) => u.last_login_at)
+        .slice(0, 8)
+        .map((u, i) => ({
+          id: `act_${u.id}_${i}`,
+          user_id: u.id,
+          event_type: `${u.role}_session_active`,
+          created_at: u.last_login_at || new Date().toISOString(),
+        }))
     }
 
     let reviews = await db

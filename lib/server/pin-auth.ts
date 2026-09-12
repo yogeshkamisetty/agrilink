@@ -356,17 +356,45 @@ export async function registerUser(params: {
       targetId = inserted.id
     }
 
-    // If farmer, register into agrilink.farmers directory so they appear in farmer network
+    // If farmer, register into agrilink.farmers directory so they appear in live harvest feed
     if (params.role === 'farmer') {
-      const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
-      const fpoId = fpos[0]?.id
-      if (fpoId) {
-        await db.query(
-          `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
-           values ($1, $2, $3, 'en', 1.0, 'Anand Hub', 22.56, 72.93)
-           on conflict do nothing`,
-          [fpoId, params.fullName.trim(), `+91 ${normalPhone}`]
-        ).catch(() => {})
+      const village = (meta.village as string) || 'Kheda Cluster'
+      const crop = (meta.crop as string) || 'PADDY'
+      const quantity = Number(meta.quantity || 500)
+      const harvestDate = (meta.harvestDate as string) || new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0]
+
+      try {
+        let fpoId = 'f0000000-0000-0000-0000-000000000001'
+        try {
+          const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
+          if (fpos?.[0]?.id) fpoId = fpos[0].id
+        } catch {}
+
+        let farmerId = `f-${normalPhone}`
+        try {
+          const rows = await db.query<any>(
+            `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
+             values ($1, $2, $3, 'gu', 1.0, $4, 22.56, 72.92)
+             on conflict do nothing
+             returning id`,
+            [fpoId, params.fullName.trim(), `+91 ${normalPhone}`, village]
+          )
+          if (rows?.[0]?.id) farmerId = rows[0].id
+
+          await db.query(
+            `insert into agrilink.crop_registry (farmer_id, crop, expected_qty_kg, harvest_window_start, harvest_window_end)
+             values ($1, $2, $3, now()::date, (now() + interval '14 days')::date)`,
+            [farmerId, crop.toUpperCase(), quantity]
+          ).catch(() => {})
+        } catch {
+          await db.query(
+            `insert into agrilink.farmers (name, village, phone, crop_name, quantity, quality_grade, harvest_date)
+             values ($1, $2, $3, $4, $5, 'A', $6)`,
+            [params.fullName.trim(), village, `+91 ${normalPhone}`, crop.toUpperCase(), quantity, harvestDate]
+          )
+        }
+      } catch (fErr) {
+        console.warn('[pin-auth] Farmer insert notice:', fErr)
       }
     }
 
@@ -488,3 +516,234 @@ export function verifySessionToken(token: string): SessionPayload | null {
     return null
   }
 }
+
+/**
+ * Record a user's login timestamp across in-memory cache and persistent database
+ */
+export async function recordUserLogin(phone: string): Promise<void> {
+  const normalPhone = phone.replace(/\D/g, '').slice(-10)
+  const now = new Date().toISOString()
+  seedDemoUsers()
+  const cached = inMemoryUsers.get(normalPhone)
+  if (cached) {
+    cached.lastLoginAt = now
+  }
+  try {
+    const db = await getDb()
+    await db.query(`update agrilink.user_accounts set last_login_at = $1 where phone = $2`, [now, normalPhone])
+  } catch {}
+}
+
+/**
+ * Retrieve all registered users across in-memory cache, PostgreSQL/PGlite database, and Supabase
+ */
+export async function getAllUsers(): Promise<UserAccount[]> {
+  seedDemoUsers()
+  const usersMap = new Map<string, UserAccount>()
+
+  // 1. In-memory fast cache
+  for (const [phone, user] of inMemoryUsers.entries()) {
+    usersMap.set(phone, { ...user })
+  }
+
+  // 2. Persistent SQL database
+  try {
+    await ensureTable()
+    const db = await getDb()
+    const rows = await db.query<any>(`select * from agrilink.user_accounts order by created_at desc`)
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        const phone = String(r.phone || '').replace(/\D/g, '').slice(-10)
+        if (!phone) continue
+        if (!usersMap.has(phone)) {
+          const rawStatus = r.verification_status
+          const status: 'verified' | 'pending' = rawStatus === 'pending' ? 'pending' : 'verified'
+          usersMap.set(phone, {
+            id: r.id,
+            phone,
+            fullName: r.full_name || 'AgriLink User',
+            role: (r.role === 'admin' || r.role === 'buyer' ? r.role : 'farmer') as 'farmer' | 'buyer' | 'admin',
+            salt: r.salt || '',
+            pinHash: r.pin_hash || '',
+            verificationStatus: status,
+            onboardingComplete: r.onboarding_complete ?? true,
+            metadata: r.metadata || {},
+            createdAt: r.created_at || new Date().toISOString(),
+            lastLoginAt: r.last_login_at || undefined,
+          })
+        } else {
+          const u = usersMap.get(phone)!
+          if (r.last_login_at && (!u.lastLoginAt || new Date(r.last_login_at) > new Date(u.lastLoginAt))) {
+            u.lastLoginAt = r.last_login_at
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Supabase user profiles if configured
+  if (supabaseAdmin) {
+    try {
+      const { data: profiles } = await supabaseAdmin.from('user_profiles').select('*')
+      if (Array.isArray(profiles)) {
+        for (const p of profiles) {
+          const phone = String(p.mobile_number || '').replace(/\D/g, '').slice(-10)
+          if (!phone) continue
+          if (!usersMap.has(phone)) {
+            const rawStatus = p.verification_status
+            const status: 'verified' | 'pending' = rawStatus === 'pending' ? 'pending' : 'verified'
+            usersMap.set(phone, {
+              id: p.id,
+              phone,
+              fullName: p.full_name || 'AgriLink User',
+              role: (p.role === 'admin' || p.role === 'buyer' ? p.role : 'farmer') as 'farmer' | 'buyer' | 'admin',
+              salt: '',
+              pinHash: '',
+              verificationStatus: status,
+              onboardingComplete: p.onboarding_complete ?? true,
+              metadata: { village: p.village, district: p.district },
+              createdAt: p.created_at || new Date().toISOString(),
+              lastLoginAt: p.last_login_at || undefined,
+            })
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return Array.from(usersMap.values())
+}
+
+/**
+ * Update a user's profile details during onboarding or profile editing
+ */
+export async function updateUserProfile(params: {
+  phone: string
+  fullName?: string
+  role?: 'farmer' | 'buyer' | 'admin'
+  village?: string | null
+  district?: string | null
+  state?: string | null
+  fpoName?: string | null
+  organizationName?: string | null
+  organizationType?: string | null
+  onboardingComplete?: boolean
+  metadata?: Record<string, unknown>
+}): Promise<UserAccount | null> {
+  const normalPhone = params.phone.replace(/\D/g, '').slice(-10)
+  if (!normalPhone) return null
+
+  // 1. In-memory update
+  let user = inMemoryUsers.get(normalPhone)
+  if (user) {
+    if (params.fullName) user.fullName = params.fullName
+    if (params.role) user.role = params.role
+    if (params.onboardingComplete !== undefined) user.onboardingComplete = params.onboardingComplete
+    user.metadata = {
+      ...user.metadata,
+      village: params.village ?? user.metadata?.village,
+      district: params.district ?? user.metadata?.district,
+      state: params.state ?? user.metadata?.state,
+      fpoName: params.fpoName ?? user.metadata?.fpoName,
+      organizationName: params.organizationName ?? user.metadata?.organizationName,
+      organizationType: params.organizationType ?? user.metadata?.organizationType,
+      ...(params.metadata || {}),
+    }
+  }
+
+  // 2. Database update
+  try {
+    await ensureTable()
+    const db = await getDb()
+    const meta = {
+      village: params.village,
+      district: params.district,
+      state: params.state,
+      fpoName: params.fpoName,
+      organizationName: params.organizationName,
+      organizationType: params.organizationType,
+      ...(params.metadata || {}),
+    }
+
+    await db.query(
+      `update agrilink.user_accounts
+       set full_name = coalesce($1, full_name),
+           role = coalesce($2, role),
+           onboarding_complete = true,
+           metadata = metadata || $3::jsonb
+       where phone = $4`,
+      [params.fullName || null, params.role || null, JSON.stringify(meta), normalPhone]
+    )
+
+    // If farmer, sync to agrilink.farmers
+    if (params.role === 'farmer' && (params.village || params.fullName)) {
+      const village = params.village || 'Kheda Cluster'
+      const crop = 'Mixed Crops'
+      const farmerName = params.fullName || user?.fullName || 'Farmer'
+      let fpoId = 'f0000000-0000-0000-0000-000000000001'
+      try {
+        const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
+        if (fpos?.[0]?.id) fpoId = fpos[0].id
+      } catch {}
+
+      try {
+        await db.query(
+          `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
+           values ($1, $2, $3, 'gu', 1.0, $4, 22.56, 72.92)
+           on conflict do nothing`,
+          [fpoId, farmerName, `+91 ${normalPhone}`, village]
+        )
+      } catch {
+        try {
+          await db.query(
+            `insert into agrilink.farmers (name, village, phone, crop_name, quantity, quality_grade)
+             values ($1, $2, $3, $4, 0, 'A')
+             on conflict do nothing`,
+            [farmerName, village, `+91 ${normalPhone}`, crop]
+          )
+        } catch {}
+      }
+    }
+
+    // If buyer, sync to agrilink.buyers
+    if (params.role === 'buyer' && (params.organizationName || params.fullName)) {
+      await db.query(
+        `insert into agrilink.buyers (name, type, address, city, lat, lng, contact_name, contact_phone)
+         values ($1, 'INSTITUTIONAL', 'Central Market Road', coalesce($2, 'Anand'), 22.56, 72.93, $3, $4)
+         on conflict do nothing`,
+        [
+          params.organizationName || params.fullName || 'AgriLink Buyer',
+          params.district || 'Anand',
+          params.fullName || 'Buyer Contact',
+          `+91 ${normalPhone}`,
+        ]
+      ).catch(() => {})
+    }
+  } catch (dbErr) {
+    console.warn('[pin-auth] updateUserProfile db error:', dbErr)
+  }
+
+  // 3. Supabase update if configured
+  if (supabaseAdmin) {
+    try {
+      await supabaseAdmin.from('user_profiles').upsert({
+        mobile_number: normalPhone,
+        full_name: params.fullName,
+        role: params.role,
+        village: params.village,
+        district: params.district,
+        state: params.state,
+        fpo_name: params.fpoName,
+        organization_name: params.organizationName,
+        organization_type: params.organizationType,
+        onboarding_complete: true,
+        updated_at: new Date().toISOString(),
+      })
+    } catch (sbErr) {
+      console.warn('[pin-auth] updateUserProfile supabase error:', sbErr)
+    }
+  }
+
+  return inMemoryUsers.get(normalPhone) || null
+}
+

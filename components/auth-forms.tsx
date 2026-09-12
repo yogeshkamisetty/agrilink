@@ -67,6 +67,11 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         if (data.session) {
           localStorage.setItem('agrilink_session', JSON.stringify(data.session))
         }
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'user-login', phone: phoneUsed, role: userRole })
+          bc.close()
+        } catch {}
       } catch {}
     }
 

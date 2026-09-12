@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireUser } from '@/lib/server/auth'
-import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+import { supabaseAdmin } from '@/lib/supabase-admin'
+import { updateUserProfile } from '@/lib/server/pin-auth'
 
 function sanitizeText(value: unknown, maxLength = 100): string | null {
   if (typeof value !== 'string') return null
@@ -40,84 +41,124 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'FPO Federation name and District hub are required for admins.' }, { status: 400 })
     }
 
-    const db = requireSupabaseAdmin()
-    const cleanPhone = typeof body.mobile_number === 'string' ? body.mobile_number.replace(/\D/g, '').slice(-10) : null
+    const userPhone = (user.phone || (user.user_metadata?.mobile as string) || (user.user_metadata?.phone as string) || '')
+    const cleanPhone = typeof body.mobile_number === 'string' && body.mobile_number.trim()
+      ? body.mobile_number.replace(/\D/g, '').slice(-10)
+      : userPhone.replace(/\D/g, '').slice(-10)
 
-    const { data, error } = await db
-      .from('user_profiles')
-      .upsert({
-        id: user.id,
+    // Persist into user accounts registry and domain tables
+    if (cleanPhone) {
+      await updateUserProfile({
+        phone: cleanPhone,
+        fullName,
         role,
-        full_name: fullName,
-        mobile_number: cleanPhone,
         village,
         district,
         state,
-        fpo_name: fpoName,
-        organization_name: organizationName,
-        organization_type: organizationType,
-        onboarding_complete: true,
-        updated_at: new Date().toISOString(),
+        fpoName,
+        organizationName,
+        organizationType,
+        onboardingComplete: true,
       })
-      .select()
-      .single()
-
-    if (error) {
-      throw new Error(`Profile save failed: ${error.message}`)
     }
 
-    // Synchronize to domain tables (buyers or farmers) for unified data flow
-    if (role === 'buyer' && organizationName) {
+    let data: any = null
+
+    // Synchronize to Supabase if configured
+    if (supabaseAdmin) {
       try {
-        await db.from('buyers').insert({
-          buyer_name: fullName,
-          organization_name: organizationName,
-          mobile_number: cleanPhone || user.phone || '',
-        })
-      } catch (syncErr) {
-        console.warn('[onboarding] buyer sync warning:', syncErr)
-      }
-    } else if (role === 'farmer' && village) {
-      try {
-        await db.from('farmers').insert({
-          name: fullName,
-          village: village,
-          mobile_number: cleanPhone || user.phone || '',
-          crop_name: 'Mixed Crops',
-          quantity: 0,
-          verified: false,
-        })
-      } catch (syncErr) {
-        console.warn('[onboarding] farmer sync warning:', syncErr)
+        const { data: sbData, error } = await supabaseAdmin
+          .from('user_profiles')
+          .upsert({
+            id: user.id,
+            role,
+            full_name: fullName,
+            mobile_number: cleanPhone,
+            village,
+            district,
+            state,
+            fpo_name: fpoName,
+            organization_name: organizationName,
+            organization_type: organizationType,
+            onboarding_complete: true,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single()
+
+        if (error) {
+          console.warn('[onboarding] Supabase profile upsert warning:', error.message)
+        } else {
+          data = sbData
+        }
+
+        // Synchronize to domain tables (buyers or farmers) for unified data flow
+        if (role === 'buyer' && organizationName) {
+          try {
+            await supabaseAdmin.from('buyers').insert({
+              buyer_name: fullName,
+              organization_name: organizationName,
+              mobile_number: cleanPhone || user.phone || '',
+            })
+          } catch (syncErr) {
+            console.warn('[onboarding] buyer sync warning:', syncErr)
+          }
+        } else if (role === 'farmer' && village) {
+          try {
+            await supabaseAdmin.from('farmers').insert({
+              name: fullName,
+              village: village,
+              mobile_number: cleanPhone || user.phone || '',
+              crop_name: 'Mixed Crops',
+              quantity: 0,
+              verified: false,
+            })
+          } catch (syncErr) {
+            console.warn('[onboarding] farmer sync warning:', syncErr)
+          }
+        }
+
+        // Log onboarding completion in audit trail
+        try {
+          await supabaseAdmin.from('auth_activity').insert({
+            user_id: user.id,
+            event_type: 'onboarding_complete',
+            metadata: { role },
+          })
+        } catch (activityError) {
+          console.warn('[onboarding] activity log warning:', activityError)
+        }
+      } catch (sbEx) {
+        console.warn('[onboarding] Supabase operation notice:', sbEx)
       }
     }
 
-    // Log onboarding completion in audit trail
-    try {
-      await db.from('auth_activity').insert({
-        user_id: user.id,
-        event_type: 'onboarding_complete',
-        metadata: { role },
-      })
-    } catch (activityError) {
-      console.warn('[onboarding] activity log warning:', activityError)
+    const profile = data || {
+      id: user.id,
+      role,
+      full_name: fullName,
+      mobile_number: cleanPhone,
+      village,
+      district,
+      state,
+      fpo_name: fpoName,
+      organization_name: organizationName,
+      organization_type: organizationType,
+      onboarding_complete: true,
+      updated_at: new Date().toISOString(),
     }
 
-    return NextResponse.json({ ok: true, profile: data })
+    return NextResponse.json({ ok: true, profile })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unexpected profile-save error.'
-    const status = message === 'AUTH_REQUIRED' ? 401 : message.includes('credentials are not configured') ? 503 : 500
+    const status = message === 'AUTH_REQUIRED' ? 401 : 500
     console.error('[onboarding] failed:', message)
     return NextResponse.json(
       {
-        error:
-          status === 401
-            ? 'Please sign in again.'
-            : status === 503
-            ? 'Server authentication is not configured. Add SUPABASE_SERVICE_ROLE_KEY in Vercel.'
-            : message,
+        error: status === 401 ? 'Please sign in again.' : message,
       },
       { status }
     )
   }
 }
+

@@ -177,6 +177,47 @@ export function createMemoryFallbackDb(): Db {
 
   const userSessions: Row[] = []
   const mpinCredentials: Row[] = []
+  const userAccounts: Row[] = [
+    {
+      id: 'demo-admin-anita',
+      phone: '9825000000',
+      full_name: 'Anita Sharma',
+      role: 'admin',
+      pin_hash: 'demo_hash',
+      salt: 'salt_9825000000',
+      verification_status: 'verified',
+      onboarding_complete: true,
+      metadata: { role: 'Lead FPO Federation Coordinator' },
+      created_at: new Date().toISOString(),
+      last_login_at: new Date().toISOString(),
+    },
+    {
+      id: 'demo-farmer-ramesh',
+      phone: '9825144102',
+      full_name: 'Ramesh Kumar',
+      role: 'farmer',
+      pin_hash: 'demo_hash',
+      salt: 'salt_9825144102',
+      verification_status: 'verified',
+      onboarding_complete: true,
+      metadata: { village: 'Boriavi', state: 'Gujarat' },
+      created_at: new Date().toISOString(),
+      last_login_at: new Date().toISOString(),
+    },
+    {
+      id: 'demo-buyer-meera',
+      phone: '9825277103',
+      full_name: 'Meera Patel',
+      role: 'buyer',
+      pin_hash: 'demo_hash',
+      salt: 'salt_9825277103',
+      verification_status: 'verified',
+      onboarding_complete: true,
+      metadata: { company: 'PM POSHAN Central Kitchen', city: 'Anand' },
+      created_at: new Date().toISOString(),
+      last_login_at: new Date().toISOString(),
+    },
+  ]
 
   let nextOrderSeq = 1002
 
@@ -218,16 +259,91 @@ export function createMemoryFallbackDb(): Db {
         return [...buyers] as T[]
       }
 
-      if (q.includes('from agrilink.farmers')) {
-        if (params.length && q.includes('where id = $1')) {
-          return farmers.filter((f) => f.id === params[0]) as T[]
+      if (q.includes('from agrilink.user_accounts')) {
+        if (params.length && q.includes('where phone = $1')) {
+          const searchPhone = String(params[0] || '').replace(/\D/g, '').slice(-10)
+          return userAccounts.filter((u) => u.phone === searchPhone) as T[]
         }
-        if (params.length && q.includes('any(')) {
+        return [...userAccounts] as T[]
+      }
+
+      if (q.startsWith('insert into agrilink.user_accounts')) {
+        const phone = String(params[0] || '').replace(/\D/g, '').slice(-10)
+        const fullName = String(params[1] || 'AgriLink Member').trim()
+        const role = String(params[2] || 'farmer').trim()
+        const pinHash = String(params[3] || '')
+        const salt = String(params[4] || '')
+        const metadata = typeof params[5] === 'string' ? JSON.parse(params[5] || '{}') : (params[5] || {})
+        const existingIdx = userAccounts.findIndex((u) => u.phone === phone)
+        const now = new Date().toISOString()
+        if (existingIdx !== -1) {
+          const existing = userAccounts[existingIdx]
+          existing.full_name = fullName
+          existing.role = role
+          existing.pin_hash = pinHash || existing.pin_hash
+          existing.salt = salt || existing.salt
+          existing.metadata = metadata
+          existing.last_login_at = now
+          return [{ id: existing.id }] as T[]
+        }
+        const newId = `usr_${phone}_${Date.now()}`
+        const newAcc: Row = {
+          id: newId,
+          phone,
+          full_name: fullName,
+          role,
+          pin_hash: pinHash,
+          salt,
+          verification_status: 'verified',
+          onboarding_complete: true,
+          metadata,
+          last_login_at: now,
+          created_at: now,
+        }
+        userAccounts.unshift(newAcc)
+        return [{ id: newId }] as T[]
+      }
+
+      if (q.startsWith('update agrilink.user_accounts')) {
+        const time = String(params[0] || new Date().toISOString())
+        const phone = String(params[1] || '').replace(/\D/g, '').slice(-10)
+        const found = userAccounts.find((u) => u.phone === phone)
+        if (found) {
+          found.last_login_at = time
+        }
+        return [] as T[]
+      }
+
+      if (q.includes('from agrilink.farmers')) {
+        let matched = farmers
+        if (params.length && q.includes('where id = $1')) {
+          matched = farmers.filter((f) => f.id === params[0])
+        } else if (params.length && q.includes('any(')) {
           const idStr = String(params[0] || '').replace(/[{}]/g, '')
           const ids = idStr.split(',').map((s) => s.trim())
-          return farmers.filter((f) => ids.includes(String(f.id))) as T[]
+          matched = farmers.filter((f) => ids.includes(String(f.id)))
         }
-        return [...farmers] as T[]
+        return matched.map((f) => {
+          const reg = cropRegistry.find((r) => r.farmer_id === f.id)
+          return {
+            id: f.id,
+            name: f.name,
+            phone: f.phone,
+            mobile_number: f.phone,
+            village: f.village,
+            crop_name: f.crop_name || (reg ? reg.crop : 'PADDY'),
+            crop: f.crop_name || (reg ? reg.crop : 'PADDY'),
+            quantity: f.quantity || (reg ? reg.expected_qty_kg : 500),
+            quality_grade: f.quality_grade || 'A',
+            harvest_date: f.harvest_date || (reg ? reg.harvest_window_start : new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0]),
+            verified: true,
+            reliability_score: f.reliability_score || 95,
+            land_hectares: f.land_hectares || 1.0,
+            is_live_account: f.is_live_account || false,
+            last_login_at: f.last_login_at || f.created_at,
+            created_at: f.created_at,
+          }
+        }) as T[]
       }
 
       if (q.includes('from agrilink.price_refs')) {
@@ -274,19 +390,36 @@ export function createMemoryFallbackDb(): Db {
       }
 
       if (q.startsWith('insert into agrilink.farmers')) {
-        const farmerId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
         const isFullSchema = q.includes('fpo_id')
-        const name = String((isFullSchema ? params[1] : params[0]) || 'Farmer')
-        const phone = String((isFullSchema ? params[2] : params[2]) || '+91 98251 44102')
-        const village = String((isFullSchema ? params[5] : params[1]) || 'Kheda')
-        const cropName = String(params[3] || 'PADDY').toUpperCase()
-        const qty = Number(params[4] || 500)
-        const grade = String(params[5] || 'A')
-        const harvestDate = String(params[6] || new Date().toISOString().split('T')[0])
+        const name = String((isFullSchema ? params[1] : params[0]) || 'Farmer Member').trim()
+        const phone = String((isFullSchema ? params[2] : params[2]) || '+91 98251 44102').trim()
+        const normalPhone = phone.replace(/\D/g, '').slice(-10)
+        const village = String((isFullSchema ? (params[3] || params[5]) : params[1]) || 'Kheda').trim()
+        const cropName = String((isFullSchema ? 'PADDY' : params[3]) || 'PADDY').toUpperCase()
+        const qty = Number((isFullSchema ? 500 : params[4]) || 500)
+        const grade = String((isFullSchema ? 'A' : params[5]) || 'A')
+        const harvestDate = String((isFullSchema ? new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0] : params[6]) || new Date().toISOString().split('T')[0])
 
+        const existingIdx = farmers.findIndex((f) => String(f.phone).replace(/\D/g, '').slice(-10) === normalPhone)
+        if (existingIdx !== -1) {
+          const existing = farmers[existingIdx]
+          existing.name = name
+          existing.village = village
+          if (!isFullSchema || !existing.crop_name) {
+            existing.crop_name = cropName
+            existing.quantity = qty
+            existing.quality_grade = grade
+            existing.harvest_date = harvestDate
+          }
+          existing.is_live_account = true
+          existing.last_login_at = new Date().toISOString()
+          return [existing] as T[]
+        }
+
+        const farmerId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
         const newFarmer: Row = {
           id: farmerId,
-          fpo_id: fpos[0].id,
+          fpo_id: fpos[0]?.id || 'fpo-anand-001',
           name,
           village,
           phone,
@@ -301,6 +434,8 @@ export function createMemoryFallbackDb(): Db {
           completed_orders: 1,
           failed_orders: 0,
           reliability_score: 95,
+          is_live_account: true,
+          last_login_at: new Date().toISOString(),
           created_at: new Date().toISOString(),
         }
         farmers.unshift(newFarmer)
@@ -380,28 +515,6 @@ export function createMemoryFallbackDb(): Db {
         return orders.map((o) => {
           const b = buyers.find((x) => x.id === o.buyer_id) || buyers[0]
           return { ...o, buyer_name: b.name }
-        }) as T[]
-      }
-
-      if (q.includes('from agrilink.farmers')) {
-        return farmers.map((f) => {
-          const reg = cropRegistry.find((r) => r.farmer_id === f.id)
-          return {
-            id: f.id,
-            name: f.name,
-            phone: f.phone,
-            mobile_number: f.phone,
-            village: f.village,
-            crop_name: f.crop_name || (reg ? reg.crop : 'PADDY'),
-            crop: f.crop_name || (reg ? reg.crop : 'PADDY'),
-            quantity: f.quantity || (reg ? reg.expected_qty_kg : 500),
-            quality_grade: f.quality_grade || 'A',
-            harvest_date: f.harvest_date || (reg ? reg.harvest_window_start : new Date().toISOString().split('T')[0]),
-            verified: true,
-            reliability_score: f.reliability_score || 95,
-            land_hectares: f.land_hectares || 1.0,
-            created_at: f.created_at,
-          }
         }) as T[]
       }
 
