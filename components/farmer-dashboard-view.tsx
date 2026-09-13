@@ -644,13 +644,17 @@ export function FarmerDashboardView({
                 </p>
               </div>
 
-              <button
-                onClick={onDeclareHarvest}
-                className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors shrink-0"
-              >
-                <Sprout className="size-4" />
-                <span>{labels.btnDeclare}</span>
-              </button>
+              <div className="flex items-center gap-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  {liveDemands.length}{' '}
+                  {lang === 'hi'
+                    ? 'सत्यापित मांगें उपलब्ध'
+                    : lang === 'te'
+                    ? 'ప్రత్యక్ష డిమాండ్లు అందుబాటులో ఉన్నాయి'
+                    : 'Verified Demands Active'}
+                </span>
+              </div>
             </div>
 
             {/* Demand Cards Grid */}
@@ -1007,37 +1011,39 @@ export function FarmerDashboardView({
                 </div>
               </div>
 
-              {/* Village Coordinator Support */}
+              {/* Kisan DBT & Banking Support */}
               <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
                 <h4 className="font-serif text-lg font-bold text-foreground">
-                  Village FPO Sahayak
+                  {lang === 'hi' ? 'किसान सहायता एवं DBT समाधान' : lang === 'te' ? 'రైతు సహాయం & DBT మద్దతు' : 'Kisan Banking & DBT Support'}
                 </h4>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Need assistance with your bank account, passbook, or pickup?
+                  {lang === 'hi'
+                    ? 'खाते में पैसे या भुगतान संबंधी किसी भी प्रश्न के लिए 24x7 निशुल्क किसान हेल्पलाइन उपलब्ध है।'
+                    : 'For direct bank credit or settlement questions, free government Kisan Helpline is available 24x7.'}
                 </p>
 
                 <div className="mt-4 rounded-2xl bg-card p-3.5 border border-border space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Coordinator:</span>
-                    <span className="font-bold text-foreground">Anita Desai</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Contact Phone:</span>
-                    <span className="font-mono font-bold text-primary">+91 98250 12345</span>
-                  </div>
-                  <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Kisan Call Center:</span>
-                    <span className="font-mono text-muted-foreground">1800-180-1551 (Toll Free)</span>
+                    <span className="font-mono font-bold text-primary">1800-180-1551 (Toll Free)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Transaction Fee:</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">₹0 (Zero Charges)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Local Sahayak:</span>
+                    <span className="font-medium text-foreground">Anita Desai (Anand Cluster)</span>
                   </div>
                 </div>
 
                 <div className="mt-4">
                   <a
-                    href="tel:+919825012345"
+                    href="tel:18001801551"
                     className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-2.5 text-xs font-bold hover:bg-primary/90 transition-colors"
                   >
                     <Phone className="size-3.5" />
-                    <span>Call Coordinator Anita</span>
+                    <span>Call Kisan Helpline (1800-180-1551)</span>
                   </a>
                 </div>
               </div>

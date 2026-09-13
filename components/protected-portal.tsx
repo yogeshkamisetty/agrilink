@@ -6,7 +6,6 @@ import { Loader2, LogOut } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 import { AgriLinkDashboard } from '@/components/agri-link-dashboard'
 import Link from 'next/link'
-import { CropAvailability } from '@/components/crop-availability'
 
 export function ProtectedPortal() {
   const router = useRouter()
@@ -110,11 +109,6 @@ export function ProtectedPortal() {
   }
 
   return (
-    <>
-      <AgriLinkDashboard onSignOut={signOut} verified={verified} userName={userName} userRole={userRole} />
-      <main className="mx-auto max-w-[1500px] px-4 pb-12 sm:px-6 lg:pl-[21rem] lg:pr-8">
-        <CropAvailability role={userRole} />
-      </main>
-    </>
+    <AgriLinkDashboard onSignOut={signOut} verified={verified} userName={userName} userRole={userRole} />
   )
 }
