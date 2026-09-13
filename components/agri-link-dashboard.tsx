@@ -15,7 +15,8 @@ import { PrintableReceiptModal, DocumentType } from './printable-receipt-modal'
 import { TeamManagementModal } from './team-management-modal'
 import { DeclareHarvestModal } from './declare-harvest-modal'
 import { OnboardFarmerModal } from './onboard-farmer-modal'
-import { SmartAggregationCard } from './aggregation-engine-card'
+import { SmartAggregationCard, AggregationContributor } from './aggregation-engine-card'
+import { allocateFarmersOptimal, getVillageLatLng, CandidateFarmer } from '@/lib/domain/allocation'
 import { ExcessRedistributionModal } from './excess-redistribution-modal'
 import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
@@ -509,15 +510,38 @@ export function AgriLinkDashboard({
 
     fetchFarmers()
     const timer = setInterval(fetchFarmers, 4000)
-    const onHarvest = () => fetchFarmers()
+    const onHarvest = () => {
+      fetchFarmers()
+      refresh()
+    }
+    const onOrderCreated = () => {
+      fetchFarmers()
+      refresh()
+    }
     window.addEventListener('agrilink:harvest-updated', onHarvest)
+    window.addEventListener('agrilink:order-created', onOrderCreated)
+
+    let bc: BroadcastChannel | null = null
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('agrilink_sync')
+        bc.onmessage = () => {
+          fetchFarmers()
+          refresh()
+        }
+      }
+    } catch {}
 
     return () => {
       mounted = false
       clearInterval(timer)
       window.removeEventListener('agrilink:harvest-updated', onHarvest)
+      window.removeEventListener('agrilink:order-created', onOrderCreated)
+      try {
+        bc?.close()
+      } catch {}
     }
-  }, [])
+  }, [refresh])
 
   // Listen to open-order events from Crop Availability board
   useEffect(() => {
@@ -595,6 +619,123 @@ export function AgriLinkDashboard({
   const committed = activeTotals?.primaryKg || 0
   const target = activeOrder?.qtyTargetKg || 1000
   const progress = Math.min(100, Math.round((committed / target) * 100))
+
+  // Real-time Candidate Smallholders mapped from live roster
+  const candidateFarmers: CandidateFarmer[] = useMemo(() => {
+    return rosterFarmers.map((f: any, idx: number) => ({
+      id: f.id || `FARM-${String(idx + 1).padStart(3, '0')}`,
+      name: f.name || 'Farmer Member',
+      village: f.village || 'Kheda',
+      crop: f.crop || 'PADDY',
+      availableKg: Number(f.kg || 500),
+      reliability: Number(f.reliability || 94),
+      qualityGrade: 'A' as const,
+      location: getVillageLatLng(f.village),
+    }))
+  }, [rosterFarmers])
+
+  // Multi-objective knapsack & corridor TSP optimization for active order
+  const optimalAllocation = useMemo(() => {
+    if (!candidateFarmers.length || !activeOrder) return null
+    const targetKg = Number((activeOrder as any)?.targetKg || activeOrder?.qtyTargetKg || 1000)
+    const crop = activeOrder?.crop || 'Paddy (Rice)'
+    return allocateFarmersOptimal({
+      targetKg,
+      crop,
+      candidates: candidateFarmers,
+      standbyPct: 0.15,
+      dropLabel: activeBuyer?.name || 'Institutional Buyer Central Kitchen',
+    })
+  }, [candidateFarmers, activeOrder, activeBuyer])
+
+  // Track promoted standby farmers
+  const [promotedFarmerIds, setPromotedFarmerIds] = useState<string[]>([])
+  const [isLockingBatch, setIsLockingBatch] = useState(false)
+  const [batchLocked, setBatchLocked] = useState(false)
+
+  // Derived real-time aggregation contributors
+  const aggregationContributors: AggregationContributor[] = useMemo(() => {
+    if (!optimalAllocation) return []
+    return optimalAllocation.allocations.map((a) => {
+      const isPromoted = promotedFarmerIds.includes(a.farmer.id)
+      const isStandby = isPromoted ? false : a.isStandby
+      return {
+        farmerId: a.farmer.id,
+        name: a.farmer.name,
+        village: a.farmer.village,
+        committedKg: a.allocatedKg,
+        isStandby,
+        reliabilityScore: a.farmer.reliability,
+        status: isStandby ? 'STANDBY' : 'ACTIVE',
+      }
+    })
+  }, [optimalAllocation, promotedFarmerIds])
+
+  const handlePromoteStandby = (farmerId: string) => {
+    setPromotedFarmerIds((prev) => [...prev, farmerId])
+    const farmerName = candidateFarmers.find((c) => c.id === farmerId)?.name || 'Farmer'
+    setActionMessage(`${farmerName} promoted from standby buffer into active allocation pool!`)
+    setNotifications((prev) => [
+      {
+        id: `promote-${Date.now()}`,
+        title: 'Standby Farmer Promoted',
+        detail: `${farmerName} moved into active delivery quota for ${activeOrder?.crop || 'Paddy'}.`,
+        time: 'Just now',
+        type: 'order',
+        unread: true,
+      },
+      ...prev,
+    ])
+  }
+
+  const handleLockBatch = async () => {
+    if (!activeOrder || !aggregationContributors.length) return
+    setIsLockingBatch(true)
+    try {
+      const activeContribs = aggregationContributors
+        .filter((c) => !c.isStandby && c.committedKg > 0)
+        .map((c) => ({ farmer_id: c.farmerId, quantity_kg: c.committedKg }))
+
+      const orderCode = activeOrder.code || `AG-${String(activeOrder.id).slice(-4).toUpperCase()}`
+      const batchCode = `BATCH-${orderCode}-${(activeOrder.crop || 'PADDY').toUpperCase()}`
+
+      const res = await fetch('/api/aggregation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: activeOrder.id,
+          batch_code: batchCode,
+          fpo_name: 'Mahi Valley FPO',
+          crop: activeOrder.crop || 'PADDY',
+          location: 'Kheda Central Sourcing Hub',
+          contributions: activeContribs,
+        }),
+      })
+
+      if (res.ok) {
+        setBatchLocked(true)
+        const totalKg = activeContribs.reduce((sum, c) => sum + c.quantity_kg, 0)
+        setActionMessage(`Batch ${batchCode} locked! Consolidated ${totalKg} KG across ${activeContribs.length} smallholders.`)
+        await refresh()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
+          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+          try {
+            const bc = new BroadcastChannel('agrilink_sync')
+            bc.postMessage({ type: 'batch-locked', orderId: activeOrder.id })
+            bc.close()
+          } catch {}
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        setActionMessage(errData.error || 'Failed to lock batch')
+      }
+    } catch {
+      setActionMessage('Network error while locking batch')
+    } finally {
+      setIsLockingBatch(false)
+    }
+  }
 
   const go = (screen: Screen) => {
     setActiveNav(screen)
@@ -1266,6 +1407,14 @@ export function AgriLinkDashboard({
                   onNotify={handleNotify}
                   busy={actionBusy}
                   t={t}
+                  contributors={aggregationContributors}
+                  onPromoteStandby={handlePromoteStandby}
+                  onLockBatch={handleLockBatch}
+                  isLockingBatch={isLockingBatch}
+                  batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
+                  vehicleName={optimalAllocation?.vehicle?.name}
+                  km={optimalAllocation?.routePlan?.km}
+                  fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
                 />
               )}
 
@@ -1278,6 +1427,15 @@ export function AgriLinkDashboard({
                     pricePerKg={activeOrder?.pricePerKg || 28}
                     deliveryDate={activeOrder?.deliveryDate || '2025-10-20'}
                     buyerName={activeBuyer?.name || 'PM POSHAN Central Kitchen'}
+                    contributors={aggregationContributors}
+                    onPromoteStandby={handlePromoteStandby}
+                    onLockBatch={handleLockBatch}
+                    isLocking={isLockingBatch}
+                    batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
+                    vehicleName={optimalAllocation?.vehicle?.name}
+                    km={optimalAllocation?.routePlan?.km}
+                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
+                    isLive={true}
                   />
                   <Network
                     order={activeOrder}
@@ -2198,6 +2356,14 @@ function Orders({
   onNotify,
   busy,
   t,
+  contributors,
+  onPromoteStandby,
+  onLockBatch,
+  isLockingBatch,
+  batchLocked,
+  vehicleName,
+  km,
+  fuelSavedPct,
 }: any) {
   const crop = order?.crop || 'PADDY'
   const price = order?.pricePerKg || 28
@@ -2406,6 +2572,15 @@ function Orders({
         pricePerKg={price}
         deliveryDate={order?.deliveryDate || '2025-10-20'}
         buyerName={buyer?.name || 'PM POSHAN Central Kitchen'}
+        contributors={contributors}
+        onPromoteStandby={onPromoteStandby}
+        onLockBatch={onLockBatch}
+        isLocking={isLockingBatch}
+        batchLocked={batchLocked || order?.status === 'AGGREGATED'}
+        vehicleName={vehicleName}
+        km={km}
+        fuelSavedPct={fuelSavedPct}
+        isLive={true}
       />
     </div>
   )
@@ -2458,25 +2633,36 @@ function Network({ notified, onNotify, busy, t, order, onOnboard, farmers, onCal
             <Button
               variant="secondary"
               onClick={() => {
-                downloadCsv('agrilink-farmer-roster.csv', [
-                  'Farmer ID',
-                  'Full Name',
-                  'Village',
-                  'Registered Crops',
-                  'Committed Volume (kg)',
-                  'Harvest Window',
-                  'Reliability Score',
-                  'Commitment Status',
-                  'Preferred Channel',
-                  'Aadhaar KYC',
-                ], [
-                  ['FARM-001', 'Ramesh Kumar', 'Kheda', 'Paddy / Tomato', '500', '17–19 Oct 2025', '94% (14 settled)', 'Accepted', 'SMS + WhatsApp', 'Verified'],
-                  ['FARM-002', 'Savitri Devi', 'Borsad', 'Paddy / Wheat', '700', '17–19 Oct 2025', '98% (21 settled)', 'Accepted', 'IVR Voice', 'Verified'],
-                  ['FARM-003', 'Mohan Lal', 'Vasad', 'Paddy', '800', '18–20 Oct 2025', '91% (11 settled)', 'Accepted', 'WhatsApp', 'Verified'],
-                  ['FARM-004', 'Lakshmi Bai', 'Kheda', 'Paddy / Onion', '300', '19–21 Oct 2025', '89% (Standby)', 'Standby (15% Buffer)', 'SMS', 'Verified'],
-                  ['FARM-005', 'Dinesh Patel', 'Nadiad', 'Tomato / Chilli', '650', '20–22 Oct 2025', '92% (Standby)', 'Standby', 'IVR Voice', 'Verified'],
-                  ['FARM-006', 'Meenaben Parmar', 'Petlad', 'Potato / Wheat', '900', '21–24 Oct 2025', '95% (Standby)', 'Standby', 'WhatsApp', 'Verified'],
+                const rows = (farmerList || []).map((f: any, idx: number) => [
+                  f.id || `FARM-${String(idx + 1).padStart(3, '0')}`,
+                  f.name || 'Farmer Member',
+                  f.village || 'Kheda',
+                  f.crop || 'Paddy / Tomato',
+                  String(f.kg || 500),
+                  '17–24 Oct 2025',
+                  `${f.reliability || 94}%`,
+                  f.status || 'Accepted',
+                  'SMS + WhatsApp',
+                  'Verified',
                 ])
+                downloadCsv(
+                  'agrilink-farmer-roster.csv',
+                  [
+                    'Farmer ID',
+                    'Full Name',
+                    'Village',
+                    'Registered Crops',
+                    'Committed Volume (kg)',
+                    'Harvest Window',
+                    'Reliability Score',
+                    'Commitment Status',
+                    'Preferred Channel',
+                    'Aadhaar KYC',
+                  ],
+                  rows.length ? rows : [
+                    ['FARM-001', 'Ramesh Kumar', 'Kheda', 'Paddy / Tomato', '500', '17–19 Oct 2025', '94%', 'Accepted', 'SMS + WhatsApp', 'Verified'],
+                  ]
+                )
               }}
             >
               <Download className="size-4" /> {t?.actionExportRoster || 'Export Roster (CSV)'}

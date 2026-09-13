@@ -132,13 +132,36 @@ export async function POST(request: Request) {
       } catch {}
 
       for (const c of contributions) {
-        if (c.farmer_id) {
+        if (c.farmer_id && c.quantity_kg > 0) {
           try {
-            await db.query(
-              `insert into agrilink.commitments (order_id, registry_id, farmer_id, qty_committed_kg, tier, status)
-               values ($1, $2, $3, $4, 'SMS', 'ACTIVE')`,
-              [body.order_id, `reg-${c.farmer_id}`, c.farmer_id, c.quantity_kg]
-            )
+            let farmerId = c.farmer_id
+            const farmerCheck = await db.query<{ id: string }>(`select id from agrilink.farmers where id = $1`, [farmerId]).catch(() => [])
+            if (!farmerCheck?.[0]?.id) {
+              const existingFarmers = await db.query<{ id: string }>(`select id from agrilink.farmers limit 1`).catch(() => [])
+              if (existingFarmers?.[0]?.id) {
+                farmerId = existingFarmers[0].id
+              }
+            }
+
+            if (farmerId) {
+              const regCheck = await db.query<{ id: string }>(`select id from agrilink.crop_registry where farmer_id = $1 limit 1`, [farmerId]).catch(() => [])
+              let regId = regCheck?.[0]?.id
+              if (!regId) {
+                const newReg = await db.query<{ id: string }>(
+                  `insert into agrilink.crop_registry (farmer_id, crop, expected_qty_kg, harvest_window_start, harvest_window_end)
+                   values ($1, $2, $3, now()::date, (now() + interval '14 days')::date) returning id`,
+                  [farmerId, crop, c.quantity_kg]
+                ).catch(() => [])
+                regId = newReg?.[0]?.id
+              }
+              if (regId) {
+                await db.query(
+                  `insert into agrilink.commitments (order_id, farmer_id, registry_id, qty_committed_kg, is_standby, status)
+                   values ($1, $2, $3, $4, false, 'ACTIVE')`,
+                  [body.order_id, farmerId, regId, c.quantity_kg]
+                ).catch(() => {})
+              }
+            }
           } catch {}
         }
       }

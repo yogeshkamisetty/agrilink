@@ -4,7 +4,7 @@ import React from 'react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Boxes, ShieldCheck, Users, Layers, AlertCircle, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Boxes, ShieldCheck, Users, Layers, AlertCircle, ArrowRight, CheckCircle2, Truck, RefreshCw } from 'lucide-react'
 
 export type AggregationContributor = {
   farmerId: string
@@ -25,6 +25,13 @@ export interface SmartAggregationCardProps {
   buyerName: string
   contributors?: AggregationContributor[]
   onPromoteStandby?: (farmerId: string) => void
+  onLockBatch?: () => void
+  isLocking?: boolean
+  batchLocked?: boolean
+  vehicleName?: string
+  km?: number
+  fuelSavedPct?: number
+  isLive?: boolean
 }
 
 const DEFAULT_CONTRIBUTORS: AggregationContributor[] = [
@@ -42,11 +49,21 @@ export function SmartAggregationCard({
   pricePerKg = 28,
   deliveryDate = '2025-10-20',
   buyerName = 'PM POSHAN Central Kitchen',
-  contributors = DEFAULT_CONTRIBUTORS,
+  contributors,
   onPromoteStandby,
+  onLockBatch,
+  isLocking = false,
+  batchLocked = false,
+  vehicleName,
+  km,
+  fuelSavedPct,
+  isLive = false,
 }: SmartAggregationCardProps) {
-  const activeContributors = contributors.filter((c) => !c.isStandby)
-  const standbyContributors = contributors.filter((c) => c.isStandby)
+  const effectiveContributors = contributors && contributors.length > 0 ? contributors : DEFAULT_CONTRIBUTORS
+  const isUsingLive = isLive || (contributors && contributors.length > 0)
+
+  const activeContributors = effectiveContributors.filter((c) => !c.isStandby)
+  const standbyContributors = effectiveContributors.filter((c) => c.isStandby)
 
   const activeSum = activeContributors.reduce((sum, c) => sum + c.committedKg, 0)
   const standbySum = standbyContributors.reduce((sum, c) => sum + c.committedKg, 0)
@@ -64,10 +81,11 @@ export function SmartAggregationCard({
           <div>
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="font-mono text-xs font-bold text-primary">{orderCode}</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-emerald-700">
-                <CheckCircle2 className="size-3" /> Smart Aggregated
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {isUsingLive ? 'Real-Time Smart Aggregation' : 'Smart Aggregated'}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700 dark:text-blue-300">
                 {activeContributors.length} Smallholders Pooled
               </span>
             </div>
@@ -80,12 +98,43 @@ export function SmartAggregationCard({
           </div>
         </div>
 
-        <div className="text-left sm:text-right pt-2 sm:pt-0 border-t border-border/40 sm:border-0">
-          <p className="font-mono text-xs text-muted-foreground">Active Pool Fulfillment</p>
-          <p className="font-mono text-xl sm:text-2xl font-bold text-primary">
-            {activeSum} / {targetKg} kg
-            <span className="ml-1 text-xs text-muted-foreground font-normal">({pctFilled}%)</span>
-          </p>
+        <div className="flex flex-col sm:items-end gap-2.5 text-left sm:text-right pt-2 sm:pt-0 border-t border-border/40 sm:border-0">
+          <div>
+            <p className="font-mono text-xs text-muted-foreground">Active Pool Fulfillment</p>
+            <p className="font-mono text-xl sm:text-2xl font-bold text-primary">
+              {activeSum} / {targetKg} kg
+              <span className="ml-1 text-xs text-muted-foreground font-normal">({pctFilled}%)</span>
+            </p>
+          </div>
+          {onLockBatch && (
+            <Button
+              size="sm"
+              onClick={onLockBatch}
+              disabled={isLocking || batchLocked}
+              className={`h-8 text-xs font-bold gap-1.5 shadow-sm transition-all ${
+                batchLocked
+                  ? 'bg-emerald-600 hover:bg-emerald-600 text-white'
+                  : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+              }`}
+            >
+              {batchLocked ? (
+                <>
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Batch Consolidated</span>
+                </>
+              ) : isLocking ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" />
+                  <span>Locking Allocation…</span>
+                </>
+              ) : (
+                <>
+                  <Boxes className="size-3.5" />
+                  <span>Lock & Combine {activeContributors.length} Farmers</span>
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -142,6 +191,24 @@ export function SmartAggregationCard({
             <span>Standby Buffer: <strong>{standbySum} kg</strong></span>
           </div>
         </div>
+
+        {/* Realtime TSP Route Corridor & Vehicle Allocation */}
+        {vehicleName && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-secondary/60 border border-border px-3 py-2 text-xs">
+            <div className="flex items-center gap-2 text-foreground font-medium">
+              <Truck className="size-3.5 text-primary" />
+              <span>Recommended Freight: <strong>{vehicleName}</strong></span>
+            </div>
+            <div className="flex items-center gap-3 text-muted-foreground font-mono text-[11px]">
+              {km != null && <span>Route: <strong>{km} km</strong> TSP Loop</span>}
+              {fuelSavedPct != null && fuelSavedPct > 0 && (
+                <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                  🌱 {fuelSavedPct}% Fuel Saved
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Roster of Contributing Smallholders with Reliability Scores */}
@@ -155,7 +222,7 @@ export function SmartAggregationCard({
           </div>
         </div>
 
-        {contributors.map((c) => (
+        {effectiveContributors.map((c) => (
           <div key={c.farmerId} className="p-3 sm:p-3.5 hover:bg-card/60 transition-colors">
             {/* Desktop Row View (sm and up) */}
             <div className="hidden sm:flex items-center justify-between text-xs">
