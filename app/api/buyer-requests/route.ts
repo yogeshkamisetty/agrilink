@@ -67,6 +67,19 @@ export async function POST(request: Request) {
       [buyerId, crop, quantity, purpose, reviewRequired, reviewStatus]
     )
 
+    // Also create order in agrilink.orders so it is visible in real-time on Admin and Farmer dashboards
+    try {
+      const pricePerKg = crop === 'TOMATO' ? 24 : crop === 'WHEAT' ? 26 : crop === 'ONION' ? 22 : crop === 'POTATO' ? 17 : 28
+      const deliveryDate = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0]
+      const orderId = `ord-req-${Date.now()}`
+      await db.query(
+        `insert into agrilink.orders (id, crop, qty_target_kg, qty_committed_kg, price_per_kg, delivery_date, status, created_at)
+         values ($1, $2, $3, 0, $4, $5::date, 'POSTED', now())
+         on conflict do nothing`,
+        [orderId, crop, quantity, pricePerKg, deliveryDate]
+      )
+    } catch {}
+
     return NextResponse.json({ request: row, threshold_kg: LARGE_ORDER_KG })
   } catch (error) {
     return NextResponse.json(

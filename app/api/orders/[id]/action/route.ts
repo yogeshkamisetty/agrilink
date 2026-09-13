@@ -178,6 +178,58 @@ export async function POST(
       })
     }
 
+    // Handle Action 4: Farmer Commits Produce to an Order / Demand
+    if (action === 'farmer_commit') {
+      const commitQty = Number(body.committedKg || body.quantity_kg || 100)
+      const farmerName = body.farmerName || 'Ramesh Kumar'
+      const fId = body.farmerId || 'f-ramesh-101'
+
+      // Check current order details
+      let currentOrder: any = null
+      try {
+        const rows = await db.query<any>(`select * from agrilink.orders where id = $1`, [id])
+        if (rows.length > 0) currentOrder = rows[0]
+      } catch {}
+
+      const currentCommitted = Number(currentOrder?.qty_committed_kg || 0)
+      const target = Number(currentOrder?.qty_target_kg || body.targetKg || 500)
+      const newCommitted = Math.min(target, currentCommitted + commitQty)
+      const isFull = newCommitted >= target
+      const newStatus = isFull ? 'AGGREGATED' : 'PARTIALLY_COMMITTED'
+
+      try {
+        await db.query(
+          `update agrilink.orders
+           set qty_committed_kg = $2,
+               status = case when $3 = 'AGGREGATED' then 'AGGREGATED' else status end
+           where id = $1`,
+          [id, newCommitted, newStatus]
+        )
+
+        await db.query(
+          `insert into agrilink.commitments (order_id, farmer_id, qty_committed_kg, is_standby, status, created_at)
+           values ($1, $2, $3, false, 'ACTIVE', now())
+           on conflict do nothing`,
+          [id, fId, commitQty]
+        ).catch(() => null)
+      } catch (e) {
+        console.warn('DB commitment update notice:', e)
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action: 'farmer_commit',
+        orderId: id,
+        farmerName,
+        committedKg: commitQty,
+        totalCommittedKg: newCommitted,
+        targetKg: target,
+        remainingKg: Math.max(0, target - newCommitted),
+        status: newStatus,
+        message: `Successfully committed ${commitQty} kg produce. Remaining open capacity: ${Math.max(0, target - newCommitted)} kg.`
+      })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
     return NextResponse.json(

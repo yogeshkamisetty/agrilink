@@ -137,43 +137,48 @@ export function FarmerDashboardView({
   const balanceAmount = grossValue - advanceAmount - transportCost
   const extraIncome = (price - mandiPrice) * farmerCommittedKg
 
-  const buyerDemands = [
+  // Dynamic baseline demands with current year/dates used as initial state before fetch
+  const nowMs = Date.now()
+  const initialDemands = [
     {
-      id: 'dem-tomato',
+      id: 'ord-tomato-101',
       crop: 'Tomato',
-      buyer: 'Civil Hospital Trust Kitchen',
+      buyer: 'Civil Hospital Trust Kitchen, Anand',
       targetKg: 500,
+      committedKg: 350,
       stillNeededKg: 150,
       pricePerKg: 24,
-      deliveryDate: '18 Oct 2025',
+      deliveryDate: new Date(nowMs + 86400000 * 4).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       badge: 'Urgent Need',
       image: '/crops/tomato.png',
     },
     {
-      id: 'dem-wheat',
+      id: 'ord-wheat-102',
       crop: 'Wheat',
       buyer: 'Jan Poshan Kendra · FPS 214',
       targetKg: 1200,
+      committedKg: 900,
       stillNeededKg: 300,
       pricePerKg: 26,
-      deliveryDate: '25 Oct 2025',
+      deliveryDate: new Date(nowMs + 86400000 * 7).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       badge: 'Bulk Sourcing',
       image: '/crops/wheat.png',
     },
     {
-      id: 'dem-onion',
+      id: 'ord-onion-103',
       crop: 'Onion',
       buyer: 'Kheda Community Hostel Mess',
       targetKg: 400,
+      committedKg: 220,
       stillNeededKg: 180,
       pricePerKg: 22,
-      deliveryDate: '22 Oct 2025',
+      deliveryDate: new Date(nowMs + 86400000 * 5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
       badge: 'Community Pool',
       image: '/crops/onion.png',
     },
   ]
 
-  const [liveDemands, setLiveDemands] = useState(buyerDemands)
+  const [liveDemands, setLiveDemands] = useState(initialDemands)
 
   useEffect(() => {
     let mounted = true
@@ -188,60 +193,112 @@ export function FarmerDashboardView({
             const cropKey = String(cropRaw).toLowerCase()
             const img = cropImages[cropKey] || '/crops/paddy.png'
             const target = Number(o.qty_target_kg || o.quantity_required || 1000)
-            const stillNeeded = Math.round(target * 0.45)
-            const dateStr = o.delivery_date
-              ? new Date(o.delivery_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-              : '25 Oct 2025'
+            const committed = Number(o.qty_committed_kg || 0)
+            const stillNeeded = Math.max(0, target - committed)
+            const deliveryDateObj = o.delivery_date ? new Date(o.delivery_date) : new Date(Date.now() + 86400000 * 5)
+            const dateStr = deliveryDateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
             return {
               id: o.id || `dem-${Math.random()}`,
               crop: cropRaw.charAt(0).toUpperCase() + cropRaw.slice(1).toLowerCase(),
               buyer: o.buyer_name || o.delivery_location || 'Institutional Buyer',
               targetKg: target,
+              committedKg: committed,
               stillNeededKg: stillNeeded,
               pricePerKg: Number(o.price_per_kg || 28),
               deliveryDate: dateStr,
-              badge: o.status === 'AGGREGATED' ? 'Aggregated' : o.status === 'FUNDED' ? 'Escrow Secured' : 'Open Sourcing',
+              badge: stillNeeded === 0 || o.status === 'AGGREGATED' ? 'Fulfilled' : o.status === 'FUNDED' ? 'Escrow Secured' : 'Open Sourcing',
               image: img,
             }
           })
-          setLiveDemands(() => {
-            const map = new Map<string, any>()
-            for (const def of buyerDemands) {
-              map.set(def.id, def)
-            }
-            for (const m of mapped) {
-              map.set(m.id, m)
-            }
-            return Array.from(map.values())
-          })
+          setLiveDemands(mapped)
         }
       } catch {}
     }
 
     fetchOrders()
-    const timer = setInterval(fetchOrders, 4000)
+    // Poll every 2.5s for seamless multi-user live updates
+    const timer = setInterval(fetchOrders, 2500)
     const handleOrderCreated = () => fetchOrders()
-    if (typeof window !== 'undefined') {
-      window.addEventListener('agrilink:order-created', handleOrderCreated)
-    }
+
+    window.addEventListener('agrilink:order-created', handleOrderCreated)
+
+    // Cross-tab real-time communication via BroadcastChannel
+    let bc: BroadcastChannel | null = null
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('agrilink_sync')
+        bc.onmessage = () => {
+          if (mounted) fetchOrders()
+        }
+      }
+    } catch {}
 
     return () => {
       mounted = false
       clearInterval(timer)
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('agrilink:order-created', handleOrderCreated)
-      }
+      window.removeEventListener('agrilink:order-created', handleOrderCreated)
+      try {
+        bc?.close()
+      } catch {}
     }
   }, [])
 
-  const handleCommitDemand = (demandId: string, cropName: string, rate: number) => {
+  const handleCommitDemand = async (demandId: string, cropName: string, rate: number, openCapacity?: number) => {
     setCommittingId(demandId)
-    setTimeout(() => {
+    try {
+      const commitQty = Math.min(openCapacity !== undefined && openCapacity > 0 ? openCapacity : 100, 100)
+
+      // 1. Send live commitment to backend API
+      await fetch(`/api/orders/${demandId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'farmer_commit',
+          farmerName,
+          farmerId: 'f-ramesh-101',
+          crop: cropName,
+          committedKg: commitQty,
+        }),
+      }).catch(() => null)
+
+      // 2. Update local state optimistically
       setDemandCommitted((prev) => ({ ...prev, [demandId]: true }))
-      setCommittingId(null)
-      setSuccessToast(`Harvest allocation confirmed for ${cropName} at ₹${rate}/kg! Confirmation SMS sent.`)
+      setLiveDemands((prev) =>
+        prev.map((d) => {
+          if (d.id === demandId) {
+            const newNeeded = Math.max(0, d.stillNeededKg - commitQty)
+            return {
+              ...d,
+              stillNeededKg: newNeeded,
+              badge: newNeeded === 0 ? 'Fulfilled' : d.badge,
+            }
+          }
+          return d
+        })
+      )
+
+      // 3. Broadcast real-time update to all tabs and windows
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'COMMITMENT_UPDATED', orderId: demandId, commitQty })
+          bc.close()
+        } catch {}
+      }
+
+      setSuccessToast(
+        lang === 'hi'
+          ? `${cropName} के लिए ${commitQty} किलो का आवंटन पक्का हुआ! भाव: ₹${rate}/किलो।`
+          : `Harvest commitment of ${commitQty} KG confirmed for ${cropName} at ₹${rate}/kg! Confirmation SMS sent.`
+      )
       setTimeout(() => setSuccessToast(null), 5000)
-    }, 600)
+    } catch {
+      setSuccessToast('Failed to record harvest commitment. Please try again.')
+      setTimeout(() => setSuccessToast(null), 4000)
+    } finally {
+      setCommittingId(null)
+    }
   }
 
   // Bilingual UI labels for Farmer clarity
@@ -813,14 +870,14 @@ export function FarmerDashboardView({
                     </div>
 
                     <div className="mt-5 pt-4 border-t border-border">
-                      {isCommitted ? (
+                      {isCommitted || demand.stillNeededKg === 0 ? (
                         <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 py-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                           <CheckCircle2 className="size-4" />
-                          <span>Allocation Confirmed</span>
+                          <span>{demand.stillNeededKg === 0 ? 'Demand 100% Fulfilled' : 'Allocation Confirmed'}</span>
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleCommitDemand(demand.id, demand.crop, demand.pricePerKg)}
+                          onClick={() => handleCommitDemand(demand.id, demand.crop, demand.pricePerKg, demand.stillNeededKg)}
                           disabled={isCommitting}
                           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-2.5 text-xs font-bold hover:bg-primary/90 transition-colors shadow-xs"
                         >

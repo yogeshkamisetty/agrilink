@@ -550,11 +550,15 @@ export function AdminPortal() {
         `Batch ${batchCode} consolidated from ${contributions.length} smallholders (${totalAllocatedKg} KG)! TSP collection runway dispatched via ${vehicleStats.name} (${vehicleStats.km} km, ${vehicleStats.fuelSavedPct}% fuel saved).`
       )
       setRouteDispatched(true)
-
       await fetchLiveFeeds(false)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
         window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'ORDER_LOCKED', orderId: activeOrder.id })
+          bc.close()
+        } catch {}
       }
 
       setTimeout(() => setAggregationSuccess(null), 7000)
@@ -587,6 +591,14 @@ export function AdminPortal() {
         fetchLiveFeeds(false)
         setActiveTab('orders')
         setOrderFilter('small')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+          try {
+            const bc = new BroadcastChannel('agrilink_sync')
+            bc.postMessage({ type: 'ORDER_CREATED', order: data.order })
+            bc.close()
+          } catch {}
+        }
         setTimeout(() => setSimulationToast(null), 8000)
       }
     } catch {
@@ -616,6 +628,14 @@ export function AdminPortal() {
         fetchLiveFeeds(false)
         setActiveTab('orders')
         setOrderFilter('bulk')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+          try {
+            const bc = new BroadcastChannel('agrilink_sync')
+            bc.postMessage({ type: 'ORDER_CREATED', order: data.order })
+            bc.close()
+          } catch {}
+        }
         setTimeout(() => setSimulationToast(null), 8000)
       }
     } catch {
@@ -657,6 +677,14 @@ export function AdminPortal() {
           setSimulationToast(`🔄 Automated Fallback: ${json.message}`)
         } else if (!isSmall) {
           setSimulationToast(`🔄 Bulk Standby Promotion: ${json.message}`)
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+          try {
+            const bc = new BroadcastChannel('agrilink_sync')
+            bc.postMessage({ type: 'ORDER_FALLBACK', orderId: order.id })
+            bc.close()
+          } catch {}
         }
         setTimeout(() => setSimulationToast(null), 8000)
       }

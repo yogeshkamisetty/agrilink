@@ -42,6 +42,73 @@ export async function GET() {
           }
         })
       }
+
+      // Ensure full suite of baseline institutional demands (Tomato, Wheat, Onion) are available with live 2026 dates
+      const nowMs = Date.now()
+      const baselineDemands = [
+        {
+          id: 'ord-tomato-101',
+          crop: 'TOMATO',
+          qty_target_kg: 500,
+          qty_committed_kg: 350,
+          price_per_kg: 24,
+          delivery_date: new Date(nowMs + 86400000 * 4).toISOString().split('T')[0],
+          buyer_name: 'Civil Hospital Trust Kitchen, Anand',
+          status: 'SOURCING',
+        },
+        {
+          id: 'ord-wheat-102',
+          crop: 'WHEAT',
+          qty_target_kg: 1200,
+          qty_committed_kg: 900,
+          price_per_kg: 26,
+          delivery_date: new Date(nowMs + 86400000 * 7).toISOString().split('T')[0],
+          buyer_name: 'Jan Poshan Kendra · FPS 214',
+          status: 'SOURCING',
+        },
+        {
+          id: 'ord-onion-103',
+          crop: 'ONION',
+          qty_target_kg: 400,
+          qty_committed_kg: 220,
+          price_per_kg: 22,
+          delivery_date: new Date(nowMs + 86400000 * 5).toISOString().split('T')[0],
+          buyer_name: 'Kheda Community Hostel Mess',
+          status: 'SOURCING',
+        },
+      ]
+
+      for (const bd of baselineDemands) {
+        if (!orderList.some((o) => o.id === bd.id || o.crop === bd.crop)) {
+          try {
+            await db.query(`
+              insert into agrilink.orders (id, crop, qty_target_kg, qty_committed_kg, price_per_kg, delivery_date, status, created_at)
+              values ($1, $2, $3, $4, $5, $6::date, $7, now())
+              on conflict (id) do nothing
+            `, [bd.id, bd.crop, bd.qty_target_kg, bd.qty_committed_kg, bd.price_per_kg, bd.delivery_date, bd.status])
+          } catch {}
+
+          orderList.push({
+            id: bd.id,
+            crop: bd.crop,
+            crop_required: bd.crop,
+            qty_target_kg: bd.qty_target_kg,
+            quantity_required: bd.qty_target_kg,
+            qty_committed_kg: bd.qty_committed_kg,
+            price_per_kg: bd.price_per_kg,
+            delivery_date: bd.delivery_date,
+            buyer_name: bd.buyer_name,
+            delivery_location: bd.buyer_name,
+            code: `AG-${bd.crop.slice(0, 3)}-101`,
+            status: bd.status,
+            order_tier: 'BULK',
+            allocation_mode: 'POOL_AGGREGATION',
+            allocated_farmer_name: null,
+            allocated_farmer_id: null,
+            farmer_acceptance_status: 'PENDING',
+          })
+        }
+      }
     } catch {}
 
     // 2. Also check Supabase

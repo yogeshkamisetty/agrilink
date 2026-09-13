@@ -792,6 +792,11 @@ export function AgriLinkDashboard({
       setActionMessage('New order posted successfully to AgriLink registry!')
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+        try {
+          const bc = new BroadcastChannel('agrilink_sync')
+          bc.postMessage({ type: 'ORDER_CREATED' })
+          bc.close()
+        } catch {}
       }
       setNotifications((prev) => [
         {
