@@ -26,7 +26,7 @@ const FAQ_ITEMS: QuestionItem[] = [
     id: 'f1',
     role: 'Farmer',
     prompt: 'How do I commit my upcoming harvest to an order?',
-    answer: 'Open your Farmer Workspace, go to the Demand Forecast Board, find an upcoming demand for your crop, and click "Commit Harvest". Enter your available kg to lock in the guaranteed APMC mandi premium price.',
+    answer: 'Open your Farmer Dashboard, go to the Demand Forecast Board, find an upcoming demand for your crop, and click "Commit Harvest". Enter your available kg to lock in the guaranteed APMC mandi premium price.',
   },
   {
     id: 'f2',

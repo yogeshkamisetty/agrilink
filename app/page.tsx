@@ -22,7 +22,6 @@ type FeatureTab = 'gradecam' | 'logistics' | 'escrow' | 'trust'
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState<FeatureTab>('gradecam')
-  const [annualBilling, setAnnualBilling] = useState(true)
   const [monthlyVolumeKg, setMonthlyVolumeKg] = useState(15000)
   const [loggedInUser, setLoggedInUser] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
@@ -190,7 +189,7 @@ export default function HomePage() {
             </span>
             <span className="text-foreground">AgriLink</span>
             <span className="hidden rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide uppercase text-emerald-800 sm:inline-block">
-              SaaS
+              Direct Market
             </span>
           </Link>
 
@@ -206,9 +205,6 @@ export default function HomePage() {
             </Link>
             <Link href="#how-it-works" className="hover:text-foreground transition-colors">
               How It Works
-            </Link>
-            <Link href="#pricing" className="hover:text-foreground transition-colors">
-              Pricing
             </Link>
             <Link href="#testimonials" className="hover:text-foreground transition-colors">
               Case Studies
@@ -249,7 +245,7 @@ export default function HomePage() {
                   href={userRole === 'Coordinator' ? '/admin' : '/portal'}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
                 >
-                  <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Workspace'}</span>
+                  <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Dashboard'}</span>
                   <ArrowRight className="size-4" />
                 </Link>
               </div>
@@ -313,7 +309,6 @@ export default function HomePage() {
                     { href: '#verified-supply', label: 'Live Supply Registry' },
                     { href: '#roi-calculator', label: 'ROI & Spoilage Calculator' },
                     { href: '#how-it-works', label: 'How AgriLink Works' },
-                    { href: '#pricing', label: 'Commercial Plans' },
                     { href: '#testimonials', label: 'Field Case Studies' },
                   ].map((item) => (
                     <Link
@@ -340,7 +335,7 @@ export default function HomePage() {
                       onClick={() => setMobileMenuOpen(false)}
                       className="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground"
                     >
-                      <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Open Workspace'}</span>
+                      <span>{userRole === 'Coordinator' ? 'Admin Portal' : 'Open Dashboard'}</span>
                       <ArrowRight className="size-4" />
                     </Link>
                     <button
@@ -394,13 +389,13 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[1.15fr_.85fr] lg:items-center">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5 text-xs font-semibold text-primary shadow-xs">
-              <BadgeCheck className="size-4" /> Direct-From-Farm B2B Supply Chain SaaS
+              <BadgeCheck className="size-4" /> Direct From Farm to Fair Market
             </div>
             <h1 className="mt-6 max-w-3xl font-serif text-5xl font-bold leading-[1.05] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
               From harvest to a fair, verified market.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground">
-              AgriLink unifies farmers, FPOs, wholesale buyers, and logistics fleets into one transparent operating system—crop planning, AI visual grading, GPS routing, and instant bank settlements included.
+              AgriLink connects farmers, local farm groups, buyers, and transport into one simple, transparent platform — crop planning, quality grading, pickup routing, and direct bank payments included.
             </p>
 
             {loggedInUser ? (
@@ -409,7 +404,7 @@ export default function HomePage() {
                   href={userRole === 'Coordinator' ? '/admin' : '/portal'}
                   className="inline-flex w-full sm:w-auto items-center justify-center gap-2.5 rounded-xl bg-primary px-5 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold text-primary-foreground shadow-sm hover:opacity-95 transition-opacity text-center"
                 >
-                  <span>Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Workspace`}</span>
+                  <span>Welcome back, {loggedInUser} · Open {userRole === 'Coordinator' ? 'Admin Portal' : `${userRole || ''} Dashboard`}</span>
                   <ArrowRight className="size-4 shrink-0" />
                 </Link>
                 <button
@@ -445,7 +440,7 @@ export default function HomePage() {
                   href="/login"
                   className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-border bg-card px-5 sm:px-6 py-3 sm:py-3.5 text-sm sm:text-base font-semibold hover:bg-muted transition-colors shadow-2xs"
                 >
-                  Open live workspace
+                  Go to Dashboard
                 </Link>
               </div>
             )}
@@ -765,160 +760,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* SaaS Pricing Architecture */}
-      <section id="pricing" className="py-20 sm:py-28">
-        <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Commercial Tiers</p>
-            <h2 className="mt-3 font-serif text-4xl font-bold sm:text-5xl">
-              Transparent, Scalable SaaS Plans
-            </h2>
-            <p className="mt-4 text-base text-muted-foreground">
-              Predictable pricing for single FPOs, regional aggregators, and institutional enterprise buyers.
-            </p>
 
-            {/* Billing Toggle Switch */}
-            <div className="mt-8 inline-flex items-center gap-3 rounded-full border border-border bg-card p-1 shadow-2xs">
-              <button
-                onClick={() => setAnnualBilling(false)}
-                className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                  !annualBilling ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground'
-                }`}
-              >
-                Monthly billing
-              </button>
-              <button
-                onClick={() => setAnnualBilling(true)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                  annualBilling ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground'
-                }`}
-              >
-                Annual billing
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                  Save 20%
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Pricing Grid */}
-          <div className="mt-10 sm:mt-14 grid gap-6 sm:gap-8 lg:grid-cols-3 lg:items-stretch">
-            {/* Tier 1: FPO Community */}
-            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-5 sm:p-8 shadow-xs">
-              <div>
-                <h3 className="font-serif text-2xl font-bold">FPO Community</h3>
-                <p className="mt-1 text-xs text-muted-foreground">For budding FPOs & cooperative pilot hubs</p>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="font-serif text-4xl font-bold">₹0</span>
-                  <span className="text-xs text-muted-foreground">/ free forever</span>
-                </div>
-
-                <div className="mt-8 space-y-3.5 text-sm">
-                  {[
-                    'Up to 50 registered farmers',
-                    'SMS harvest notifications',
-                    'Manual lot grading & entry',
-                    'Basic route sheets & CSV export',
-                    'Community support forum',
-                  ].map((feat) => (
-                    <div key={feat} className="flex items-center gap-2.5">
-                      <Check className="size-4 text-primary shrink-0" />
-                      <span>{feat}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Link
-                href="/signup"
-                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                Start free pilot
-              </Link>
-            </div>
-
-            {/* Tier 2: Growth Aggregator (Featured) */}
-            <div className="relative flex flex-col justify-between rounded-3xl border-2 border-primary bg-card p-5 sm:p-8 shadow-md">
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary-foreground shadow-xs">
-                Most Popular
-              </div>
-
-              <div>
-                <h3 className="font-serif text-2xl font-bold">Growth Aggregator</h3>
-                <p className="mt-1 text-xs text-muted-foreground">For scaling FPOs, aggregators & regional hubs</p>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="font-serif text-4xl font-bold">
-                    {annualBilling ? '₹3,999' : '₹4,999'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">/ month</span>
-                </div>
-
-                <div className="mt-8 space-y-3.5 text-sm">
-                  {[
-                    'Unlimited farmers & crop profiles',
-                    'AI GradeCam™ automated visual inspection',
-                    'Automated WhatsApp & IVR voice alerts',
-                    'Multi-stop TSP route optimizer with Leaflet map',
-                    'Digital escrow clearing passbook',
-                    'One-click CSV dispatch & settlement manifests',
-                    'Priority phone & WhatsApp support',
-                  ].map((feat) => (
-                    <div key={feat} className="flex items-center gap-2.5">
-                      <Check className="size-4 text-primary shrink-0" />
-                      <span className="font-medium">{feat}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Link
-                href="/signup"
-                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl bg-primary px-4 py-3 text-center text-sm font-semibold text-primary-foreground shadow-xs hover:opacity-95 transition-opacity"
-              >
-                Start 14-day free trial
-              </Link>
-            </div>
-
-            {/* Tier 3: Enterprise Buyer */}
-            <div className="flex flex-col justify-between rounded-3xl border border-border bg-card p-5 sm:p-8 shadow-xs">
-              <div>
-                <h3 className="font-serif text-2xl font-bold">Enterprise Buyer</h3>
-                <p className="mt-1 text-xs text-muted-foreground">For institutional kitchens, retail chains & processors</p>
-                <div className="mt-6 flex items-baseline gap-1">
-                  <span className="font-serif text-4xl font-bold">
-                    {annualBilling ? '₹11,999' : '₹14,999'}
-                  </span>
-                  <span className="text-xs text-muted-foreground">/ month</span>
-                </div>
-
-                <div className="mt-8 space-y-3.5 text-sm">
-                  {[
-                    'Dedicated cold-chain logistics routing',
-                    'Custom Quality SLA & dispute guarantees',
-                    'REST API & Webhooks for ERP/SAP integration',
-                    'Multi-organization buyer sub-accounts',
-                    'AGMARKNET live adapter benchmark feeds',
-                    'Dedicated Key Account Manager',
-                    '24/7 SLA with 99.9% uptime guarantee',
-                  ].map((feat) => (
-                    <div key={feat} className="flex items-center gap-2.5">
-                      <Check className="size-4 text-primary shrink-0" />
-                      <span>{feat}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <Link
-                href="/signup"
-                className="mt-8 flex min-h-[44px] items-center justify-center rounded-xl border border-border px-4 py-3 text-center text-sm font-semibold hover:bg-muted transition-colors"
-              >
-                Contact Enterprise Sales
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Enterprise Standards & Compliance Grid */}
       <section className="border-t border-border bg-[#fcfbf7] py-14">
@@ -1021,7 +863,7 @@ export default function HomePage() {
                 AgriLink
               </Link>
               <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                India&apos;s accountable agricultural supply chain SaaS platform. Connecting farmers, FPOs, wholesale buyers, and logistics networks with AI quality inspection and instant bank settlements.
+                India&apos;s trusted farm-to-market platform. Connecting farmers, local farm groups, buyers, and transport with quality grading and direct bank payments.
               </p>
               <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <MapPin className="size-3.5 text-primary" /> Anand District Innovation Pilot, Gujarat

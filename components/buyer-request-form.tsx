@@ -49,7 +49,7 @@ export function BuyerRequestForm() {
   return (
     <main className="mx-auto max-w-xl p-3.5 py-8 sm:p-5 sm:py-12">
       <section className="rounded-3xl border border-border bg-card p-4 sm:p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Buyer workspace</p>
+        <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Buyer dashboard</p>
         <h1 className="mt-2 font-serif text-2xl sm:text-4xl">Request verified produce</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Orders up to 50 kg can proceed normally. Larger requests need a purpose and administrator approval.

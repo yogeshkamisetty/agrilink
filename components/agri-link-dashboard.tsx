@@ -1210,7 +1210,7 @@ export function AgriLinkDashboard({
             </div>
 
             <div className="hidden h-6 w-px bg-border sm:block" />
-            <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold" title={role === 'Farmer' ? 'Farmer Workspace' : role === 'Buyer' ? 'Buyer Workspace' : 'FPO Coordinator'}>
+            <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold" title={role === 'Farmer' ? 'Farmer Dashboard' : role === 'Buyer' ? 'Buyer Dashboard' : 'FPO Coordinator'}>
               <span className={`size-2 rounded-full ${role === 'Farmer' ? 'bg-emerald-500' : role === 'Buyer' ? 'bg-blue-500' : 'bg-purple-500'}`} />
               <span className="hidden sm:inline text-foreground">
                 {role === 'Farmer' ? '🌾 Farmer' : role === 'Buyer' ? '🏢 Buyer' : '🛡️ Coordinator'}
@@ -1240,7 +1240,7 @@ export function AgriLinkDashboard({
               <button
                 onClick={onSignOut}
                 className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors"
-                title="Sign out of workspace"
+                title="Sign out"
               >
                 <LogOut className="size-3.5" />
                 <span className="hidden xl:inline">{t.signOut}</span>
@@ -1611,7 +1611,7 @@ function Sidebar({
     <div className={`flex ${mobile ? 'flex-col' : 'flex-1 flex-col justify-between'} px-3 py-6`}>
       <nav className="space-y-1">
         <div className="mb-4 px-3 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          {role === 'Farmer' ? '🌾 Kisan Portal' : `${role} workspace`}
+          {role === 'Farmer' ? '🌾 Kisan Portal' : `${role} Dashboard`}
         </div>
         {navItems
           .filter((item) => roleNav[role].includes(item.label as Screen))
@@ -1720,7 +1720,7 @@ function Sidebar({
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-colors shadow-sm"
           >
             <LogOut className="size-4" />
-            <span>{t?.signOut || 'Sign out of workspace'}</span>
+            <span>{t?.signOut || 'Sign out'}</span>
           </button>
         )}
       </div>
@@ -1778,7 +1778,7 @@ function ScreenHeader({
       <div>
         <div className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">
           <span className="size-2 rounded-full bg-primary" />
-          {role} workspace · live backend engine
+          {role} Dashboard · Live Operations
         </div>
         <h2 className="max-w-2xl font-serif text-4xl font-bold tracking-tight text-balance sm:text-5xl">{copy[activeNav]}</h2>
       </div>

@@ -124,7 +124,7 @@ export function OnboardingForm() {
         <p className='text-xs font-semibold uppercase tracking-[.2em] text-primary'>Profile setup</p>
         <h1 className='mt-2 font-serif text-2xl sm:text-4xl'>Tell us about your work</h1>
         <p className='mt-2 text-sm text-muted-foreground'>
-          Your mobile number is already verified. Aadhaar trust verification can be completed from the workspace at any time.
+          Your mobile number is already verified. Aadhaar trust verification can be completed from the dashboard at any time.
         </p>
 
         <div
@@ -315,7 +315,7 @@ export function OnboardingForm() {
             className='sm:col-span-2 min-h-[44px] rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60 hover:opacity-95 transition-opacity'
           >
             {busy && <Loader2 className='mr-2 inline size-4 animate-spin' />}
-            {busy ? 'Saving profile…' : 'Open workspace'}
+            {busy ? 'Saving profile…' : 'Open dashboard'}
           </button>
         </form>
       </section>

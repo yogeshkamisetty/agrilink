@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       await recordUserLogin(targetPhone)
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = user.role === 'admin' ? '/admin' : '/'
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
 
       return NextResponse.json({
         ok: true,
@@ -170,7 +170,7 @@ export async function POST(request: Request) {
       await recordUserLogin(phone)
 
       const sessionToken = createSessionToken(user)
-      const redirectUrl = user.role === 'admin' ? '/admin' : '/'
+      const redirectUrl = user.role === 'admin' ? '/admin' : '/portal'
 
       return NextResponse.json({
         ok: true,
@@ -238,7 +238,7 @@ export async function POST(request: Request) {
       })
 
       const sessionToken = createSessionToken(newUser)
-      const redirectUrl = newUser.role === 'admin' ? '/admin' : '/'
+      const redirectUrl = newUser.role === 'admin' ? '/admin' : '/portal'
 
       return NextResponse.json({
         ok: true,

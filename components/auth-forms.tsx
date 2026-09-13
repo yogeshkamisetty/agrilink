@@ -89,7 +89,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
 
     const destination = userRole === 'admin' || mappedRole === 'Coordinator' || phoneUsed === '9825000000'
       ? '/admin'
-      : (data.redirectUrl || '/')
+      : (data.redirectUrl && data.redirectUrl !== '/' ? data.redirectUrl : '/portal')
     if (typeof window !== 'undefined') {
       window.location.href = destination
     } else {
@@ -222,8 +222,8 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         </h1>
         <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-muted-foreground">
           {newUser
-            ? 'Open to all farmers, institutional buyers, and cooperatives across India. Zero SMS wait times.'
-            : 'Enter your 10-digit mobile number and 4-digit security MPIN to enter your portal.'}
+            ? 'Open to all farmers, buyers, and local cooperatives across India. Quick mobile registration.'
+            : 'Enter your 10-digit mobile number and 4-digit security MPIN to open your dashboard.'}
         </p>
 
         {/* Form: Login or Signup */}
@@ -431,7 +431,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             className="w-full rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground disabled:opacity-60 shadow-xs hover:bg-primary/95 transition-colors"
           >
             {busy && <Loader2 className="mr-2 inline size-4 animate-spin" />}
-            {newUser ? 'Create Account & Enter Portal' : 'Sign in to Workspace'}
+            {newUser ? 'Create Account & Open Dashboard' : 'Sign in to Dashboard'}
           </button>
         </form>
 

@@ -582,7 +582,7 @@ export function AdminPortal() {
             </Link>
             <span className="text-xs text-muted-foreground">·</span>
             <Link href="/portal" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-              Workspace
+              Dashboard
             </Link>
             <span className="text-xs text-muted-foreground">·</span>
             <button
@@ -771,7 +771,7 @@ export function AdminPortal() {
           </div>
         )}
 
-        {/* Aggregation Workspace Body */}
+        {/* Aggregation Dashboard Body */}
         <div className="p-5 sm:p-7 space-y-6">
           {/* Success Banner */}
           {aggregationSuccess && (
