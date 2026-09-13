@@ -18,7 +18,9 @@ import {
   Receipt,
   Check,
   RefreshCw,
-  ShoppingBag
+  ShoppingBag,
+  X,
+  Zap,
 } from 'lucide-react'
 import { Language, getT } from '@/lib/i18n'
 import { GradeCamCamera } from './gradecam-camera'
@@ -74,6 +76,54 @@ export function FarmerDashboardView({
   const [demandCommitted, setDemandCommitted] = useState<Record<string, boolean>>({})
   const [committingId, setCommittingId] = useState<string | null>(null)
   const [successToast, setSuccessToast] = useState<string | null>(null)
+
+  // SIH 2026 Direct Order Allocation State for Smallholders
+  const [allocationStatus, setAllocationStatus] = useState<'PENDING' | 'ACCEPTED' | 'REJECTED'>('PENDING')
+  const [allocationBusy, setAllocationBusy] = useState(false)
+
+  const handleAcceptAllocation = async () => {
+    setAllocationBusy(true)
+    try {
+      if (order?.id) {
+        await fetch(`/api/orders/${order.id}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'farmer_accept' }),
+        }).catch(() => null)
+      }
+      setAllocationStatus('ACCEPTED')
+      setSuccessToast(
+        lang === 'hi'
+          ? 'फसल आवंटन स्वीकार कर लिया गया है! 30% अग्रिम बैंक खाते में जमा होगा।'
+          : 'Order allocation accepted! 30% advance will be deposited to your bank account upon weighment.'
+      )
+      setTimeout(() => setSuccessToast(null), 6000)
+    } finally {
+      setAllocationBusy(false)
+    }
+  }
+
+  const handleRejectAllocation = async () => {
+    setAllocationBusy(true)
+    try {
+      if (order?.id) {
+        await fetch(`/api/orders/${order.id}/action`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'farmer_reject', crop: order.crop, qtyTargetKg: order.qty_target_kg }),
+        }).catch(() => null)
+      }
+      setAllocationStatus('REJECTED')
+      setSuccessToast(
+        lang === 'hi'
+          ? 'ऑर्डर रद्द कर दिया गया। प्रणाली ने स्वतः इसे अगले निकटतम किसान को भेज दिया है।'
+          : 'Allocation released. System automatically re-routed this request to the next nearest farmer in your cluster.'
+      )
+      setTimeout(() => setSuccessToast(null), 6000)
+    } finally {
+      setAllocationBusy(false)
+    }
+  }
 
   const t = getT(lang)
   const farmerName = currentUserName?.trim() || 'Ramesh Kumar'
@@ -354,6 +404,67 @@ export function FarmerDashboardView({
                 98.4% Purity · Zero Price Cut
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SIH 2026: Direct Purchase Order Allocation Card for Farmer */}
+      <div className="rounded-3xl border-2 border-primary/40 bg-card p-5 sm:p-6 shadow-md overflow-hidden relative">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                ⚡ New Farmgate Purchase Order Allocated to You
+              </span>
+              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                DoCA Direct Market Protocol
+              </span>
+            </div>
+            <h3 className="font-serif text-xl sm:text-2xl font-bold text-foreground">
+              {crop} (धान) · {order?.qty_target_kg && order.qty_target_kg <= 50 ? order.qty_target_kg : 350} KG requested by {buyer?.name || 'PM POSHAN Central Kitchen'}
+            </h3>
+            <p className="text-xs sm:text-sm text-muted-foreground flex flex-wrap items-center gap-3">
+              <span>Guaranteed Rate: <strong className="text-primary font-mono">₹{price}/kg</strong> (APMC Mandi: ₹22/kg)</span>
+              <span>·</span>
+              <span>Collection: <strong>Tomorrow 07:15 AM · Tata Ace</strong></span>
+              <span>·</span>
+              <span>Advance: <strong className="text-emerald-600">30% on weighment</strong></span>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            {allocationStatus === 'PENDING' ? (
+              <>
+                <button
+                  onClick={handleAcceptAllocation}
+                  disabled={allocationBusy}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
+                >
+                  <Check className="size-4" />
+                  <span>{lang === 'hi' ? 'स्वीकार करें' : 'Accept Order Allocation'}</span>
+                </button>
+                <button
+                  onClick={handleRejectAllocation}
+                  disabled={allocationBusy}
+                  className="inline-flex items-center gap-1.5 rounded-2xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer"
+                  title="Decline order and automatically re-route to next nearest farmer in cluster"
+                >
+                  <X className="size-4" />
+                  <span>{lang === 'hi' ? 'अस्वीकार करें (अगले किसान को भेजें)' : 'Decline (Pass to Next)'}</span>
+                </button>
+              </>
+            ) : allocationStatus === 'ACCEPTED' ? (
+              <div className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                <span>Allocation Accepted · Scheduled for Tomorrow</span>
+              </div>
+            ) : (
+              <div className="inline-flex items-center gap-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-amber-800 dark:text-amber-300">
+                <RefreshCw className="size-4 text-amber-600" />
+                <span>Declined · Auto-re-routed to Next Nearest Farmer</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

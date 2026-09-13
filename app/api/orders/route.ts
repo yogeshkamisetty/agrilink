@@ -22,6 +22,7 @@ export async function GET() {
         orderList = rows.map((o) => {
           const target = Number(o.qty_target_kg || o.quantity_required || 1000)
           const committed = o.status === 'AGGREGATED' ? target : Number(o.db_committed_kg || o.qty_committed_kg || 0)
+          const isSmall = target <= 50
           return {
             ...o,
             crop: (o.crop || o.crop_required || 'PADDY').toUpperCase(),
@@ -33,6 +34,11 @@ export async function GET() {
             buyer_name: o.buyer_name || 'PM POSHAN Central Kitchen',
             delivery_location: o.delivery_location || o.buyer_name || 'Central Kitchen Depot',
             code: o.code || `AG-${String(o.id || '1001').slice(-4).toUpperCase()}`,
+            order_tier: isSmall ? 'SMALL' : 'BULK',
+            allocation_mode: isSmall ? 'AUTO_ALLOCATED' : 'POOL_AGGREGATION',
+            allocated_farmer_name: o.allocated_farmer_name || (isSmall ? 'Jignesh Chauhan (Bakrol · 1.8 km)' : null),
+            allocated_farmer_id: o.allocated_farmer_id || (isSmall ? 'f-jignesh-104' : null),
+            farmer_acceptance_status: o.farmer_acceptance_status || 'PENDING',
           }
         })
       }
@@ -51,6 +57,7 @@ export async function GET() {
             if (!orderList.some((o) => o.id === item.id)) {
               const target = Number(item.quantity_required || 1000)
               const committed = item.status === 'AGGREGATED' ? target : 0
+              const isSmall = target <= 50
               orderList.push({
                 ...item,
                 crop: (item.crop_required || 'PADDY').toUpperCase(),
@@ -61,6 +68,11 @@ export async function GET() {
                 price_per_kg: 28,
                 buyer_name: item.delivery_location || 'Institutional Buyer',
                 code: `AG-${String(item.id || '1001').slice(-4).toUpperCase()}`,
+                order_tier: isSmall ? 'SMALL' : 'BULK',
+                allocation_mode: isSmall ? 'AUTO_ALLOCATED' : 'POOL_AGGREGATION',
+                allocated_farmer_name: isSmall ? 'Jignesh Chauhan (Bakrol · 1.8 km)' : null,
+                allocated_farmer_id: isSmall ? 'f-jignesh-104' : null,
+                farmer_acceptance_status: 'PENDING',
               })
             }
           }
@@ -118,7 +130,17 @@ export async function POST(request: Request) {
       }
     }
 
-    return Response.json({ order })
+    const isSmall = qtyTargetKg <= 50
+    const enrichedOrder = {
+      ...order,
+      order_tier: isSmall ? 'SMALL' : 'BULK',
+      allocation_mode: isSmall ? 'AUTO_ALLOCATED' : 'POOL_AGGREGATION',
+      allocated_farmer_name: isSmall ? 'Jignesh Chauhan (Bakrol · 1.8 km)' : null,
+      allocated_farmer_id: isSmall ? 'f-jignesh-104' : null,
+      farmer_acceptance_status: 'PENDING',
+    }
+
+    return Response.json({ order: enrichedOrder })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to create order'
     return Response.json({ error: message }, { status: 400 })
