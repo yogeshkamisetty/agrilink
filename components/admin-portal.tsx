@@ -95,6 +95,9 @@ export type LiveOrder = {
   allocated_farmer_distance_km?: number | null
   farmer_acceptance_status?: 'PENDING' | 'ACCEPTED' | 'REJECTED'
   declined_history?: string[]
+  purpose?: string | null
+  review_status?: 'pending' | 'approved' | 'rejected' | null
+  admin_note?: string | null
 }
 
 type LiveFarmer = {
@@ -175,6 +178,10 @@ export function AdminPortal() {
 
   // Simulation Feedback Banner for Judges
   const [simulationToast, setSimulationToast] = useState<string | null>(null)
+
+  // Compliance Desk State for >50 kg Bulk Orders
+  const [validatingOrderId, setValidatingOrderId] = useState<string | null>(null)
+  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
 
   // Bolna AI Calling Agent Confirmation States
   const [bolnaModalOpen, setBolnaModalOpen] = useState(false)
@@ -331,6 +338,15 @@ export function AdminPortal() {
     }
     return orders
   }, [orders, orderFilter])
+
+  // Pending compliance orders (>50 kg awaiting admin verification of purpose)
+  const pendingComplianceOrders = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        Number(o.qty_target_kg || o.quantity_required || 0) > SMALL_ORDER_THRESHOLD_KG &&
+        (o.review_status === 'pending' || o.status === 'PENDING_ADMIN_REVIEW')
+    )
+  }, [orders])
 
   // Farmers matching active crop
   const matchedFarmers = useMemo(() => {
@@ -618,12 +634,15 @@ export function AdminPortal() {
           pricePerKg: 28,
           deliveryDate: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
           buyerId: 'buyer-school-001',
+          buyerName: 'PM POSHAN Central Kitchen, Anand',
+          deliveryLocation: 'Kitchen Block, Nana Bazaar, Vallabh Vidyanagar, Anand',
+          purpose: 'PM POSHAN Central Kitchen weekly mid-day meal buffer quota for 14 government schools in Anand district (1,100 students).',
         }),
       })
       const data = await res.json()
       if (data.order) {
         setSimulationToast(
-          `🛡️ Bulk Institutional Demand Created (1,200 kg Paddy): Flagged for Admin Verification & Multi-Smallholder Aggregation.`
+          `🛡️ Bulk Institutional Demand Created (1,200 kg Paddy): Purpose submitted and placed in Compliance Desk for validation.`
         )
         fetchLiveFeeds(false)
         setActiveTab('orders')
@@ -632,7 +651,7 @@ export function AdminPortal() {
           window.dispatchEvent(new CustomEvent('agrilink:order-created'))
           try {
             const bc = new BroadcastChannel('agrilink_sync')
-            bc.postMessage({ type: 'ORDER_CREATED', order: data.order })
+            bc.postMessage({ type: 'ORDER_CREATED', order: data.order, isBulk: true })
             bc.close()
           } catch {}
         }
@@ -640,6 +659,54 @@ export function AdminPortal() {
       }
     } catch {
       alert('Unable to simulate bulk demand.')
+    }
+  }
+
+  // COMPLIANCE DESK: Admin Validates or Rejects Bulk Order Purpose
+  async function handleValidateBulkOrder(orderId: string, decision: 'approved' | 'rejected') {
+    setValidatingOrderId(orderId)
+    try {
+      const note =
+        adminNotes[orderId] ||
+        (decision === 'approved'
+          ? 'Verified institutional buyer purpose and approved for multi-farmer aggregation.'
+          : 'Order purpose does not meet institutional procurement compliance.')
+
+      const res = await fetch(`/api/orders/${orderId}/action`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'admin_validate_bulk',
+          decision,
+          note,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok && data.ok) {
+        // Broadcast across all open tabs (BuyerMarketplace and other admin tabs)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+          try {
+            const bc = new BroadcastChannel('agrilink_sync')
+            bc.postMessage({ type: 'ORDER_VALIDATED', orderId, decision, note })
+            bc.close()
+          } catch {}
+        }
+
+        setSimulationToast(
+          decision === 'approved'
+            ? `✅ Bulk Demand #${orderId.slice(-4).toUpperCase()} Validated & Approved! Sourcing unlocked.`
+            : `❌ Bulk Demand #${orderId.slice(-4).toUpperCase()} Rejected by Compliance Desk.`
+        )
+        setTimeout(() => setSimulationToast(null), 8000)
+        await fetchLiveFeeds(false)
+      } else {
+        alert(data.error || 'Failed to update order review.')
+      }
+    } catch {
+      alert('Network error while validating order.')
+    } finally {
+      setValidatingOrderId(null)
     }
   }
 
@@ -958,7 +1025,153 @@ export function AdminPortal() {
       {/* TAB 1: BUYER DEMANDS & LIVE ORDER FLOW */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'orders' && (
-        <div className="space-y-5">
+        <div className="space-y-6">
+          {/* 🛡️ BUYER LARGE ORDERS COMPLIANCE DESK (>50 KG PURPOSE VERIFICATION) */}
+          <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card to-background p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-amber-500/20 p-2.5 text-amber-600 dark:text-amber-400 shrink-0">
+                  <ShieldCheck className="size-6" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-serif text-lg sm:text-xl font-bold text-foreground">
+                      Buyer Large Orders Compliance Desk (&gt;50 kg Purpose Verification)
+                    </h3>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                        pendingComplianceOrders.length > 0
+                          ? 'bg-amber-500/20 border border-amber-500/30 text-amber-900 dark:text-amber-200 animate-pulse'
+                          : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200'
+                      }`}
+                    >
+                      {pendingComplianceOrders.length > 0
+                        ? `⏳ ${pendingComplianceOrders.length} Demands Awaiting Purpose Verification`
+                        : '✓ All Large Demands Verified'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground max-w-3xl">
+                    Under AgriLink fair procurement policy, buyers placing orders exceeding 50 kg must declare their institutional procurement purpose. As FPO Administrator, verify the justification before releasing the demand for multi-smallholder aggregation.
+                  </p>
+                </div>
+              </div>
+
+              {pendingComplianceOrders.length === 0 && (
+                <button
+                  onClick={handleSimulateBulkOrder}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 text-xs font-bold transition-colors cursor-pointer"
+                  title="Simulate a >50 kg bulk demand with purpose to test real-time admin validation"
+                >
+                  <Boxes className="size-3.5" />
+                  <span>+ Test &gt;50 kg Demand with Reason</span>
+                </button>
+              )}
+            </div>
+
+            {/* Pending Demands Cards or All Clear State */}
+            {pendingComplianceOrders.length > 0 ? (
+              <div className="mt-4 space-y-4">
+                {pendingComplianceOrders.map((ord) => {
+                  const targetKg = Number(ord.qty_target_kg || ord.quantity_required || 100)
+                  const cropName = ord.crop || ord.crop_required || 'PADDY'
+                  const code = ord.code || `AG-${String(ord.id).slice(-4).toUpperCase()}`
+                  const price = Number(ord.price_per_kg || 28)
+                  const totalEst = targetKg * price
+                  const isValidating = validatingOrderId === ord.id
+
+                  return (
+                    <div
+                      key={ord.id}
+                      className="rounded-2xl border border-amber-500/40 bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-amber-500/60"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-secondary text-foreground">
+                              {code}
+                            </span>
+                            <span className="text-xs font-bold text-foreground">
+                              {ord.buyer_name || 'Institutional Buyer'}
+                            </span>
+                            <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                              {cropName} · {targetKg.toLocaleString()} KG (Bulk Demand)
+                            </span>
+                            <span className="text-xs font-mono text-muted-foreground">
+                              Escrow Budget: ₹{totalEst.toLocaleString()} (₹{price}/kg)
+                            </span>
+                          </div>
+
+                          {/* Stated Purpose Quote Box */}
+                          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
+                            <div className="flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-200 mb-1">
+                              <FileText className="size-3.5" />
+                              <span>Buyer Stated Purpose for Bulk Order (&gt;50 kg):</span>
+                            </div>
+                            <blockquote className="italic text-foreground font-medium pl-2 border-l-2 border-amber-500/50">
+                              &ldquo;{ord.purpose || 'Institutional hostel & kitchen weekly produce procurement quota'}&rdquo;
+                            </blockquote>
+                            {ord.delivery_location && (
+                              <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
+                                <MapPin className="size-3 text-primary" /> Delivery Target: {ord.delivery_location}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Admin Action Buttons & Note */}
+                        <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:min-w-[320px]">
+                          <input
+                            type="text"
+                            value={adminNotes[ord.id] ?? ''}
+                            onChange={(e) => setAdminNotes((prev) => ({ ...prev, [ord.id]: e.target.value }))}
+                            placeholder="Add admin remarks (optional)..."
+                            className="w-full sm:w-48 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              disabled={isValidating}
+                              onClick={() => handleValidateBulkOrder(ord.id, 'approved')}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
+                              title="Approve institutional purpose and release demand to multi-farmer pooling"
+                            >
+                              {isValidating ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Check className="size-3.5" />
+                              )}
+                              <span>Approve & Validate</span>
+                            </button>
+                            <button
+                              disabled={isValidating}
+                              onClick={() => handleValidateBulkOrder(ord.id, 'rejected')}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-2 text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+                              title="Reject bulk order purpose and decline demand"
+                            >
+                              <AlertCircle className="size-3.5" />
+                              <span>Reject</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/60 p-3.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                  <span>
+                    No bulk demands currently pending compliance review. All orders &gt;50 kg are in active sourcing or completed.
+                  </span>
+                </div>
+                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
+                  Real-time Listening Active
+                </span>
+              </div>
+            )}
+          </div>
+
           {/* Order Category Filters */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
@@ -1033,6 +1246,8 @@ export function AdminPortal() {
                   const isCurrent = selectedOrderId === ord.id
                   const cropName = ord.crop || ord.crop_required || 'PADDY'
                   const code = ord.code || `AG-${String(ord.id).slice(-4).toUpperCase()}`
+                  const isPendingReview = ord.review_status === 'pending' || ord.status === 'PENDING_ADMIN_REVIEW'
+                  const isRejected = ord.review_status === 'rejected' || ord.status === 'REJECTED'
 
                   return (
                     <tr
@@ -1073,9 +1288,14 @@ export function AdminPortal() {
                             <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary">
                               <Boxes className="size-3" /> Bulk Demand ({targetKg} kg)
                             </span>
-                            <span className="block text-[11px] text-muted-foreground">
-                              Requires Multi-Smallholder Pooling
-                            </span>
+                            {ord.purpose && (
+                              <span
+                                className="block text-[11px] text-muted-foreground truncate max-w-[220px]"
+                                title={ord.purpose}
+                              >
+                                Reason: &ldquo;{ord.purpose}&rdquo;
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1084,17 +1304,25 @@ export function AdminPortal() {
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                             ord.status === 'AGGREGATED'
                               ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                              : isPendingReview
+                              ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/30'
+                              : isRejected
+                              ? 'bg-destructive/15 text-destructive border border-destructive/30'
                               : isSmall
                               ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                              : 'bg-amber-500/15 text-amber-800 dark:text-amber-400'
+                              : 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
                           {ord.status === 'AGGREGATED' ? (
                             <>✓ Locked Batch</>
+                          ) : isPendingReview ? (
+                            <>⏳ Compliance Review Pending</>
+                          ) : isRejected ? (
+                            <>❌ Purpose Rejected</>
                           ) : isSmall ? (
                             <>⚡ Auto-Assigned</>
                           ) : (
-                            <>⏳ Pending Review</>
+                            <>✅ Purpose Approved</>
                           )}
                         </span>
                       </td>
@@ -1109,6 +1337,24 @@ export function AdminPortal() {
                               <RefreshCw className="size-3" />
                               <span>Decline Fallback</span>
                             </button>
+                          ) : isPendingReview ? (
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleValidateBulkOrder(ord.id, 'approved')}
+                                className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-xs font-bold shadow-xs transition-colors cursor-pointer"
+                                title="Approve institutional purpose"
+                              >
+                                <Check className="size-3" />
+                                <span>Approve</span>
+                              </button>
+                              <button
+                                onClick={() => handleValidateBulkOrder(ord.id, 'rejected')}
+                                className="inline-flex items-center gap-1 rounded-xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1 text-xs font-bold transition-colors cursor-pointer"
+                                title="Reject order purpose"
+                              >
+                                <AlertCircle className="size-3" />
+                              </button>
+                            </div>
                           ) : (
                             <button
                               onClick={() => {

@@ -3,9 +3,13 @@
 import { FormEvent, useState } from 'react'
 import { getAuthClient } from '@/lib/auth-client'
 
+import { BuyerMarketplace } from './buyer-marketplace'
+import { ShoppingBag, FileEdit } from 'lucide-react'
+
 const input = 'mt-2 w-full rounded-xl border border-border bg-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20'
 
 export function BuyerRequestForm() {
+  const [viewMode, setViewMode] = useState<'marketplace' | 'classic'>('marketplace')
   const [crop, setCrop] = useState('TOMATO')
   const [quantity, setQuantity] = useState('')
   const [purpose, setPurpose] = useState('')
@@ -13,6 +17,23 @@ export function BuyerRequestForm() {
   const [busy, setBusy] = useState(false)
 
   const large = Number(quantity) > 50
+
+  if (viewMode === 'marketplace') {
+    return (
+      <div>
+        <div className="mx-auto max-w-7xl mb-4 px-4 flex justify-end">
+          <button
+            onClick={() => setViewMode('classic')}
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1.5 py-1 px-2.5 rounded-lg border border-border bg-card"
+          >
+            <FileEdit className="size-3.5" />
+            <span>Switch to Classic Quick Form</span>
+          </button>
+        </div>
+        <BuyerMarketplace />
+      </div>
+    )
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()

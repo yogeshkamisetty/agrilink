@@ -230,6 +230,55 @@ export async function POST(
       })
     }
 
+    // Handle Action 5: Admin Validates / Reviews Buyer's Purpose for Bulk Order (> 50 kg)
+    if (action === 'admin_validate_bulk') {
+      const decision = body.decision === 'rejected' ? 'rejected' : 'approved'
+      const note = body.note || (decision === 'approved' ? 'Institutional purpose validated & approved by FPO Administrator' : 'Purchase reason rejected')
+      const adjustedQty = body.adjustedQty ? Number(body.adjustedQty) : null
+
+      try {
+        await db.exec(`
+          alter table agrilink.orders add column if not exists review_status text default 'approved';
+          alter table agrilink.orders add column if not exists admin_note text;
+        `).catch(() => null)
+
+        if (decision === 'approved') {
+          await db.query(
+            `update agrilink.orders
+             set review_status = 'approved',
+                 status = 'POSTED',
+                 admin_note = $2
+                 ${adjustedQty ? ', qty_target_kg = $3' : ''}
+             where id = $1`,
+            adjustedQty ? [id, note, adjustedQty] : [id, note]
+          )
+        } else {
+          await db.query(
+            `update agrilink.orders
+             set review_status = 'rejected',
+                 status = 'REJECTED',
+                 admin_note = $2
+             where id = $1`,
+            [id, note]
+          )
+        }
+      } catch (e) {
+        console.warn('DB admin_validate_bulk notice:', e)
+      }
+
+      return NextResponse.json({
+        ok: true,
+        action: 'admin_validate_bulk',
+        orderId: id,
+        decision,
+        note,
+        status: decision === 'approved' ? 'POSTED' : 'REJECTED',
+        message: decision === 'approved' 
+          ? `Bulk order #${id.slice(-4).toUpperCase()} approved and validated by administrator. Sourcing unlocked.` 
+          : `Bulk order #${id.slice(-4).toUpperCase()} rejected.`
+      })
+    }
+
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
   } catch (error) {
     return NextResponse.json(

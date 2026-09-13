@@ -5,7 +5,7 @@ import { useAgriLink } from '@/lib/hooks/use-agrilink'
 import {
   AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Boxes, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight,
   CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, Layers, LogOut, MapPin, Menu, MessageSquare, Mic, PackageCheck,
-  Pencil, Phone, PhoneCall, Plus, Printer, Receipt, Recycle, RefreshCw, Route, Send, ShieldCheck, Smartphone, Sparkles, Sprout, Star, Truck, Users, UtensilsCrossed, Volume2, Wallet, Wheat, X
+  Pencil, Phone, PhoneCall, Plus, Printer, Receipt, Recycle, RefreshCw, Route, Send, ShieldCheck, ShoppingBag, ArrowRight, Smartphone, Sparkles, Sprout, Star, Truck, Users, UtensilsCrossed, Volume2, Wallet, Wheat, X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { GradeCamCamera } from './gradecam-camera'
@@ -22,6 +22,7 @@ import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
 import { FarmerDashboardView } from './farmer-dashboard-view'
 import { BolnaCallModal } from './bolna-call-modal'
+import { BuyerMarketplace } from './buyer-marketplace'
 import { getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -1372,7 +1373,13 @@ export function AgriLinkDashboard({
               <ScreenHeader
                 role={role}
                 activeNav={activeNav}
-                onNew={() => setShowOrderForm(true)}
+                onNew={() => {
+                  if (role === 'Buyer') {
+                    go('Orders')
+                  } else {
+                    setShowOrderForm(true)
+                  }
+                }}
                 onDeclareHarvest={() => setShowHarvestModal(true)}
                 onOnboardFarmer={() => setShowOnboardFarmerModal(true)}
                 onReset={resetData}
@@ -1380,47 +1387,97 @@ export function AgriLinkDashboard({
               />
 
               {activeNav === 'Overview' && (
-                <Overview
-                  role={role}
-                  order={activeOrder}
-                  buyer={activeBuyer}
-                  committed={committed}
-                  target={target}
-                  progress={progress}
-                  notified={activeOrder?.status !== 'POSTED'}
-                  onNotify={handleNotify}
-                  onOrder={() => setShowOrderForm(true)}
-                  onDeclareHarvest={() => setShowHarvestModal(true)}
-                  onRoute={() => go('Routes')}
-                  busy={actionBusy}
-                  t={t}
-                />
+                <>
+                  <Overview
+                    role={role}
+                    order={activeOrder}
+                    buyer={activeBuyer}
+                    committed={committed}
+                    target={target}
+                    progress={progress}
+                    notified={activeOrder?.status !== 'POSTED'}
+                    onNotify={handleNotify}
+                    onOrder={() => {
+                      if (role === 'Buyer') {
+                        go('Orders')
+                      } else {
+                        setShowOrderForm(true)
+                      }
+                    }}
+                    onDeclareHarvest={() => setShowHarvestModal(true)}
+                    onRoute={() => go('Routes')}
+                    busy={actionBusy}
+                    t={t}
+                  />
+
+                  {role === 'Buyer' && (
+                    <div className="mt-8 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-background p-6 shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
+                              🛍️ Amazon & Flipkart Style Fresh Store
+                            </span>
+                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
+                              Instant Direct Sourcing
+                            </span>
+                          </div>
+                          <h3 className="mt-2 font-serif text-2xl font-bold">
+                            Source Fresh Farmgate Produce Direct from Smallholders
+                          </h3>
+                          <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-2xl">
+                            Verified quality, mandi-beating prices, and zero middleman commissions. Orders ≤50 kg auto-assign to nearest farms in seconds; orders &gt;50 kg enter rapid compliance verification.
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => go('Orders')}
+                          className="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-3 text-sm font-bold shadow-md hover:bg-primary/90 transition-transform active:scale-95 cursor-pointer"
+                        >
+                          <ShoppingBag className="size-4" />
+                          <span>Browse Produce Store</span>
+                          <ArrowRight className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {activeNav === 'Orders' && (
-                <Orders
-                  role={role}
-                  order={activeOrder}
-                  buyer={activeBuyer}
-                  onNew={() => setShowOrderForm(true)}
-                  onDeclareHarvest={() => setShowHarvestModal(true)}
-                  onFundAdvance={handleFundAdvance}
-                  onAcceptCommitment={handleAcceptCommitment}
-                  onRedistributeExcess={() => setShowExcessModal(true)}
-                  farmerOfferAccepted={farmerOfferAccepted}
-                  notified={activeOrder?.status !== 'POSTED'}
-                  onNotify={handleNotify}
-                  busy={actionBusy}
-                  t={t}
-                  contributors={aggregationContributors}
-                  onPromoteStandby={handlePromoteStandby}
-                  onLockBatch={handleLockBatch}
-                  isLockingBatch={isLockingBatch}
-                  batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
-                  vehicleName={optimalAllocation?.vehicle?.name}
-                  km={optimalAllocation?.routePlan?.km}
-                  fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
-                />
+                role === 'Buyer' ? (
+                  <div className="space-y-6">
+                    <BuyerMarketplace
+                      currentUserName={currentUserName}
+                      buyerId={activeBuyer?.id || 'buyer-school-001'}
+                      buyerName={activeBuyer?.name || currentUserName || 'PM POSHAN Central Kitchen'}
+                      deliveryLocation="Nana Bazaar, Vallabh Vidyanagar, Anand, Gujarat"
+                    />
+                  </div>
+                ) : (
+                  <Orders
+                    role={role}
+                    order={activeOrder}
+                    buyer={activeBuyer}
+                    onNew={() => setShowOrderForm(true)}
+                    onDeclareHarvest={() => setShowHarvestModal(true)}
+                    onFundAdvance={handleFundAdvance}
+                    onAcceptCommitment={handleAcceptCommitment}
+                    onRedistributeExcess={() => setShowExcessModal(true)}
+                    farmerOfferAccepted={farmerOfferAccepted}
+                    notified={activeOrder?.status !== 'POSTED'}
+                    onNotify={handleNotify}
+                    busy={actionBusy}
+                    t={t}
+                    contributors={aggregationContributors}
+                    onPromoteStandby={handlePromoteStandby}
+                    onLockBatch={handleLockBatch}
+                    isLockingBatch={isLockingBatch}
+                    batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
+                    vehicleName={optimalAllocation?.vehicle?.name}
+                    km={optimalAllocation?.routePlan?.km}
+                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
+                  />
+                )
               )}
 
               {activeNav === 'Farmer network' && (

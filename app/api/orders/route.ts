@@ -11,6 +11,12 @@ export async function GET() {
     // 1. Try DB first to get rich institutional orders
     try {
       const db = await getDb()
+      await db.exec(`
+        alter table agrilink.orders add column if not exists purpose text;
+        alter table agrilink.orders add column if not exists review_status text default 'approved';
+        alter table agrilink.orders add column if not exists admin_note text;
+      `).catch(() => null)
+
       const rows = await db.query<any>(`
         select o.*, b.name as buyer_name,
                coalesce((select sum(c.qty_committed_kg) from agrilink.commitments c where c.order_id = o.id), 0) as db_committed_kg
@@ -39,6 +45,9 @@ export async function GET() {
             allocated_farmer_name: o.allocated_farmer_name || (isSmall ? 'Jignesh Chauhan (Bakrol · 1.8 km)' : null),
             allocated_farmer_id: o.allocated_farmer_id || (isSmall ? 'f-jignesh-104' : null),
             farmer_acceptance_status: o.farmer_acceptance_status || 'PENDING',
+            purpose: o.purpose || (isSmall ? null : 'Midday Meal School Programme Buffer Stock'),
+            review_status: o.review_status || (isSmall ? 'approved' : 'pending'),
+            admin_note: o.admin_note || null,
           }
         })
       }
@@ -198,13 +207,35 @@ export async function POST(request: Request) {
     }
 
     const isSmall = qtyTargetKg <= 50
+    const purpose = body.purpose ? String(body.purpose).trim() : (isSmall ? null : 'Institutional bulk procurement requirement')
+    const reviewStatus = isSmall ? 'approved' : 'pending'
+    const finalStatus = isSmall ? 'POSTED' : 'PENDING_ADMIN_REVIEW'
+
+    try {
+      await db.exec(`
+        alter table agrilink.orders add column if not exists purpose text;
+        alter table agrilink.orders add column if not exists review_status text default 'approved';
+        alter table agrilink.orders add column if not exists admin_note text;
+      `).catch(() => null)
+
+      await db.query(`
+        update agrilink.orders
+        set purpose = $2, review_status = $3, status = $4
+        where id = $1
+      `, [order.id, purpose, reviewStatus, finalStatus])
+    } catch {}
+
     const enrichedOrder = {
       ...order,
+      status: finalStatus,
       order_tier: isSmall ? 'SMALL' : 'BULK',
       allocation_mode: isSmall ? 'AUTO_ALLOCATED' : 'POOL_AGGREGATION',
       allocated_farmer_name: isSmall ? 'Jignesh Chauhan (Bakrol · 1.8 km)' : null,
       allocated_farmer_id: isSmall ? 'f-jignesh-104' : null,
       farmer_acceptance_status: 'PENDING',
+      purpose,
+      review_status: reviewStatus,
+      admin_note: null,
     }
 
     return Response.json({ order: enrichedOrder })
