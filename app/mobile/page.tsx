@@ -324,30 +324,75 @@ export default function MobilePreviewPage() {
                     </button>
                   </div>
 
-                  {/* AGMARKNET Price Corridor Banner */}
-                  <div className="bg-[#E6EFE8] dark:bg-[#1F3B2C] rounded-2xl p-3.5 flex items-center gap-3 border border-[#1B382B]/20">
-                    <div className="text-xl">📈</div>
-                    <div>
-                      <p className="text-xs font-bold text-[#1B382B] dark:text-[#CEEADB]">
-                        AGMARKNET Modal Rate: Tomato ₹24.50/kg
-                      </p>
-                      <p className="text-[11px] text-[#324C3D] dark:text-[#A6CDB6]">
-                        AgriLink guaranteed price: ≥ Mandi + 18.2% direct realization
-                      </p>
+                  {/* SIH 26033 Cleaned Farmer Flow: 3 Immediate Questions (What to do, Where to take, What happened) */}
+                  {role === 'farmer' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="bg-[#FAF0DB] dark:bg-[#2A210F] border-2 border-[#E6C374] dark:border-[#846226] p-3 rounded-xl shadow-2xs">
+                          <span className="text-[10px] font-black uppercase text-[#846226] dark:text-[#F0CA86] bg-[#F3DEB0] dark:bg-[#433215] px-1.5 py-0.5 rounded">
+                            Action Required
+                          </span>
+                          <p className="text-xs font-black mt-1 text-[#1B382B] dark:text-[#E0EAE2]">Tomato — 400 kg Supply Request</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Matched from Buyer Order #123</p>
+                        </div>
+
+                        <div className="bg-[#EBF3FC] dark:bg-[#102336] border-2 border-[#94C2F2] dark:border-[#1E456E] p-3 rounded-xl shadow-2xs">
+                          <span className="text-[10px] font-black uppercase text-[#1B528F] dark:text-[#94C2F2] bg-[#D4E6F9] dark:bg-[#163454] px-1.5 py-0.5 rounded">
+                            Handover Slot
+                          </span>
+                          <p className="text-xs font-black mt-1 text-[#1B382B] dark:text-[#E0EAE2]">24 Sep • 8–10 AM</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">ABC FPO Collection Centre</p>
+                        </div>
+
+                        <div className="bg-[#E6EFE8] dark:bg-[#132A1C] border-2 border-[#89D7A5] dark:border-[#267A38] p-3 rounded-xl shadow-2xs">
+                          <span className="text-[10px] font-black uppercase text-[#1B382B] dark:text-[#89D7A5] bg-[#C5E4CE] dark:bg-[#1F452C] px-1.5 py-0.5 rounded">
+                            Latest Status
+                          </span>
+                          <p className="text-xs font-black mt-1 text-[#1B382B] dark:text-[#E0EAE2]">392 kg Accepted (Grade A)</p>
+                          <p className="text-[10px] text-[#267A38] dark:text-[#89D7A5] font-semibold mt-0.5">₹11,520 Net Settlement Credited</p>
+                        </div>
+                      </div>
+
+                      {/* 5-Stage Produce Pipeline Progress */}
+                      <div className="bg-white dark:bg-[#18201B] p-3 rounded-xl border border-[#E5E0D8] dark:border-[#2C3B32] shadow-2xs">
+                        <div className="flex justify-between items-center mb-1.5 text-[11px] font-bold">
+                          <span className="text-muted-foreground uppercase text-[10px] tracking-wider">5-Stage Produce Pipeline</span>
+                          <span className="text-[#267A38] dark:text-[#89D7A5]">FPO Verified Stock</span>
+                        </div>
+                        <div className="grid grid-cols-5 gap-1 text-center text-[10px]">
+                          <div className="p-1 rounded bg-[#E6EFE8] dark:bg-[#1F3B2C] font-bold text-[#1B382B] dark:text-[#89D7A5]">
+                            1. Expected<br/><span className="text-[11px]">2,000kg</span>
+                          </div>
+                          <div className="p-1 rounded bg-[#E6EFE8] dark:bg-[#1F3B2C] font-bold text-[#1B382B] dark:text-[#89D7A5]">
+                            2. Harvest<br/><span className="text-[11px]">1,500kg</span>
+                          </div>
+                          <div className="p-1 rounded bg-[#E6EFE8] dark:bg-[#1F3B2C] font-bold text-[#1B382B] dark:text-[#89D7A5]">
+                            3. Offered<br/><span className="text-[11px]">1,200kg</span>
+                          </div>
+                          <div className="p-1 rounded bg-[#E6EFE8] dark:bg-[#1F3B2C] font-bold text-[#1B382B] dark:text-[#89D7A5]">
+                            4. Received<br/><span className="text-[11px]">400kg</span>
+                          </div>
+                          <div className="p-1 rounded bg-[#267A38] text-white font-bold">
+                            5. Accepted<br/><span className="text-[11px]">392kg</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Dual Metric Cards */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-white dark:bg-[#18201B] border border-[#E5E0D8] dark:border-[#2C3B32] p-3.5 rounded-2xl shadow-2xs">
                       <div className="flex justify-between text-[11px] text-muted-foreground">
-                        <span>Escrow Balance</span>
-                        <span className="bg-[#E6EFE8] dark:bg-[#1F3B2C] text-[#1B382B] dark:text-[#89D7A5] font-bold px-1.5 py-0.5 rounded text-[10px]">+18%</span>
+                        <span>{role === 'farmer' ? 'Net Settlement' : 'Escrow Balance'}</span>
+                        <span className="bg-[#E6EFE8] dark:bg-[#1F3B2C] text-[#1B382B] dark:text-[#89D7A5] font-bold px-1.5 py-0.5 rounded text-[10px]">Paid</span>
                       </div>
                       <p className="text-2xl font-extrabold text-[#1B382B] dark:text-[#89D7A5] my-1">
-                        ₹{escrowBalance.toLocaleString()}
+                        {role === 'farmer' ? '₹11,520' : `₹${escrowBalance.toLocaleString()}`}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">40% harvest advance released</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {role === 'farmer' ? '392 kg × ₹30 − ₹240 charges' : '40% harvest advance released'}
+                      </p>
                     </div>
 
                     <div className="bg-white dark:bg-[#18201B] border border-[#E5E0D8] dark:border-[#2C3B32] p-3.5 rounded-2xl shadow-2xs">

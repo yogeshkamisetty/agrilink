@@ -148,6 +148,96 @@ private fun PhoneDashboardContent(
             }
         }
 
+        // SIH 26033: Farmer 3 Immediate Questions (Action, Handover, Latest Status)
+        if (userRole == UserRole.FARMER) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Question 1: Action Required
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = HarvestGoldWarning.copy(alpha = 0.15f)),
+                        border = BorderStroke(1.5.dp, HarvestGoldWarning.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = HarvestGoldWarning.copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(6.dp)
+                                ) {
+                                    Text(
+                                        text = "ACTION REQUIRED",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = HarvestGoldWarning,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.weight(1f))
+                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = HarvestGoldWarning, modifier = Modifier.size(16.dp))
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Tomato — 400 kg Supply Request", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                            Text("Matched from Buyer Order #123 (Annapurna Mess)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    // Question 2: Handover Slot
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("HANDOVER LOCATION & TIME", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ForestGreenPrimary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("24 Sep • 8–10 AM", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                            Text("ABC FPO Collection Centre", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    // Question 3: Latest Status & Formula
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = ForestGreenPrimaryContainer.copy(alpha = 0.7f)),
+                        border = BorderStroke(1.dp, ForestGreenPrimary.copy(alpha = 0.3f)),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("LATEST STATUS & SETTLEMENT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ForestGreenPrimary)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("392 kg Accepted (Grade A)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                            Text("₹11,520 Net Settlement Credited (392kg × ₹30 − ₹240 charges)", style = MaterialTheme.typography.bodySmall, color = OnForestGreenPrimaryContainer)
+                        }
+                    }
+
+                    // 5-Stage Progression Pipeline
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("5-Stage Produce Pipeline", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("1. Expected\n2,000kg", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("2. Harvest\n1,500kg", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("3. Offered\n1,200kg", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("4. Received\n400kg", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("5. Accepted\n392kg", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ForestGreenPrimary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // High-Level Financial / Operational Metrics
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
