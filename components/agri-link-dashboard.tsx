@@ -1427,7 +1427,7 @@ export function AgriLinkDashboard({
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
-                              🛍️ Amazon & Flipkart Style Fresh Store
+                              Direct Farm-to-Buyer Marketplace
                             </span>
                             <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
                               Instant Direct Sourcing
