@@ -482,6 +482,7 @@ export function AgriLinkDashboard({
   useEffect(() => {
     let mounted = true
     const fetchFarmers = async () => {
+      if (role === 'Farmer') return // Farmers do not need the coordinator 500-farmer roster
       try {
         const res = await fetch('/api/farmers')
         if (res.ok) {
@@ -510,8 +511,10 @@ export function AgriLinkDashboard({
       } catch {}
     }
 
-    fetchFarmers()
-    const timer = setInterval(fetchFarmers, 4000)
+    if (role !== 'Farmer') {
+      fetchFarmers()
+    }
+    const timer = role === 'Farmer' ? null : setInterval(fetchFarmers, 10000)
     const onHarvest = () => {
       fetchFarmers()
       refresh()
