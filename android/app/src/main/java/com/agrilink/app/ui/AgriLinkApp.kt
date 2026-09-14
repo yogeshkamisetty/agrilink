@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.agrilink.app.model.UserRole
 import com.agrilink.app.theme.*
 import com.agrilink.app.ui.auth.AuthScreen
+import com.agrilink.app.ui.auth.BuyerRegistrationScreen
 import com.agrilink.app.ui.auth.OnboardingScreen
 import com.agrilink.app.ui.dashboard.DashboardScreen
 import com.agrilink.app.ui.features.GradeCamScreen
@@ -40,7 +41,22 @@ fun AgriLinkApp(
     var isAuthenticated by remember { mutableStateOf(true) }
     var isOnboarded by remember { mutableStateOf(true) }
     var userRole by remember { mutableStateOf(UserRole.FARMER) }
+    var isBuyerRegistering by remember { mutableStateOf(false) }
     var currentScreen by remember { mutableStateOf(ScreenNav.DASHBOARD) }
+
+    if (isBuyerRegistering) {
+        BuyerRegistrationScreen(
+            onRegistrationSuccess = { role ->
+                userRole = role
+                isBuyerRegistering = false
+                isAuthenticated = true
+                isOnboarded = true
+            },
+            onBackToLogin = { isBuyerRegistering = false },
+            modifier = modifier
+        )
+        return
+    }
 
     if (!isAuthenticated) {
         AuthScreen(
@@ -49,6 +65,7 @@ fun AgriLinkApp(
                 isAuthenticated = true
                 isOnboarded = true
             },
+            onNavigateToBuyerRegister = { isBuyerRegistering = true },
             modifier = modifier
         )
         return

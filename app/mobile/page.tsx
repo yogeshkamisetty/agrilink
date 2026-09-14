@@ -24,11 +24,13 @@ import {
   Sun,
   Moon,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  ShoppingBag
 } from 'lucide-react'
+import { BuyerRegistrationWizard } from '@/components/buyer-registration-wizard'
 
 type ViewportMode = 'phone' | 'tablet' | 'desktop'
-type ScreenNav = 'dashboard' | 'marketplace' | 'gradecam' | 'logistics' | 'settings'
+type ScreenNav = 'dashboard' | 'marketplace' | 'gradecam' | 'logistics' | 'settings' | 'buyer-reg'
 type UserRole = 'farmer' | 'buyer' | 'coordinator'
 
 export default function MobilePreviewPage() {
@@ -135,6 +137,17 @@ export default function MobilePreviewPage() {
               title="Toggle Dark Mode"
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+
+            <button
+              onClick={() => setScreen('buyer-reg')}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                screen === 'buyer-reg'
+                  ? 'bg-[#1B382B] text-white border-[#1B382B]'
+                  : 'bg-[#E6EFE8] dark:bg-[#1F3B2C] text-[#1B382B] dark:text-[#89D7A5] border-[#1B382B]/20 hover:bg-[#1B382B] hover:text-white'
+              }`}
+            >
+              🛍️ 9-Screen Buyer Flow
             </button>
           </div>
         </div>
@@ -814,6 +827,26 @@ export default function MobilePreviewPage() {
                   >
                     Sign Out of AgriLink
                   </button>
+                </div>
+              )}
+
+              {/* SCREEN 6: BUYER REGISTRATION 9-SCREEN WIZARD */}
+              {screen === 'buyer-reg' && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#E5E0D8] dark:border-[#2C3B32]">
+                    <button
+                      onClick={() => setScreen('dashboard')}
+                      className="p-1.5 rounded-lg hover:bg-[#E5E0D8] dark:hover:bg-[#222D26] inline-flex items-center gap-1.5 text-xs font-bold text-[#1B382B] dark:text-[#89D7A5]"
+                    >
+                      <ArrowLeft className="w-4 h-4" /> Back to App
+                    </button>
+                    <span className="text-[11px] font-bold bg-[#E6EFE8] text-[#1B382B] px-2.5 py-1 rounded-full">
+                      Buyer Registration 9-Screen Flow
+                    </span>
+                  </div>
+                  <div className="overflow-x-hidden">
+                    <BuyerRegistrationWizard />
+                  </div>
                 </div>
               )}
             </div>

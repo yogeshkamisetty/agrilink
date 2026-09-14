@@ -170,6 +170,20 @@ export function OnboardingForm() {
           </button>
         </div>
 
+        {role === 'buyer' && (
+          <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center justify-between">
+            <span>
+              <strong>New:</strong> Tiered Buyer Onboarding with instant household (1–20 kg) or business wholesale limits (up to 2,000 kg).
+            </span>
+            <a
+              href="/register/buyer"
+              className="ml-2 font-bold underline hover:text-emerald-950 shrink-0"
+            >
+              Open Buyer Wizard →
+            </a>
+          </div>
+        )}
+
         <form onSubmit={submit} className='mt-6 grid gap-4 sm:grid-cols-2'>
           <label className='text-sm font-medium sm:col-span-2'>
             Full name

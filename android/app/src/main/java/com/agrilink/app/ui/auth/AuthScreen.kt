@@ -30,6 +30,7 @@ import com.agrilink.app.ui.components.PrimaryActionButton
 @Composable
 fun AuthScreen(
     onAuthSuccess: (UserRole) -> Unit,
+    onNavigateToBuyerRegister: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var phone by remember { mutableStateOf("") }
@@ -297,7 +298,21 @@ fun AuthScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onNavigateToBuyerRegister,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ForestGreenPrimary),
+                border = BorderStroke(1.5.dp, ForestGreenPrimary.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Register as Verified Buyer (Tiered Flow)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Demo Shortcut Pills
             Text(
