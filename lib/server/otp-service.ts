@@ -28,6 +28,7 @@ const DEMO_FIXED_OTP = '123456'
 function getHmacSecret(): string {
   return (
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
     process.env.AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
     'agrilink-stateless-otp-secret-key-32chars'

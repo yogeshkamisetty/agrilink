@@ -6,7 +6,7 @@ import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 const OTP_TTL_MS = 5 * 60 * 1000
 const allowedTypes = new Set(['farmer', 'buyer'])
 const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(v)
-const secret = () => process.env.IDENTITY_OTP_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || (process.env.NODE_ENV !== 'production' ? 'local-development-secret' : '')
+const secret = () => process.env.IDENTITY_OTP_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || (process.env.NODE_ENV !== 'production' ? 'local-development-secret' : '')
 const hashOtp = (otp: string, id: string) => createHmac('sha256', secret()).update(`${id}:${otp}`).digest('hex')
 async function deliverOtp(mobile: string, otp: string) {
   const twoFactorKey = (process.env.TWOFACTOR_API_KEY_2 || process.env.TWOFACTOR_API_KEY || '').trim()

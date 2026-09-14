@@ -3,8 +3,8 @@ import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 
 /** Deployment-safe diagnostic: exposes readiness, never credentials or user data. */
 export async function GET() {
-  const authConfigured = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const workflowDatabaseConfigured = Boolean(process.env.DATABASE_URL)
+  const authConfigured = Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY))
+  const workflowDatabaseConfigured = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL)
   if (!authConfigured) return NextResponse.json({ ok: false, service: 'agrilink', supabase: 'not_configured', workflow_database: workflowDatabaseConfigured ? 'configured' : 'not_configured' }, { status: 503 })
   try {
     const db = requireSupabaseAdmin(), { error } = await db.from('user_profiles').select('id').limit(1)

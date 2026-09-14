@@ -33,7 +33,7 @@ const DIGEST = 'sha256'
 const LOCAL_DEV_SECRET = 'agrilink-local-development-only-session-secret'
 
 function getSecret(): string {
-  const configured = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const configured = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
   if (configured) return configured
   // A default checked into a public repository lets anyone mint an admin token.
   if (process.env.NODE_ENV === 'production') throw new Error('AUTH_SECRET must be set in production to sign session tokens.')

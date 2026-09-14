@@ -140,7 +140,7 @@ type Holder = { [KEY]?: Promise<Db> }
 export function getDb(): Promise<Db> {
   const holder = globalThis as Holder
   if (!holder[KEY]) {
-    const url = process.env.DATABASE_URL
+    const url = process.env.DATABASE_URL || process.env.POSTGRES_URL
     if (!url && process.env.VERCEL) {
       // A writable local database is not durable on serverless infrastructure.
       // Failing explicitly prevents requests from silently writing to an empty
