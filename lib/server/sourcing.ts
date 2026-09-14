@@ -303,7 +303,15 @@ export async function tick(db: Db, orderId: string): Promise<void> {
   })
 }
 
-export async function tickAllSourcing(db: Db): Promise<void> {
+let lastTickAll = 0
+const TICK_ALL_THROTTLE_MS = 20_000
+
+export async function tickAllSourcing(db: Db, force = false): Promise<void> {
+  const now = Date.now()
+  if (process.env.NODE_ENV !== 'test' && !force && now - lastTickAll < TICK_ALL_THROTTLE_MS) {
+    return
+  }
+  lastTickAll = now
   const rows = await db.query<{ id: string }>(`select id from agrilink.orders where status = 'SOURCING'`)
   for (const { id } of rows) await tick(db, id)
 }

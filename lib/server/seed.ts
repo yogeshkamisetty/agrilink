@@ -227,15 +227,20 @@ const HISTORY_PLANS: HistoryPlan[] = [
 export async function ensureDemandHistory(db: Db) {
   const buyers = await db.query<{ id: string; type: BuyerType }>(`select id, type from agrilink.buyers order by created_at`)
   if (!buyers.length) return
-  const calendar = await db.query<{ day: string; kind: 'HOLIDAY' | 'EXAM' }>(`select day, kind from agrilink.academic_calendar`)
+  const [calendar, existingCounts] = await Promise.all([
+    db.query<{ day: string; kind: 'HOLIDAY' | 'EXAM' }>(`select day, kind from agrilink.academic_calendar`),
+    db.query<{ buyer_id: string; crop: string; n: number }>(`select buyer_id, crop, count(*)::int as n from agrilink.order_history group by buyer_id, crop`),
+  ])
   const byDay = new Map(calendar.map((c) => [c.day, c.kind]))
+  const existingSet = new Set(existingCounts.map((e) => `${e.buyer_id}:${e.crop}`))
   const thisWeek = weekStart(isoDate(clock.now()))
+
+  const rowsToInsert: Array<{ buyerId: string; crop: CropId; start: string; servingDays: number; qty: number }> = []
 
   for (const plan of HISTORY_PLANS) {
     const buyer = buyers.find((b) => b.type === plan.buyerType)
     if (!buyer) continue
-    const [existing] = await db.query<{ n: number }>(`select count(*)::int as n from agrilink.order_history where buyer_id = $1 and crop = $2`, [buyer.id, plan.crop])
-    if ((existing?.n ?? 0) > 0) continue
+    if (existingSet.has(`${buyer.id}:${plan.crop}`)) continue
     const random = mulberry32(plan.seed)
     for (let w = 26; w >= 1; w--) {
       const start = addDays(thisWeek, -7 * w)
@@ -246,11 +251,25 @@ export async function ensureDemandHistory(db: Db) {
       const growth = 1 + plan.weeklyGrowth * (26 - w)
       const jitter = 1 - plan.noise + random() * 2 * plan.noise
       const qty = Math.round((plan.kgPerServingDay * (servingDays - examDays * 0.15) * growth * jitter) / 5) * 5
-      await db.query(
-        `insert into agrilink.order_history (buyer_id, crop, week_start, school_days, qty_kg) values ($1, $2, $3::date, $4, $5) on conflict (buyer_id, crop, week_start) do nothing`,
-        [buyer.id, plan.crop, start, servingDays, qty],
-      )
+      rowsToInsert.push({ buyerId: buyer.id, crop: plan.crop, start, servingDays, qty })
     }
+  }
+
+  if (rowsToInsert.length > 0) {
+    const placeholders: string[] = []
+    const values: unknown[] = []
+    let p = 1
+    for (const r of rowsToInsert) {
+      placeholders.push(`($${p}, $${p + 1}, $${p + 2}::date, $${p + 3}, $${p + 4})`)
+      values.push(r.buyerId, r.crop, r.start, r.servingDays, r.qty)
+      p += 5
+    }
+    await db.query(
+      `insert into agrilink.order_history (buyer_id, crop, week_start, school_days, qty_kg)
+       values ${placeholders.join(', ')}
+       on conflict (buyer_id, crop, week_start) do nothing`,
+      values,
+    )
   }
 }
 

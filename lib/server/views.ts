@@ -8,7 +8,27 @@ import type { Buyer, Commitment, Consignment, Farmer, Fpo, Lot, Notification, Or
 import { clock } from './clock'
 import type { Db } from './db'
 import { acceptanceLimits } from './collection'
-import { getAdvances, getBuyer, getCommitments, getConsignment, getFarmer, getFarmersByIds, getFpo, getLots, getNotifications, getOrder, getSettlements, listBuyers, mapRow, mapRows } from './repo'
+import {
+  getAdvances,
+  getAdvancesByLotIds,
+  getBuyer,
+  getCommitments,
+  getCommitmentsByOrderIds,
+  getConsignment,
+  getFarmer,
+  getFarmersByIds,
+  getFpo,
+  getLots,
+  getLotsByOrderIds,
+  getNotifications,
+  getOrder,
+  getOrdersByIds,
+  getSettlements,
+  getSettlementsByLotIds,
+  listBuyers,
+  mapRow,
+  mapRows,
+} from './repo'
 import { commitmentTotals, matchForOrder, tick, tickAllSourcing } from './sourcing'
 import { getMandiPrice, getRetailPrice } from './prices'
 
@@ -195,12 +215,23 @@ export async function listOrders(db: Db, filter: { buyerId?: string } = {}) {
   await tickAllSourcing(db)
   const orders = mapRows<Order>(await db.query(`select * from agrilink.orders ${filter.buyerId ? 'where buyer_id = $1' : ''} order by created_at desc`, filter.buyerId ? [filter.buyerId] : []))
   const buyers = new Map((await listBuyers(db)).map((b) => [b.id, b]))
-  const out = []
-  for (const order of orders) {
-    const [commitments, lots] = await Promise.all([getCommitments(db, order.id), getLots(db, order.id)])
-    out.push({ order, buyer: buyers.get(order.buyerId)!, totals: { ...commitmentTotals(order, commitments), acceptedKg: round2(lots.reduce((s, l) => s + l.qtyAcceptedKg, 0)) } })
-  }
-  return out
+  if (!orders.length) return []
+
+  const orderIds = orders.map((o) => o.id)
+  const [commitmentsMap, lotsMap] = await Promise.all([
+    getCommitmentsByOrderIds(db, orderIds),
+    getLotsByOrderIds(db, orderIds),
+  ])
+
+  return orders.map((order) => {
+    const commitments = commitmentsMap.get(order.id) ?? []
+    const lots = lotsMap.get(order.id) ?? []
+    return {
+      order,
+      buyer: buyers.get(order.buyerId)!,
+      totals: { ...commitmentTotals(order, commitments), acceptedKg: round2(lots.reduce((s, l) => s + l.qtyAcceptedKg, 0)) },
+    }
+  })
 }
 
 /** Coordinator landing view: verified demand, committed supply, and the pilot metric. */
@@ -244,10 +275,22 @@ export async function farmerInbox(db: Db, farmerId: string) {
     ),
   )
   const orderIds = [...new Set(messages.filter((m) => m.kind === 'OFFER').map((m) => m.orderId))]
+  if (!orderIds.length) {
+    return { farmer, fpo, messages, offers: [] }
+  }
+
+  const [ordersMap, commitmentsMap, lotsMap] = await Promise.all([
+    getOrdersByIds(db, orderIds),
+    getCommitmentsByOrderIds(db, orderIds),
+    getLotsByOrderIds(db, orderIds),
+  ])
+
   const offers = []
   for (const orderId of orderIds) {
-    const order = await getOrder(db, orderId)
-    const [commitments, lots] = await Promise.all([getCommitments(db, orderId), getLots(db, orderId)])
+    const order = ordersMap.get(orderId)
+    if (!order) continue
+    const commitments = commitmentsMap.get(orderId) ?? []
+    const lots = lotsMap.get(orderId) ?? []
     const mine = commitments.filter((c) => c.farmerId === farmerId)
     const responded = messages.find((m) => m.orderId === orderId && m.kind === 'OFFER' && m.respondedAt)
     const totals = commitmentTotals(order, commitments)
@@ -288,17 +331,26 @@ export async function farmerSales(db: Db, farmerId: string) {
       [farmerId],
     ),
   )
-  const sales = []
-  for (const lot of lots) {
-    const [settlementRow] = await db.query('select * from agrilink.settlements where lot_id = $1', [lot.id])
-    const [advanceRow] = await db.query('select * from agrilink.advance_records where lot_id = $1', [lot.id])
-    const settlement = settlementRow ? mapRow<Settlement>(settlementRow) : null
-    const advance = advanceRow ? (advanceRow.amount as number) : null
+
+  if (!lots.length) {
+    return { farmer, sales: [] }
+  }
+
+  const lotIds = lots.map((l) => l.id)
+  const [settlementsMap, advancesMap] = await Promise.all([
+    getSettlementsByLotIds(db, lotIds),
+    getAdvancesByLotIds(db, lotIds),
+  ])
+
+  const sales = lots.map((lot) => {
+    const settlement = settlementsMap.get(lot.id) ?? null
+    const advance = advancesMap.has(lot.id) ? advancesMap.get(lot.id)! : null
     const proof = settlement && settlement.acceptedKg > 0
       ? priceProof({ mandi: lot.mandiRef?.pricePerKg ?? null, retail: lot.retailRef?.pricePerKg ?? null, buyerPaid: lot.pricePerKg, farmerRealised: (settlement.grossAmount - settlement.transportShare) / settlement.acceptedKg })
       : null
-    sales.push({ lot, settlement, advance, proof })
-  }
+    return { lot, settlement, advance, proof }
+  })
+
   return { farmer, sales }
 }
 

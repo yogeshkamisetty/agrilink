@@ -1,5 +1,5 @@
 import type { AdvanceRecord, Buyer, Commitment, Consignment, Farmer, Fpo, Lot, Notification, Order, RegistryEntry, Settlement } from '@/lib/types'
-import type { Db, Row } from './db'
+import { uuidArray, type Db, type Row } from './db'
 import { notFound } from './errors'
 
 /** snake_case row → camelCase record, timestamps → ISO strings. */
@@ -26,12 +26,40 @@ export const getBuyer = (db: Db, id: string) => one<Buyer>(db, 'select * from ag
 export const getFarmer = (db: Db, id: string) => one<Farmer>(db, 'select * from agrilink.farmers where id = $1', [id], 'Farmer')
 export const getFpo = (db: Db, id: string) => one<Fpo>(db, 'select * from agrilink.fpos where id = $1', [id], 'FPO')
 
+export async function getOrdersByIds(db: Db, ids: string[]): Promise<Map<string, Order>> {
+  if (!ids.length) return new Map()
+  const rows = mapRows<Order>(await db.query('select * from agrilink.orders where id = any($1::uuid[])', [uuidArray(ids)]))
+  return new Map(rows.map((o) => [o.id, o]))
+}
+
 export async function getCommitments(db: Db, orderId: string) {
   return mapRows<Commitment>(await db.query('select * from agrilink.commitments where order_id = $1 order by created_at, id', [orderId]))
 }
 
+export async function getCommitmentsByOrderIds(db: Db, orderIds: string[]): Promise<Map<string, Commitment[]>> {
+  const map = new Map<string, Commitment[]>()
+  if (!orderIds.length) return map
+  for (const id of orderIds) map.set(id, [])
+  const rows = mapRows<Commitment>(await db.query('select * from agrilink.commitments where order_id = any($1::uuid[]) order by created_at, id', [uuidArray(orderIds)]))
+  for (const r of rows) {
+    map.get(r.orderId)?.push(r)
+  }
+  return map
+}
+
 export async function getLots(db: Db, orderId: string) {
   return mapRows<Lot>(await db.query('select * from agrilink.lots where order_id = $1 order by captured_at, id', [orderId]))
+}
+
+export async function getLotsByOrderIds(db: Db, orderIds: string[]): Promise<Map<string, Lot[]>> {
+  const map = new Map<string, Lot[]>()
+  if (!orderIds.length) return map
+  for (const id of orderIds) map.set(id, [])
+  const rows = mapRows<Lot>(await db.query('select * from agrilink.lots where order_id = any($1::uuid[]) order by captured_at, id', [uuidArray(orderIds)]))
+  for (const r of rows) {
+    map.get(r.orderId)?.push(r)
+  }
+  return map
 }
 
 export async function getAdvances(db: Db, orderId: string) {
@@ -40,6 +68,18 @@ export async function getAdvances(db: Db, orderId: string) {
 
 export async function getSettlements(db: Db, orderId: string) {
   return mapRows<Settlement>(await db.query('select * from agrilink.settlements where order_id = $1 order by created_at, id', [orderId]))
+}
+
+export async function getSettlementsByLotIds(db: Db, lotIds: string[]): Promise<Map<string, Settlement>> {
+  if (!lotIds.length) return new Map()
+  const rows = mapRows<Settlement>(await db.query('select * from agrilink.settlements where lot_id = any($1::uuid[])', [uuidArray(lotIds)]))
+  return new Map(rows.map((s) => [s.lotId, s]))
+}
+
+export async function getAdvancesByLotIds(db: Db, lotIds: string[]): Promise<Map<string, number>> {
+  if (!lotIds.length) return new Map()
+  const rows = await db.query<{ lot_id: string; amount: number }>('select lot_id, amount from agrilink.advance_records where lot_id = any($1::uuid[])', [uuidArray(lotIds)])
+  return new Map(rows.map((a) => [a.lot_id, a.amount as number]))
 }
 
 export async function getNotifications(db: Db, orderId: string) {
@@ -54,7 +94,7 @@ export async function getConsignment(db: Db, id: string | null) {
 
 export async function getFarmersByIds(db: Db, ids: string[]) {
   if (!ids.length) return new Map<string, Farmer>()
-  const rows = mapRows<Farmer>(await db.query('select * from agrilink.farmers where id = any($1::uuid[])', [`{${ids.join(',')}}`]))
+  const rows = mapRows<Farmer>(await db.query('select * from agrilink.farmers where id = any($1::uuid[])', [uuidArray(ids)]))
   return new Map(rows.map((f) => [f.id, f]))
 }
 

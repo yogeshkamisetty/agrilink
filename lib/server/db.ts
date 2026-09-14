@@ -60,8 +60,9 @@ async function openPostgres(url: string): Promise<Db> {
   const sql = postgres(url, {
     // Supabase's transaction pooler (port 6543) does not support prepared statements.
     prepare: false,
-    max: 5,
-    idle_timeout: 20,
+    max: 10,
+    idle_timeout: 30,
+    connect_timeout: 15,
     types: {
       numeric: { to: NUMERIC, from: [NUMERIC], serialize: (x: unknown) => String(x), parse: (x: string) => Number(x) },
       bigint: { to: INT8, from: [INT8], serialize: (x: unknown) => String(x), parse: (x: string) => Number(x) },

@@ -339,7 +339,7 @@ export function CropAvailability({ onSelectCrop, role }: CropAvailabilityProps =
     }
 
     fetchLiveFeeds()
-    const timer = setInterval(fetchLiveFeeds, 4000)
+    const timer = setInterval(fetchLiveFeeds, 20000)
     const onOrderCreated = () => fetchLiveFeeds()
     const onHarvestUpdated = () => fetchLiveFeeds()
 

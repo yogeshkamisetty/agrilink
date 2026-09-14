@@ -60,14 +60,14 @@ export function BuyerOrderTracker({ focus }: { focus: 'delivery' | 'payments' })
 
   useEffect(() => {
     loadOrders()
-    const timer = setInterval(loadOrders, 6000)
+    const timer = setInterval(loadOrders, 15000)
     return () => clearInterval(timer)
   }, [loadOrders])
 
   useEffect(() => {
     if (!selected) return
     loadDetail(selected)
-    const timer = setInterval(() => loadDetail(selected), 6000)
+    const timer = setInterval(() => loadDetail(selected), 15000)
     return () => clearInterval(timer)
   }, [selected, loadDetail])
 

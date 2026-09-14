@@ -125,7 +125,7 @@ export function BuyerMarketplace({ deliveryLocation }: BuyerMarketplaceProps) {
   useEffect(() => {
     loadCatalog()
     loadOrders()
-    const timer = setInterval(loadOrders, 5000)
+    const timer = setInterval(loadOrders, 15000)
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel('agrilink_sync')

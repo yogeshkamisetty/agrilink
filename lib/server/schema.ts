@@ -299,6 +299,21 @@ create table if not exists agrilink.aggregation_batches (
   created_at timestamptz default now()
 );
 
+create index if not exists orders_status on agrilink.orders (status);
+create index if not exists orders_buyer on agrilink.orders (buyer_id);
+create index if not exists orders_created_at on agrilink.orders (created_at desc);
+create index if not exists commitments_farmer on agrilink.commitments (farmer_id, status);
+create index if not exists commitments_registry on agrilink.commitments (registry_id);
+create index if not exists lots_order on agrilink.lots (order_id);
+create index if not exists lots_farmer on agrilink.lots (farmer_id, captured_at desc);
+create index if not exists settlements_lot on agrilink.settlements (lot_id);
+create index if not exists settlements_order on agrilink.settlements (order_id);
+create index if not exists advance_records_lot on agrilink.advance_records (lot_id);
+create index if not exists advance_records_order on agrilink.advance_records (order_id);
+create index if not exists notifications_order on agrilink.notifications (order_id);
+create index if not exists crop_registry_farmer on agrilink.crop_registry (farmer_id, status);
+create index if not exists order_history_buyer_crop on agrilink.order_history (buyer_id, crop);
+
 alter table agrilink.fpos enable row level security;
 alter table agrilink.aggregation_batches enable row level security;
 alter table agrilink.farmers enable row level security;
@@ -323,7 +338,7 @@ alter table agrilink.demo_reply_profiles enable row level security;
  * Additive changes applied once per database (tracked in agrilink.meta), so a
  * deployed Postgres upgrades in place instead of needing a destructive reset.
  */
-export const MIGRATION_VERSION = '7'
+export const MIGRATION_VERSION = '8'
 
 export const MIGRATIONS_SQL = /* sql */ `
 -- v6 · marketplace: bulk-order review gate, direct small-order allocation, household consumers
@@ -362,4 +377,20 @@ update agrilink.buyers set contact_phone = '+91 98252 77103'
 update agrilink.farmers set language = 'hi' where language = 'gu' or language not in ('en', 'hi', 'te');
 alter table agrilink.farmers drop constraint if exists farmers_language_check;
 alter table agrilink.farmers add constraint farmers_language_check check (language in ('en', 'hi', 'te'));
+
+-- v8 · performance indices for remote queries and foreign key joins
+create index if not exists orders_status on agrilink.orders (status);
+create index if not exists orders_buyer on agrilink.orders (buyer_id);
+create index if not exists orders_created_at on agrilink.orders (created_at desc);
+create index if not exists commitments_farmer on agrilink.commitments (farmer_id, status);
+create index if not exists commitments_registry on agrilink.commitments (registry_id);
+create index if not exists lots_order on agrilink.lots (order_id);
+create index if not exists lots_farmer on agrilink.lots (farmer_id, captured_at desc);
+create index if not exists settlements_lot on agrilink.settlements (lot_id);
+create index if not exists settlements_order on agrilink.settlements (order_id);
+create index if not exists advance_records_lot on agrilink.advance_records (lot_id);
+create index if not exists advance_records_order on agrilink.advance_records (order_id);
+create index if not exists notifications_order on agrilink.notifications (order_id);
+create index if not exists crop_registry_farmer on agrilink.crop_registry (farmer_id, status);
+create index if not exists order_history_buyer_crop on agrilink.order_history (buyer_id, crop);
 `

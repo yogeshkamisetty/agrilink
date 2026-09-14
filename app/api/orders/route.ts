@@ -7,6 +7,14 @@ import { DomainError } from '@/lib/server/errors'
 import { errorResponse, optionalString, readJson } from '@/lib/server/http'
 import { boardOrders, placeOrder } from '@/lib/server/marketplace'
 
+type CacheEntry = { data: unknown; expiresAt: number }
+const readCache = new Map<string, CacheEntry>()
+const CACHE_TTL_MS = 3_000
+
+export function invalidateOrdersCache() {
+  readCache.clear()
+}
+
 export async function GET(request: Request) {
   try {
     const db = await getDb()
@@ -15,7 +23,16 @@ export async function GET(request: Request) {
       farmerId: user?.role === 'farmer' ? await farmerIdForUser(db, user) : null,
       buyerId: user?.role === 'buyer' ? await buyerIdForUser(db, user) : null,
     }
-    return Response.json({ orders: await boardOrders(db, viewer) })
+    const cacheKey = `${viewer.farmerId ?? 'none'}:${viewer.buyerId ?? 'none'}`
+    const now = Date.now()
+    const cached = readCache.get(cacheKey)
+    if (cached && cached.expiresAt > now) {
+      return Response.json(cached.data)
+    }
+    const orders = await boardOrders(db, viewer)
+    const payload = { orders }
+    readCache.set(cacheKey, { data: payload, expiresAt: now + CACHE_TTL_MS })
+    return Response.json(payload)
   } catch (error) {
     return errorResponse(error, 'Unable to load orders.')
   }
@@ -50,6 +67,7 @@ export async function POST(request: Request) {
       },
       { buyerId: user.role === 'buyer' ? buyerId : null },
     )
+    invalidateOrdersCache()
     return Response.json(placed)
   } catch (error) {
     return errorResponse(error, 'Unable to create the order.')
