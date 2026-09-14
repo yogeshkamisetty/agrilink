@@ -539,7 +539,7 @@ export function AgriLinkDashboard({
 
     return () => {
       mounted = false
-      clearInterval(timer)
+      if (timer) clearInterval(timer)
       window.removeEventListener('agrilink:harvest-updated', onHarvest)
       window.removeEventListener('agrilink:order-created', onOrderCreated)
       try {
