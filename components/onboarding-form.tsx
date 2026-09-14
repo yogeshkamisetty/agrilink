@@ -213,17 +213,17 @@ export function OnboardingForm() {
               <div>
                 <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
                   <span className="flex size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>SIH Farmer Verification Flow</span>
+                  <span>Farmer Verification Onboarding</span>
                 </p>
                 <p className="text-[11px] text-emerald-800 mt-0.5">
-                  Full 6-step flow with UIDAI identity check, AgriStack Farmer Registry, and Field Verifier assignment.
+                  Full onboarding with UIDAI identity check, AgriStack Farmer Registry, and Field Verifier assignment.
                 </p>
               </div>
               <a
                 href="/register/farmer"
                 className="inline-flex items-center justify-center rounded-xl bg-emerald-700 hover:bg-emerald-800 px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors shrink-0"
               >
-                Launch SIH Flow &rarr;
+                Start Verification &rarr;
               </a>
             </div>
           )}

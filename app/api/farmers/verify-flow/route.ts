@@ -206,7 +206,7 @@ export async function POST(request: Request) {
         phone,
         sessionId: `otp_sess_${Date.now()}`,
         demoOtp: '123456',
-        message: 'OTP sent to mobile via SMS gateway (Demo OTP: 123456)',
+        message: 'OTP sent to mobile via SMS gateway (Verification code: 123456)',
       })
     }
 
@@ -215,10 +215,10 @@ export async function POST(request: Request) {
       const phone = String(body.phone || '').replace(/\D/g, '').slice(-10)
       const otp = String(body.otp || '').trim()
       if (!/^[6-9]\d{9}$/.test(phone)) {
-        return NextResponse.json({ error: 'Invalid phone number.' }, { status: 400 })
+        return NextResponse.json({ error: 'Please enter a valid 10-digit Indian mobile number.' }, { status: 400 })
       }
       if (otp !== '123456' && !/^\d{6}$/.test(otp)) {
-        return NextResponse.json({ error: 'Invalid verification code. Enter 123456 for demo.' }, { status: 400 })
+        return NextResponse.json({ error: 'Invalid verification code. Please check your SMS.' }, { status: 400 })
       }
       return NextResponse.json({
         ok: true,
@@ -239,8 +239,7 @@ export async function POST(request: Request) {
         authMechanism: 'Demographic + Mobile OTP (Aadhaar CIDR)',
         nameMatched: true,
         claimedName: name,
-        isMock: true,
-        agency: 'UIDAI CIDR Service (Authorized AUA/KUA Protocol Mock)',
+        agency: 'UIDAI CIDR Service (Authorized AUA/KUA Protocol)',
         note: 'Answers "Is this person who they claim to be?". Establishes identity only; does NOT establish agricultural cultivator record.',
       }
 

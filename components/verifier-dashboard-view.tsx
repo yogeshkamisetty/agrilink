@@ -160,9 +160,6 @@ export function VerifierDashboardView() {
                   <ShieldCheck className="size-3.5" />
                 </span>
                 <h1 className="font-serif text-lg font-bold">Field Verifier Interface</h1>
-                <span className="rounded-md bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 border border-amber-300">
-                  SIH Screens 1 & 2
-                </span>
               </div>
               <p className="text-xs text-muted-foreground">
                 Assisted Verification Channel for Cultivators, Tenants & Sharecroppers
@@ -229,7 +226,7 @@ export function VerifierDashboardView() {
                   <div className="flex items-start justify-between">
                     <div>
                       <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                        SIH Screen 2 · Farmer Verification Review
+                        Assisted Verification Review
                       </span>
                       <h2 className="mt-2 font-serif text-2xl sm:text-3xl font-bold">{selectedRequest.farmerName}</h2>
                       <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
@@ -401,7 +398,7 @@ export function VerifierDashboardView() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                  SIH Screen 1 · Verifier Dashboard
+                  Field Verifier Portal
                 </span>
                 <h2 className="mt-2 font-serif text-2xl sm:text-3xl font-bold">Assisted Verification Queue</h2>
                 <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
@@ -414,7 +411,7 @@ export function VerifierDashboardView() {
                   href="/register/farmer"
                   className="rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground shadow-xs hover:opacity-90 transition-opacity"
                 >
-                  Test Farmer Onboarding &rarr;
+                  Farmer Registration &rarr;
                 </Link>
               </div>
             </div>

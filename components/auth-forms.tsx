@@ -36,7 +36,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     const res = await fetch('/api/auth/otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', phone: normalPhone }) })
     const data = await res.json()
     if (!res.ok || !data.sessionId) throw new Error(data.error || 'Unable to send OTP.')
-    setOtpSessionId(data.sessionId); setOtpSent(true); setError(data.isDemo ? 'Demo OTP: 123456' : 'OTP sent to your mobile.')
+    setOtpSessionId(data.sessionId); setOtpSent(true); setError(data.isDemo ? 'Verification code: 123456' : 'OTP sent to your mobile.')
   }
 
   // Real-time phone lookup from the database
@@ -240,14 +240,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                 <span>Registering as a Farmer?</span>
               </p>
               <p className="text-[11px] text-emerald-800 leading-snug mt-0.5">
-                Try the full SIH Farmer Verification Flow (UIDAI + AgriStack + Assisted Route)
+                Complete verified farmer registration (Digital Registry & Assisted Route)
               </p>
             </div>
             <Link
               href="/register/farmer"
               className="shrink-0 rounded-xl bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors"
             >
-              Start Flow &rarr;
+              Register &rarr;
             </Link>
           </div>
         )}
@@ -332,7 +332,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                         setAdminPasscode(e.target.value)
                         setPasscodeError('')
                       }}
-                      placeholder="Passcode (Demo: AGRILINK-FPO-2025)"
+                      placeholder="Authorized Passcode (AGRILINK-FPO-2025)"
                       className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
                       required
                     />
@@ -437,10 +437,10 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </p>
         )}
 
-        {/* Quick Testing / Evaluator Reference (Subtle Helper) */}
+        {/* Sample Accounts / Reference */}
         {!newUser && (
           <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-2.5 text-[11px] text-muted-foreground">
-            <span className="font-semibold text-foreground">Quick Test Credentials (PIN: 1234):</span>
+            <span className="font-semibold text-foreground">Sample Accounts (PIN: 1234):</span>
             <div className="mt-1 flex flex-wrap gap-1.5">
               <button
                 type="button"

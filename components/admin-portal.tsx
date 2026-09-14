@@ -197,7 +197,7 @@ export function AdminPortal() {
   const [aggregationSuccess, setAggregationSuccess] = useState<string | null>(null)
   const [routeDispatched, setRouteDispatched] = useState(false)
 
-  // Simulation Feedback Banner for Judges
+  // Operational Dispatch Toast Feedback
   const [simulationToast, setSimulationToast] = useState<string | null>(null)
 
   // Registered buyers, so test orders are filed for a real buyer record
@@ -841,7 +841,7 @@ export function AdminPortal() {
               Live Command Center
             </span>
             <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-              SIH 2026 · PS 26033
+              FPO Cluster Ops
             </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
@@ -922,20 +922,20 @@ export function AdminPortal() {
         </div>
       </div>
 
-      {/* 3. Judge & Admin Interactive Simulation Toolbar */}
+      {/* 3. Operational Dispatch Simulation Toolbar */}
       <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                SIH 2026 Interactive Verification Toolbar
+                Dispatch & Routing Simulation
               </span>
               <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
-                Live Prototype Tests
+                Ops Sandbox
               </span>
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Test real-time small-order auto-routing (≤50 kg), bulk aggregation (&gt;50 kg), and instant rejection cascading.
+              Simulate real-time small-order auto-routing (≤50 kg), bulk aggregation (&gt;50 kg), and instant rejection cascading.
             </p>
           </div>
 
@@ -946,7 +946,7 @@ export function AdminPortal() {
               title="Place a 35 kg retail order and observe immediate nearest-farmer auto-assignment"
             >
               <Zap className="size-3.5 text-emerald-600" />
-              <span>1. Test Small Order (35 kg)</span>
+              <span>Simulate Small Order (35 kg)</span>
             </button>
 
             <button
@@ -955,7 +955,7 @@ export function AdminPortal() {
               title="Place a 1,200 kg bulk demand requiring admin review and multi-farmer knapsack pooling"
             >
               <Boxes className="size-3.5" />
-              <span>2. Test Bulk Demand (1,200 kg)</span>
+              <span>Simulate Bulk Demand (1,200 kg)</span>
             </button>
 
             {pendingSmallOrder && (
@@ -965,7 +965,7 @@ export function AdminPortal() {
                 title="Simulate a farmer declining and watch the algorithm instantly re-route to next nearest farmer"
               >
                 <RefreshCw className="size-3.5" />
-                <span>3. Test Decline & Auto-Fallback</span>
+                <span>Simulate Farmer Decline</span>
               </button>
             )}
           </div>

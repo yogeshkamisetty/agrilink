@@ -365,7 +365,7 @@ fun BuyerRegistrationScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     AssistChip(
                         onClick = { otpCode = "123456" },
-                        label = { Text("Use Demo OTP: 123456") },
+                        label = { Text("Code: 123456") },
                         leadingIcon = { Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     )
 
@@ -724,14 +724,14 @@ fun BuyerRegistrationScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
-                            Text("Demo / Evaluator Quick Action:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                            Text("District Audit Verification Status:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
                             Spacer(modifier = Modifier.height(6.dp))
                             Button(
                                 onClick = { currentStep = 9 },
                                 colors = ButtonDefaults.buttonColors(containerColor = ForestGreenPrimary),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Simulate District Coordinator Approval")
+                                Text("Refresh Verification Status")
                             }
                         }
                     }

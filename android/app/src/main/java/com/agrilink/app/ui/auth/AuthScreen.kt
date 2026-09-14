@@ -314,9 +314,9 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Demo Shortcut Pills
+            // Sample Shortcut Pills
             Text(
-                text = "Quick Demo Personas:",
+                text = "Sample Personas:",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

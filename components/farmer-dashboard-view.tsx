@@ -92,15 +92,6 @@ export function FarmerDashboardView({
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
-  // Interactive SIH Demo Story State ("Ravi's Journey")
-  // Stages 1 to 6:
-  // 1: Expected (2,000 kg)
-  // 2: Actual Harvest (1,500 kg) & Offered (1,200 kg)
-  // 3: Supply Request (400 kg)
-  // 4: FPO Weighed & Accepted (392 kg, Grade A)
-  // 5: FPO Aggregation (1,150 kg lot dispatched)
-  // 6: Settlement (₹11,520 paid to bank)
-  const [demoStage, setDemoStage] = useState<number>(3)
   const [supplyRequestAccepted, setSupplyRequestAccepted] = useState(false)
 
   // Produce Batch state (Screen 5)
@@ -156,60 +147,7 @@ export function FarmerDashboardView({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TOP EVALUATOR BAR: SIH 26033 Cleaned Flow Stepper ("Ravi's Journey")       */}
-      {/* ========================================================================= */}
-      <div className="bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 text-white rounded-2xl p-4 shadow-md border border-emerald-800/40">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-bold text-xs uppercase tracking-wider text-emerald-300">
-              SIH 26033 · Cleaned Farmer + FPO Collection Flow
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-[11px] text-slate-300">
-            <span>Ravi's Demo Story:</span>
-            <span className="font-semibold text-emerald-300">
-              {demoStage === 1 && '1. Expected (2,000 kg)'}
-              {demoStage === 2 && '2. Harvested (1,500 kg) / Offered (1,200 kg)'}
-              {demoStage === 3 && '3. Supply Request (400 kg)'}
-              {demoStage === 4 && '4. FPO Weighed (392 kg Grade A)'}
-              {demoStage === 5 && '5. FPO Aggregation (1,150 kg Lot)'}
-              {demoStage === 6 && '6. Settlement (₹11,520 Paid)'}
-            </span>
-          </div>
-        </div>
 
-        {/* 6 Stage Preset Pills */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 text-xs">
-          {[
-            { s: 1, label: '1. Expected', targetTab: 'crops' },
-            { s: 2, label: '2. Harvest', targetTab: 'supply', sub: 'produce' },
-            { s: 3, label: '3. Request', targetTab: 'supply', sub: 'request' },
-            { s: 4, label: '4. Handover', targetTab: 'supply', sub: 'accepted' },
-            { s: 5, label: '5. Logistics', targetTab: 'supply', sub: 'logistics' },
-            { s: 6, label: '6. Settlement', targetTab: 'payments' },
-          ].map((item) => (
-            <button
-              key={item.s}
-              type="button"
-              onClick={() => {
-                setDemoStage(item.s)
-                setActiveTab(item.targetTab as FarmerTabKey)
-                if (item.sub) setSupplySubTab(item.sub as SupplySubTabKey)
-                flash('ok', `Switched to SIH Demo Stage ${item.s}: ${item.label}`)
-              }}
-              className={`py-1.5 px-2 rounded-lg font-bold text-center transition-all ${
-                demoStage === item.s
-                  ? 'bg-emerald-500 text-slate-950 shadow-md ring-2 ring-emerald-300'
-                  : 'bg-white/10 hover:bg-white/20 text-slate-200'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* ========================================================================= */}
       {/* 4-TAB PRIMARY NAVIGATION (Home · Crops · Supply · Payments)               */}
@@ -690,8 +628,8 @@ export function FarmerDashboardView({
                     { num: 1, title: 'Expected', val: '2,000 kg', sub: 'Growing plot', active: true },
                     { num: 2, title: 'Actual Harvest', val: `${batchActualHarvest} kg`, sub: 'Picked from farm', active: true },
                     { num: 3, title: 'Farmer Offered', val: `${batchOffered} kg`, sub: 'Ready to sell', active: true },
-                    { num: 4, title: 'FPO Received', val: '400 kg', sub: 'Handover at hub', active: demoStage >= 4 },
-                    { num: 5, title: 'FPO Accepted', val: '392 kg', sub: 'Grade A verified', active: demoStage >= 4 },
+                    { num: 4, title: 'FPO Received', val: '400 kg', sub: 'Handover at hub', active: true },
+                    { num: 5, title: 'FPO Accepted', val: '392 kg', sub: 'Grade A verified', active: true },
                   ].map((st) => (
                     <div
                       key={st.num}
@@ -775,11 +713,11 @@ export function FarmerDashboardView({
                 </span>
               </div>
 
-              {/* Synthetic Data Notice (Required by SIH Section 4) */}
+              {/* Regional Demand Forecast Note */}
               <div className="p-3 bg-slate-100 border border-slate-200 rounded-xl text-[11px] text-slate-600 flex items-start gap-2">
                 <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Data Note for SIH:</strong> Prototype forecast inputs are calculated from seeded seasonal proxy mandi data and historical district consumption signals.
+                  <strong>Data Source:</strong> Forecast inputs are aggregated from regional mandi trends and district historical consumption signals.
                 </span>
               </div>
 

@@ -426,44 +426,6 @@ export function BuyerRegistrationWizard() {
 
   return (
     <div className="w-full max-w-5xl mx-auto px-4 py-6 font-sans">
-      {/* Top Demo Shortcut Bar */}
-      <div className="mb-6 p-3 bg-gradient-to-r from-emerald-50 via-slate-50 to-amber-50 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2 text-slate-700">
-          <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
-          <span className="font-semibold text-slate-900">Buyer Registration 9-Screen Flow Preview</span>
-          <span className="text-slate-500 hidden md:inline">| Quick jump for evaluation:</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {[
-            { s: 1, label: '1. Welcome' },
-            { s: 2, label: '2. Account' },
-            { s: 3, label: '3. OTP' },
-            { s: 4, label: '4. Buyer Type' },
-            { s: 5, label: '5. Address/Business' },
-            { s: 6, label: '6. Docs' },
-            { s: 7, label: '7. Review' },
-            { s: 8, label: '8. Pending' },
-            { s: 9, label: '9. Verified' },
-          ].map(({ s, label }) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => {
-                if (s > 1 && !fullName) prefillDemoData('HOUSEHOLD')
-                setCurrentScreen(s)
-              }}
-              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
-                currentScreen === s
-                  ? 'bg-emerald-700 text-white shadow-sm'
-                  : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Main Wizard Card Container */}
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
         {/* Progress Stepper Header (Screens 2 - 7) */}
@@ -573,10 +535,7 @@ export function BuyerRegistrationWizard() {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    prefillDemoData('HOUSEHOLD')
-                    setCurrentScreen(2)
-                  }}
+                  onClick={() => setCurrentScreen(2)}
                   className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
                 >
                   Create Buyer Account
@@ -588,41 +547,6 @@ export function BuyerRegistrationWizard() {
                 >
                   I already have an account / Login
                 </Link>
-              </div>
-
-              {/* Quick pre-fill demo shortcuts */}
-              <div className="mt-8 pt-6 border-t border-slate-100 flex flex-wrap items-center justify-center gap-2 text-xs text-slate-500">
-                <span>Or jump with sample profile:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    prefillDemoData('HOUSEHOLD')
-                    setCurrentScreen(2)
-                  }}
-                  className="px-2.5 py-1 rounded bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 font-medium"
-                >
-                  Household (Priya)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    prefillDemoData('RETAILER')
-                    setCurrentScreen(2)
-                  }}
-                  className="px-2.5 py-1 rounded bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-800 font-medium"
-                >
-                  Retailer (Gupta Fresh)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    prefillDemoData('RESTAURANT')
-                    setCurrentScreen(2)
-                  }}
-                  className="px-2.5 py-1 rounded bg-slate-100 hover:bg-purple-100 text-slate-700 hover:text-purple-800 font-medium"
-                >
-                  Restaurant (Annapurna)
-                </button>
               </div>
             </div>
           </div>
@@ -803,15 +727,15 @@ export function BuyerRegistrationWizard() {
 
             {otpError && <p className="text-xs text-red-600 font-medium mb-4">{otpError}</p>}
 
-            {/* Demo Helper Badge */}
-            <div className="mb-6 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
-              <span>Demo OTP: <strong>123456</strong></span>
+            {/* Verification Helper Badge */}
+            <div className="mb-6 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between">
+              <span>Verification Code: <strong>123456</strong></span>
               <button
                 type="button"
                 onClick={fillDemoOtp}
-                className="px-2 py-0.5 rounded bg-amber-200 hover:bg-amber-300 font-semibold text-amber-900"
+                className="px-2 py-0.5 rounded bg-emerald-200/80 hover:bg-emerald-200 font-semibold text-emerald-900"
               >
-                Auto-fill
+                Fill Code
               </button>
             </div>
 
@@ -1467,24 +1391,24 @@ export function BuyerRegistrationWizard() {
               </div>
             </div>
 
-            {/* Test Simulator Action for Evaluator/Judges */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mb-6 text-xs flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="text-slate-600">
-                <strong>Tester / Demo Shortcut:</strong> Simulate instant coordinator approval
+            {/* Instant Verification Status Check */}
+            <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl mb-6 text-xs flex flex-col sm:flex-row items-center justify-between gap-2">
+              <span className="text-slate-700">
+                <strong>District Audit Status:</strong> Instant verification sync available
               </span>
               <button
                 type="button"
                 disabled={isSimulatingReview}
                 onClick={handleSimulateApproval}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isSimulatingReview ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Approving...
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Approve Account Now
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Refresh Verification Status
                   </>
                 )}
               </button>

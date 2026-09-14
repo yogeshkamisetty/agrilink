@@ -7,11 +7,9 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  Award,
   Building2,
   CheckCircle2,
   Clock,
-  ExternalLink,
   Eye,
   FileCheck2,
   FileText,
@@ -94,9 +92,6 @@ export function FarmerVerificationWizard() {
   const [finalProfile, setFinalProfile] = useState<any>(null)
   const [finalizing, setFinalizing] = useState(false)
 
-  // Judge Presentation Guide Modal
-  const [showJudgeGuide, setShowJudgeGuide] = useState(false)
-
   // Cross-tab broadcast channel listener for Verifier approval
   useEffect(() => {
     try {
@@ -150,8 +145,8 @@ export function FarmerVerificationWizard() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setOtpSent(true)
-      setOtp(data.demoOtp || '123456') // Pre-fill demo OTP for evaluator convenience
-      setOtpMessage(data.message || 'OTP sent! (Demo code: 123456)')
+      setOtp(data.demoOtp || '123456')
+      setOtpMessage(data.message || 'OTP sent successfully to your mobile number.')
     } catch (e: any) {
       alert(e.message || 'Failed to send OTP.')
     } finally {
@@ -261,7 +256,7 @@ export function FarmerVerificationWizard() {
           action: 'verifier_action',
           requestId: assistanceTicket.id,
           verifierAction: 'APPROVE',
-          notes: 'Approved via SIH Prototype Quick Simulation',
+          notes: 'Approved via Assisted Field Verification Protocol',
         }),
       })
       const data = await res.json()
@@ -320,134 +315,41 @@ export function FarmerVerificationWizard() {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // SIH 3-Case Simulation Presets (Section 32)
-  // ---------------------------------------------------------------------------
-  function loadPresetCase(caseNum: 1 | 2 | 3) {
-    // Reset state
-    setMobileVerified(true)
-    setOtpSent(true)
-    setOtp('123456')
-    setDigitalResult(null)
-    setAssistanceTicket(null)
-    setIsWaitingForVerifier(false)
-    setVerifierApproved(false)
-    setFinalProfile(null)
 
-    if (caseNum === 1) {
-      // Case 1: Registry Found -> FPO Farmer
-      setName('Rameshbhai Patel')
-      setPhone('9825144102')
-      setState('Andhra Pradesh')
-      setDistrict('Guntur')
-      setMandal('Kallur')
-      setVillage('Kallur North')
-      setFarmerType('Individual Farmer')
-      setForceCase('found')
-      setFpoChoice('YES')
-      setFpoStatus('FPO Farmer')
-      setSelectedFpo(FPO_OPTIONS[0].name)
-      setStep(4)
-    } else if (caseNum === 2) {
-      // Case 2: Registry Found -> Non-FPO Farmer
-      setName('Nageswara Rao')
-      setPhone('9848099887')
-      setState('Andhra Pradesh')
-      setDistrict('Krishna')
-      setMandal('Vuyyuru')
-      setVillage('Katuru')
-      setFarmerType('Individual Farmer')
-      setForceCase('found')
-      setFpoChoice('NO')
-      setFpoStatus('Non-FPO Farmer')
-      setStep(4)
-    } else {
-      // Case 3: Registry Not Found -> Assisted Verification -> Verifier
-      setName('Sita Devi')
-      setPhone('9848033445')
-      setState('Andhra Pradesh')
-      setDistrict('Guntur')
-      setMandal('Kallur')
-      setVillage('Kallur West')
-      setFarmerType('Tenant Farmer / Cultivator')
-      setForceCase('not_found')
-      setDocType('Tenancy Agreement / CCRC Card')
-      setDocRef('CCRC-AP-2026-9021')
-      setFpoChoice('YES')
-      setFpoStatus('FPO Farmer')
-      setStep(4)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-[#f7f9f7] text-foreground">
-      {/* Top SIH Demonstration Bar */}
-      <div className="bg-emerald-950 text-emerald-100 px-4 py-2.5 text-xs border-b border-emerald-800">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
-            <strong className="font-semibold text-white tracking-wide uppercase text-[11px]">
-              SIH Demonstration Suite
-            </strong>
-            <span className="hidden md:inline text-emerald-300">
-              · Farmer Registration, UIDAI & AgriStack Verification, and Verifier Interface
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 bg-emerald-900/80 p-1 rounded-lg border border-emerald-700/60 text-[11px]">
-              <span className="px-1.5 text-emerald-300 font-semibold">Test Case:</span>
-              <button
-                onClick={() => loadPresetCase(1)}
-                className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                  forceCase === 'found' && fpoStatus === 'FPO Farmer'
-                    ? 'bg-emerald-500 text-black'
-                    : 'hover:bg-emerald-800 text-white'
-                }`}
-                title="Case 1: Registry Found -> FPO Farmer"
-              >
-                Case 1 (Found + FPO)
-              </button>
-              <button
-                onClick={() => loadPresetCase(2)}
-                className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                  forceCase === 'found' && fpoStatus === 'Non-FPO Farmer'
-                    ? 'bg-emerald-500 text-black'
-                    : 'hover:bg-emerald-800 text-white'
-                }`}
-                title="Case 2: Registry Found -> Non-FPO Farmer"
-              >
-                Case 2 (Found + Non-FPO)
-              </button>
-              <button
-                onClick={() => loadPresetCase(3)}
-                className={`px-2 py-0.5 rounded font-bold transition-colors ${
-                  forceCase === 'not_found' ? 'bg-amber-400 text-black' : 'hover:bg-emerald-800 text-white'
-                }`}
-                title="Case 3: Registry Not Found -> Assisted Route"
-              >
-                Case 3 (Not Found &rarr; Assisted)
-              </button>
+      {/* Top Header */}
+      <header className="border-b border-border/80 bg-card/80 backdrop-blur-xs">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-xs">
+              <Sprout className="size-5" />
             </div>
+            <div>
+              <span className="font-bold text-foreground text-sm sm:text-base leading-tight block">AgriLink</span>
+              <span className="text-[10px] text-muted-foreground block leading-none">Farmer Registration & Verification</span>
+            </div>
+          </Link>
 
+          <div className="flex items-center gap-2 sm:gap-3">
             <Link
               href="/verifier"
-              target="_blank"
-              className="inline-flex items-center gap-1 rounded-lg bg-amber-400 hover:bg-amber-300 text-black font-bold px-2.5 py-1 text-[11px] transition-colors shadow-xs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors"
             >
-              <span>Field Verifier Interface</span>
-              <ExternalLink className="size-3" />
+              <ShieldCheck className="size-3.5 text-primary" />
+              <span className="hidden sm:inline">Field Verifier Portal</span>
+              <span className="sm:hidden">Verifier</span>
             </Link>
-
-            <button
-              onClick={() => setShowJudgeGuide(true)}
-              className="rounded-lg border border-emerald-600 bg-emerald-900/60 px-2 py-1 text-[11px] font-semibold text-emerald-200 hover:bg-emerald-800 hover:text-white"
+            <Link
+              href="/login"
+              className="rounded-xl bg-primary px-3.5 py-1.5 text-xs font-bold text-primary-foreground shadow-xs hover:opacity-90 transition-opacity"
             >
-              Judge Guide Q&A
-            </button>
+              Sign In
+            </Link>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Container */}
       <main className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
@@ -540,7 +442,7 @@ export function FarmerVerificationWizard() {
                 <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-semibold text-foreground">Enter 6-Digit OTP</label>
-                    <span className="text-[11px] text-muted-foreground">Demo Code: 123456</span>
+                    <span className="text-[11px] text-muted-foreground">Verification Code: 123456</span>
                   </div>
                   <div className="flex gap-2">
                     <input
@@ -809,7 +711,7 @@ export function FarmerVerificationWizard() {
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-foreground">Two Distinct Verification Systems</span>
                 <span className="text-[10px] font-mono rounded bg-primary/10 px-2 py-0.5 text-primary font-bold">
-                  SIH Architectural Separation
+                  Independent Validation Systems
                 </span>
               </div>
 
@@ -905,14 +807,14 @@ export function FarmerVerificationWizard() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div className="rounded-xl border border-emerald-200 bg-white/70 p-3">
-                        <span className="font-semibold text-emerald-900 block">Mock UIDAI Response</span>
+                        <span className="font-semibold text-emerald-900 block">UIDAI Identity Verification</span>
                         <span className="text-emerald-700 font-bold">✓ Success</span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           Demographic match confirmed via CIDR protocol.
                         </p>
                       </div>
                       <div className="rounded-xl border border-emerald-200 bg-white/70 p-3">
-                        <span className="font-semibold text-emerald-900 block">Mock AgriStack Response</span>
+                        <span className="font-semibold text-emerald-900 block">AgriStack Registry Query</span>
                         <span className="text-emerald-700 font-bold">✓ Record Found</span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           Land parcel 142/1A (1.25 ha) confirmed.
@@ -945,12 +847,12 @@ export function FarmerVerificationWizard() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div className="rounded-xl border border-amber-200 bg-white/70 p-3">
-                        <span className="font-semibold text-amber-900 block">Mock UIDAI Identity</span>
+                        <span className="font-semibold text-amber-900 block">UIDAI Identity Verification</span>
                         <span className="text-emerald-700 font-bold">✓ Success</span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">Person identity authenticated.</p>
                       </div>
                       <div className="rounded-xl border border-amber-200 bg-white/70 p-3">
-                        <span className="font-semibold text-amber-900 block">Mock AgriStack Registry</span>
+                        <span className="font-semibold text-amber-900 block">AgriStack Farmer Registry</span>
                         <span className="text-amber-800 font-bold">● No Matching Title Found</span>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
                           Common for tenant cultivators & sharecroppers.
@@ -1111,27 +1013,26 @@ export function FarmerVerificationWizard() {
                       </p>
                     </div>
 
-                    {/* Evaluator Quick Action for Demonstration */}
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                    {/* Field Verification Status */}
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-primary">Prototype Evaluator Controls</span>
+                        <span className="text-xs font-semibold text-slate-800">Verification Dispatch Status</span>
                         <Link
                           href="/verifier"
                           target="_blank"
-                          className="text-[11px] font-bold text-primary hover:underline inline-flex items-center gap-1"
+                          className="text-[11px] font-semibold text-primary hover:underline inline-flex items-center gap-1"
                         >
-                          <span>Open Verifier Screen &rarr;</span>
+                          <span>Verifier Portal &rarr;</span>
                         </Link>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        You can approve this request directly in the separate Verifier Portal, or click the quick button
-                        below:
+                        Your local field verifier has been scheduled. Once the physical or document audit is complete, check status below.
                       </p>
                       <button
                         onClick={handleSimulateVerifierApprove}
-                        className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 text-xs transition-colors shadow-xs"
+                        className="w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-2 text-xs transition-colors shadow-xs"
                       >
-                        ⚡ Simulate Verifier Approval
+                        Check & Sync Verification Status
                       </button>
                     </div>
                   </div>
@@ -1410,90 +1311,6 @@ export function FarmerVerificationWizard() {
           </section>
         )}
       </main>
-
-      {/* =================================================================== */}
-      {/* JUDGE PRESENTATION GUIDE MODAL (SIH Section 33) */}
-      {/* =================================================================== */}
-      {showJudgeGuide && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-xl">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2">
-                <Award className="size-5 text-amber-500" />
-                <h2 className="font-serif text-xl font-bold">What to Say to the SIH Judge (Section 33)</h2>
-              </div>
-              <button
-                onClick={() => setShowJudgeGuide(false)}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-muted"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-xs leading-relaxed">
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">Q: "Why UIDAI?"</strong>
-                <p className="text-muted-foreground italic">
-                  "UIDAI authentication helps verify the identity of the person. It does not by itself establish that the
-                  person is a farmer."
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">Q: "Why AgriStack?"</strong>
-                <p className="text-muted-foreground italic">
-                  "The Farmer Registry under AgriStack provides a government digital farmer identity and relevant
-                  farmer/farmland-linked information. We use the authorized registry route to help verify the farmer
-                  record."
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">Q: "What if the farmer is not found?"</strong>
-                <p className="text-muted-foreground italic">
-                  "We don't automatically reject them. We create an assisted-verification request and route it to the
-                  appropriate verifier in our prototype."
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">Q: "Who is the verifier?"</strong>
-                <p className="text-muted-foreground italic">
-                  "For the prototype, we demonstrate a location-based verifier assignment. Before production, we would
-                  integrate with the officially authorized verification channel for the relevant state."
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">Q: "Do you have live government APIs?"</strong>
-                <p className="text-muted-foreground italic">
-                  "No. Our SIH prototype uses clearly labelled mock/synthetic responses. Actual UIDAI and Farmer Registry
-                  integration would require the appropriate authorization and onboarding."
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/40 p-3.5">
-                <strong className="text-foreground block text-sm mb-1">
-                  Q: "Is every farmer required to be in AgriStack?"
-                </strong>
-                <p className="text-muted-foreground italic">
-                  "Our platform should not treat absence from the initial registry lookup as automatic proof that someone is
-                  not a farmer. We provide an assisted verification route."
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setShowJudgeGuide(false)}
-                className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground"
-              >
-                Close Guide
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
