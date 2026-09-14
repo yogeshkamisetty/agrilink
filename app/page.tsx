@@ -174,6 +174,12 @@ export default function HomePage() {
           <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
           <strong className="font-semibold text-white">AgriLink 2.0 Live:</strong>
           AI-assisted grading, demand forecasting and consolidated collection runs for FPOs.
+          <Link href="/register/farmer" className="ml-2 font-bold text-teal-300 underline hover:text-white transition-colors">
+            🌾 Farmer Verification Flow &rarr;
+          </Link>
+          <Link href="/mobile" className="ml-2 font-bold text-amber-300 underline hover:text-white transition-colors">
+            📱 Mobile App Preview &rarr;
+          </Link>
           <Link href="/signup" className="ml-2 font-bold text-emerald-300 underline hover:text-white transition-colors">
             Start free pilot &rarr;
           </Link>
@@ -194,6 +200,15 @@ export default function HomePage() {
           </Link>
 
           <nav className="hidden items-center gap-7 text-sm font-medium text-muted-foreground lg:flex">
+            <Link href="/register/farmer" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-3 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 hover:bg-emerald-200 transition-colors">
+              🌾 Farmer Verification
+            </Link>
+            <Link href="/verifier" className="hover:text-foreground transition-colors">
+              Field Verifier
+            </Link>
+            <Link href="/mobile" className="hover:text-foreground transition-colors">
+              Mobile App
+            </Link>
             <Link href="#features" className="hover:text-foreground transition-colors">
               Platform
             </Link>

@@ -232,6 +232,26 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             : 'Verify your 10-digit mobile number with a one-time password to open your dashboard.'}
         </p>
 
+        {newUser && (
+          <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50/80 p-3.5 flex items-center justify-between gap-3 shadow-xs">
+            <div>
+              <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <Sprout className="size-3.5 text-emerald-700" />
+                <span>Registering as a Farmer?</span>
+              </p>
+              <p className="text-[11px] text-emerald-800 leading-snug mt-0.5">
+                Try the full SIH Farmer Verification Flow (UIDAI + AgriStack + Assisted Route)
+              </p>
+            </div>
+            <Link
+              href="/register/farmer"
+              className="shrink-0 rounded-xl bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-colors"
+            >
+              Start Flow &rarr;
+            </Link>
+          </div>
+        )}
+
         {/* Form: Login or Signup */}
         <form onSubmit={newUser ? handleSignup : handleLogin} className="mt-6 space-y-4">
           {/* Signup specific: Full Name */}
