@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { isoDate } from '@/lib/domain/dates'
+import { addDays, isoDate } from '@/lib/domain/dates'
 import { clock } from './clock'
 import { openMemoryDb, prepare, type Db } from './db'
 import { cropDemandForecast } from './forecasting'
@@ -79,6 +79,53 @@ describe('marketplace order flow', () => {
   it('keeps the registry rules when farmers commit from the demand board', async () => {
     await expect(commitToDemand(db, bulkOrderId, ids['Suresh Yadav'], 100)).rejects.toThrow(/km from buyer/)
     await expect(commitToDemand(db, bulkOrderId, ids['Laxmiben Vaghela'], 100)).rejects.toThrow(/full/)
+  })
+
+  it('surfaces funded bulk orders on the demand board with open_for_commitment true and allows direct farmer commitment', async () => {
+    const placed = await placeOrder(db, {
+      buyerId: ids.INSTITUTIONAL,
+      crop: 'PADDY',
+      qtyTargetKg: 550,
+      pricePerKg: 28,
+      deliveryDate: addDays(delivery, 3),
+      purpose: 'Hostel mess weekly supply for students',
+    })
+    const testOrderId = placed.order.id
+    await reviewOrder(db, testOrderId, { decision: 'approved', reviewer: 'Anita Coordinator' })
+    await commitAdvance(db, testOrderId, ids.INSTITUTIONAL)
+
+    // Check visibility on the demand board for farmer
+    const [boardOrder] = await boardOrders(db, { farmerId: ids['Mohanbhai Solanki'] }, testOrderId)
+    expect(boardOrder.status).toBe('FUNDED')
+    expect(boardOrder.open_for_commitment).toBe(true)
+
+    // Farmer commits produce directly from the demand board
+    const commitResult = await commitToDemand(db, testOrderId, ids['Mohanbhai Solanki'], 200)
+    expect(commitResult.accepted).toBe(true)
+    expect(commitResult.primaryKg).toBe(200)
+
+    // Order status transitions to SOURCING and commitments update
+    const updatedOrder = await getOrder(db, testOrderId)
+    expect(updatedOrder.status).toBe('SOURCING')
+    const [updatedBoard] = await boardOrders(db, { farmerId: ids['Mohanbhai Solanki'] }, testOrderId)
+    expect(updatedBoard.qty_committed_kg).toBe(200)
+  })
+
+  it('surfaces unfulfilled small orders needing pooling as open_for_commitment on the demand board', async () => {
+    // When a small order cannot be fulfilled by a single farmer, it is marked UNFULFILLED
+    const [buyer] = await db.query<{ id: string }>(`select id from agrilink.buyers limit 1`)
+    const placed = await placeOrder(db, {
+      buyerId: buyer.id,
+      crop: 'POTATO',
+      qtyTargetKg: 50,
+      pricePerKg: 24,
+      deliveryDate: delivery,
+    })
+    const smallId = placed.order.id
+    // Force unfulfilled pooling status as happens when no candidate has enough uncommitted
+    await db.query(`update agrilink.orders set allocation_status = 'UNFULFILLED' where id = $1`, [smallId])
+    const [boardOrder] = await boardOrders(db, {}, smallId)
+    expect(boardOrder.open_for_commitment).toBe(true)
   })
 
   it('lets households order kitchen quantities of perishables, but not ration shops', async () => {

@@ -153,7 +153,7 @@ export async function notifyMatched(db: Db, orderId: string, opts: { simulateRep
       throw new DomainError('This small order is routed directly to the nearest farmer; it is only broadcast if no nearby farmer can fill it.')
     }
     if (order.status === 'POSTED') throw new DomainError('The buyer has not committed the advance yet. Farmers are only asked to harvest against funded demand.')
-    if (order.status !== 'FUNDED') throw new DomainError('Farmers have already been notified for this order.')
+    if (order.status !== 'FUNDED' && order.status !== 'SOURCING') throw new DomainError('Farmers have already been notified for this order.')
     const [buyer, fpo] = await Promise.all([getBuyer(tx, order.buyerId), getFpo(tx, order.fpoId)])
     const match = await matchForOrder(tx, order, buyer)
     if (!match.matched.length) {
@@ -329,7 +329,7 @@ export type ResponseInput = { accept: boolean; qtyKg: number; source: 'FARMER' |
 export type ResponseResult = { accepted: boolean; primaryKg: number; standbyKg: number; trimmedKg: number; fillsOrder: boolean }
 
 async function applyResponse(tx: Db, order: Order, farmerId: string, input: ResponseInput): Promise<ResponseResult> {
-  if (order.status !== 'SOURCING') throw new DomainError('This order is no longer taking commitments.')
+  if (order.status !== 'SOURCING' && order.status !== 'FUNDED') throw new DomainError('This order is no longer taking commitments.')
   const offers = (await offersFor(tx, order.id)).filter((o) => o.farmerId === farmerId && Date.parse(o.sentAt) <= input.at.getTime())
   if (!offers.length) throw new DomainError('This farmer was not matched to the order.', 403)
   if (offers.some((o) => o.respondedAt)) throw new DomainError('The farmer has already replied to this order.')

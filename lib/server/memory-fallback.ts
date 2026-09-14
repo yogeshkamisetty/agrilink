@@ -368,6 +368,10 @@ export function createMemoryFallbackDb(): Db {
           advance_amount: Math.round(Number(params[3] || 1000) * Number(params[4] || 28) * 0.15),
           mandi_ref: params[7] ? (typeof params[7] === 'string' ? JSON.parse(params[7]) : params[7]) : null,
           retail_ref: params[8] ? (typeof params[8] === 'string' ? JSON.parse(params[8]) : params[8]) : null,
+          order_tier: String(params[10] || (Number(params[3] || 1000) <= 500 ? 'SMALL' : 'BULK')),
+          review_status: String(params[11] || 'approved'),
+          purpose: params[12] ? String(params[12]) : null,
+          delivery_location: params[13] ? String(params[13]) : null,
           created_at: new Date().toISOString(),
         }
         orders.unshift(newOrder)

@@ -363,6 +363,7 @@ export function FarmerDashboardView({
     // 12s polling avoids saturating the database while staying updated
     const timer = setInterval(load, 12000)
     window.addEventListener('agrilink:order-created', load)
+    window.addEventListener('agrilink:order-funded', load)
     window.addEventListener('agrilink:harvest-updated', load)
     let bc: BroadcastChannel | null = null
     try {
@@ -372,6 +373,7 @@ export function FarmerDashboardView({
     return () => {
       clearInterval(timer)
       window.removeEventListener('agrilink:order-created', load)
+      window.removeEventListener('agrilink:order-funded', load)
       window.removeEventListener('agrilink:harvest-updated', load)
       try {
         bc?.close()
@@ -435,7 +437,7 @@ export function FarmerDashboardView({
   const available = new Map((me?.registry ?? []).map((r) => [r.crop, Math.max(0, r.expectedQtyKg - r.committedKg)]))
   const openDemands = orders.filter((o) => o.open_for_commitment)
   const upcoming = orders.filter(
-    (o) => o.order_tier === 'BULK' && (o.status === 'POSTED' || o.status === 'FUNDED') && o.review_status !== 'pending' && o.review_status !== 'rejected'
+    (o) => o.order_tier === 'BULK' && o.status === 'POSTED' && o.review_status !== 'pending' && o.review_status !== 'rejected'
   )
   const totalMoneyReceived = (summary?.advancesReceived ?? 0) + (summary?.settledNet ?? 0)
 
@@ -846,7 +848,22 @@ export function FarmerDashboardView({
                             <Sprout className="size-7 text-primary" />
                           )}
                         </div>
-                        <span className="font-mono text-xs font-semibold text-muted-foreground">{d.code}</span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-mono text-xs font-semibold text-muted-foreground">{d.code}</span>
+                          {d.status === 'FUNDED' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
+                              <ShieldCheck className="size-3" /> Advance in Escrow
+                            </span>
+                          ) : d.order_tier === 'SMALL' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-700 dark:text-sky-400">
+                              Pooled Small Order
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                              Collecting Commitments
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <h4 className="mt-3 font-serif text-xl font-bold text-foreground">{cropLabel(d.crop)}</h4>

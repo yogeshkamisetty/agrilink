@@ -209,7 +209,12 @@ function boardShape(r: BoardRow, viewer: BoardViewer) {
     farmer_acceptance_status: r.allocation_status === 'ACCEPTED' ? 'ACCEPTED' : r.allocation_status === 'UNFULFILLED' ? 'REJECTED' : r.allocation_status === 'PENDING' ? 'PENDING' : null,
     declined_history: r.declined_farmer_ids ?? [],
     is_fully_committed: r.primary_kg >= r.qty_target_kg,
-    open_for_commitment: r.order_tier === 'BULK' && r.status === 'SOURCING' && r.primary_kg + r.standby_kg < capKg,
+    open_for_commitment:
+      ((r.order_tier === 'BULK' || !r.order_tier) && (r.status === 'SOURCING' || r.status === 'FUNDED') ||
+        (r.order_tier === 'SMALL' && (r.allocation_status === 'UNFULFILLED' || r.status === 'SOURCING' || r.status === 'FUNDED'))) &&
+      r.primary_kg + r.standby_kg < capKg &&
+      r.status !== 'REJECTED' &&
+      r.status !== 'SETTLED',
     is_allocated_to_me: Boolean(viewer.farmerId) && r.allocated_farmer_id === viewer.farmerId && r.allocation_status === 'PENDING',
     is_mine: Boolean(viewer.buyerId) && r.buyer_id === viewer.buyerId,
   }
@@ -346,13 +351,25 @@ export async function respondToAllocation(db: Db, orderId: string, farmerId: str
 export async function commitToDemand(db: Db, orderId: string, farmerId: string, qtyKg: number) {
   if (!(qtyKg > 0)) throw new DomainError('Enter a quantity above zero.', 400)
   const order = await getOrder(db, orderId)
-  if (order.orderTier === 'SMALL') throw new DomainError('Small orders go to one farmer directly — accept it from the allocation card.', 400)
-  if (order.status !== 'SOURCING') {
+  if (order.orderTier === 'SMALL' && order.allocationStatus !== 'UNFULFILLED') {
+    throw new DomainError('Small orders go to one farmer directly — accept it from the allocation card.', 400)
+  }
+  const isEligible =
+    order.status === 'SOURCING' ||
+    order.status === 'FUNDED' ||
+    (order.orderTier === 'SMALL' && order.allocationStatus === 'UNFULFILLED' && order.status === 'POSTED')
+  if (!isEligible) {
     throw new DomainError(
-      order.status === 'POSTED' || order.status === 'FUNDED'
-        ? 'This order is not open for commitments yet — farmers are asked once the buyer has funded it and the FPO starts sourcing.'
+      order.status === 'POSTED'
+        ? 'This order is awaiting buyer advance — it will open for commitments once funded.'
         : 'This order is no longer taking commitments.',
       409,
+    )
+  }
+  if (order.status !== 'SOURCING') {
+    await db.query(
+      `update agrilink.orders set status = 'SOURCING', notified_at = coalesce(notified_at, $2), cascade_seconds_per_hour = coalesce(cascade_seconds_per_hour, $3) where id = $1`,
+      [orderId, clock.now(), cascadeSecondsPerHour()],
     )
   }
   const [offered] = await db.query(`select 1 from agrilink.notifications where order_id = $1 and farmer_id = $2 and kind = 'OFFER' limit 1`, [orderId, farmerId])
