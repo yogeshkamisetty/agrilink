@@ -127,6 +127,7 @@ export async function prepare(db: Db) {
   const { seed, ensureDemandHistory } = await import('./seed')
   if (n === 0) await seed(db)
   await ensureDemandHistory(db).catch((error) => console.warn('[agrilink] synthetic demand history was not seeded:', error))
+  await db.query("update agrilink.farmers set language = 'hi' where language = 'gu' or language not in ('en', 'hi', 'te')").catch(() => {})
 }
 
 const KEY = Symbol.for('agrilink.db')

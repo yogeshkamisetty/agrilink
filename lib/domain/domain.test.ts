@@ -9,7 +9,7 @@ import { allocateTransport, buyerAdvance, lotAdvance, priceProof, settleLot, sug
 import { summariseMandiRecords, parseArrivalDate } from './prices'
 import { pathKm, planRoute, type RouteStop } from './routing'
 import { dueChannels } from './cascade'
-import { renderMessage, LANGS } from './i18n'
+import { renderMessage, LANGS, cropName, localDate, t, resolveLang } from './i18n'
 
 describe('shelf-life channel routing', () => {
   it('classifies crops by shelf life', () => {
@@ -251,6 +251,24 @@ describe('farmer messages', () => {
       }
     }
     expect(renderMessage('CONFIRMATION', { crop: 'TOMATO', date: '2026-09-14', primary: 0, standby: 30 }, 'en')).toMatch(/^You are on standby for 30 kg tomato/)
+  })
+
+  it('falls back safely on legacy or unrecognized languages without throwing', () => {
+    const params = { crop: 'WHEAT' as const, buyer: 'Kitchen', fpo: 'Mahi Valley FPO', farmer: 'Ramesh', date: '2026-09-14', qty: 30, expected: 50, price: 31 }
+    // Test legacy 'gu' and unknown strings
+    const legacyMsg = renderMessage('OFFER_SMS', params, 'gu' as any)
+    expect(legacyMsg).toContain('AgriLink')
+    expect(legacyMsg).not.toMatch(/undefined|NaN/)
+
+    const unknownMsg = renderMessage('OFFER_SMS', params, 'xyz' as any)
+    expect(unknownMsg).toContain('AgriLink')
+
+    expect(cropName('WHEAT', 'gu' as any)).toBeTruthy()
+    expect(localDate('2026-09-16', 'gu' as any)).toBeTruthy()
+    expect(t('commit', 'gu' as any)).toBeTruthy()
+    expect(resolveLang('gu')).toBe('hi')
+    expect(resolveLang('en')).toBe('en')
+    expect(resolveLang('te')).toBe('te')
   })
 })
 

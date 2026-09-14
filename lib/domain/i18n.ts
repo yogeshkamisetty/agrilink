@@ -15,6 +15,11 @@ export function isLang(value: unknown): value is Lang {
   return value === 'en' || value === 'hi' || value === 'te'
 }
 
+export function resolveLang(value: unknown): Lang {
+  if (value === 'en' || value === 'hi' || value === 'te') return value
+  return 'hi'
+}
+
 const CROP_NAMES: Record<CropId, Record<Lang, string>> = {
   PADDY: { en: 'paddy (rice)', hi: 'धान (चावल)', te: 'వరి (వరి ధాన్యం)' },
   WHEAT: { en: 'wheat', hi: 'गेहूं', te: 'గోధుమలు' },
@@ -26,15 +31,17 @@ const CROP_NAMES: Record<CropId, Record<Lang, string>> = {
   TUR: { en: 'tur', hi: 'तुअर', te: 'కందులు' },
 }
 
-export function cropName(crop: CropId | string, lang: Lang): string {
+export function cropName(crop: CropId | string, lang: Lang | string): string {
   const norm = (crop || '').toUpperCase() as CropId
-  return CROP_NAMES[norm]?.[lang] || CROP_NAMES[norm]?.['en'] || String(crop || '')
+  const safeLang = resolveLang(lang)
+  return CROP_NAMES[norm]?.[safeLang] || CROP_NAMES[norm]?.['hi'] || CROP_NAMES[norm]?.['en'] || String(crop || '')
 }
 
 const DATE_LOCALE: Record<Lang, string> = { en: 'en-IN', hi: 'hi-IN', te: 'te-IN' }
 
-export function localDate(day: string, lang: Lang): string {
-  return new Intl.DateTimeFormat(DATE_LOCALE[lang], { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`))
+export function localDate(day: string, lang: Lang | string): string {
+  const safeLang = resolveLang(lang)
+  return new Intl.DateTimeFormat(DATE_LOCALE[safeLang] || DATE_LOCALE['hi'], { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${day}T00:00:00Z`))
 }
 
 export type MessageParams = {
@@ -152,8 +159,14 @@ const TEMPLATES: Record<MessageTemplate, Record<Lang, Renderer>> = {
   },
 }
 
-export function renderMessage(template: MessageTemplate, params: MessageParams, lang: Lang): string {
-  return TEMPLATES[template][lang](params, lang)
+export function renderMessage(template: MessageTemplate, params: MessageParams, lang: Lang | string): string {
+  const safeLang = resolveLang(lang)
+  const templateGroup = TEMPLATES[template]
+  const renderer = templateGroup?.[safeLang] || templateGroup?.['hi'] || templateGroup?.['en']
+  if (!renderer) {
+    return `AgriLink update regarding ${cropName(params?.crop, safeLang)}.`
+  }
+  return renderer(params as any, safeLang)
 }
 
 export const UI: Record<string, Record<Lang, string>> = {
@@ -196,6 +209,8 @@ export const UI: Record<string, Record<Lang, string>> = {
   commitRange: { en: 'Enter 1 to {max} kg', hi: '1 से {max} किलो लिखें', te: '1 నుండి {max} కిలోలు నమోదు చేయండి' },
 }
 
-export function t(key: keyof typeof UI, lang: Lang, vars: Record<string, string | number> = {}): string {
-  return Object.entries(vars).reduce((text, [k, v]) => text.replace(`{${k}}`, String(v)), UI[key][lang])
+export function t(key: keyof typeof UI, lang: Lang | string, vars: Record<string, string | number> = {}): string {
+  const safeLang = resolveLang(lang)
+  const template = UI[key]?.[safeLang] || UI[key]?.['hi'] || UI[key]?.['en'] || String(key)
+  return Object.entries(vars).reduce((text, [k, v]) => text.replace(`{${k}}`, String(v)), template)
 }

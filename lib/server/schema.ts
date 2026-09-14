@@ -323,7 +323,7 @@ alter table agrilink.demo_reply_profiles enable row level security;
  * Additive changes applied once per database (tracked in agrilink.meta), so a
  * deployed Postgres upgrades in place instead of needing a destructive reset.
  */
-export const MIGRATION_VERSION = '6'
+export const MIGRATION_VERSION = '7'
 
 export const MIGRATIONS_SQL = /* sql */ `
 -- v6 · marketplace: bulk-order review gate, direct small-order allocation, household consumers
@@ -357,4 +357,9 @@ update agrilink.farmers set phone = '+91 98251 44102'
  where phone = '+91 90000 10101' and not exists (select 1 from agrilink.farmers where phone = '+91 98251 44102');
 update agrilink.buyers set contact_phone = '+91 98252 77103'
  where contact_phone = '+91 90000 20201' and not exists (select 1 from agrilink.buyers where contact_phone = '+91 98252 77103');
+
+-- v7 · normalize farmer languages (remove deprecated gu) and update constraint
+update agrilink.farmers set language = 'hi' where language = 'gu' or language not in ('en', 'hi', 'te');
+alter table agrilink.farmers drop constraint if exists farmers_language_check;
+alter table agrilink.farmers add constraint farmers_language_check check (language in ('en', 'hi', 'te'));
 `

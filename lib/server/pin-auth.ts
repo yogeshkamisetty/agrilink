@@ -10,7 +10,7 @@ export interface UserAccount {
   role: 'farmer' | 'buyer' | 'admin'
   salt: string
   pinHash: string
-  verificationStatus: 'verified' | 'pending'
+  verificationStatus: 'verified' | 'pending' | 'pending_review' | 'rejected'
   onboardingComplete: boolean
   metadata?: Record<string, unknown>
   createdAt: string
@@ -463,7 +463,7 @@ export async function registerUser(params: {
 /**
  * Create an HMAC-signed session token (valid for 7 days)
  */
-export function createSessionToken(user: UserAccount): { token: string; exp: number } {
+export function createSessionToken(user: Pick<UserAccount, 'id' | 'phone' | 'fullName' | 'role'> & Partial<UserAccount>): { token: string; exp: number } {
   const now = Math.floor(Date.now() / 1000)
   const exp = now + 7 * 24 * 60 * 60 // 7 days expiration
 
