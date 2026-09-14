@@ -7,7 +7,13 @@ import type { RoutePlan } from './domain/routing'
 
 /** Records as the app sees them (camelCase, ISO timestamps, 'YYYY-MM-DD' dates). */
 
-export type OrderStatus = 'POSTED' | 'FUNDED' | 'SOURCING' | 'AGGREGATED' | 'COLLECTING' | 'DISPATCHED' | 'SETTLED'
+export type OrderStatus = 'POSTED' | 'FUNDED' | 'SOURCING' | 'AGGREGATED' | 'COLLECTING' | 'DISPATCHED' | 'SETTLED' | 'REJECTED'
+
+/** Orders above the small-order threshold state a purpose and wait for FPO review before they can be funded. */
+export type ReviewStatus = 'not_required' | 'pending' | 'approved' | 'rejected'
+export type OrderTier = 'SMALL' | 'BULK'
+/** Small orders go straight to the nearest farmer who can fill them; this tracks that hand-off. */
+export type AllocationStatus = 'PENDING' | 'ACCEPTED' | 'UNFULFILLED'
 
 export type Fpo = { id: string; name: string; village: string; district: string; state: string; lat: number; lng: number; bankAccountRef: string }
 
@@ -89,6 +95,15 @@ export type Order = {
   consignmentId: string | null
   deliveredAt: string | null
   createdAt: string
+  purpose: string | null
+  reviewStatus: ReviewStatus
+  adminNote: string | null
+  reviewedAt: string | null
+  orderTier: OrderTier
+  allocatedFarmerId: string | null
+  allocationStatus: AllocationStatus | null
+  declinedFarmerIds: string[]
+  deliveryLocation: string | null
 }
 
 export type NotificationKind = 'OFFER' | 'CONFIRMATION' | 'PROMOTED' | 'FILLED' | 'RELEASED' | 'ADVANCE' | 'REJECTED' | 'SETTLED' | 'WITHDRAWN'

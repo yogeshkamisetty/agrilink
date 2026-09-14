@@ -1,263 +1,135 @@
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { isCropId } from '@/lib/domain/crops'
+import { isIsoDate, isoDate } from '@/lib/domain/dates'
+import type { Lang } from '@/lib/domain/i18n'
+import { userName, userPhone } from '@/lib/server/actors'
+import { requireRole } from '@/lib/server/auth'
+import { clock } from '@/lib/server/clock'
 import { getDb } from '@/lib/server/db'
-import { getAllUsers, findUserByPhone, recordUserLogin } from '@/lib/server/pin-auth'
+import { DomainError } from '@/lib/server/errors'
+import { errorResponse, optionalString, readJson } from '@/lib/server/http'
+import { declareHarvest } from '@/lib/server/marketplace'
+import { getAllUsers } from '@/lib/server/pin-auth'
 
-function normalizePhone(value: unknown) {
-  const phone = typeof value === 'string' ? value.replace(/[^\d+]/g, '') : ''
-  return /^\+?[1-9]\d{9,14}$/.test(phone) ? phone : null
+type SupplyRow = {
+  id: string
+  name: string
+  phone: string
+  village: string
+  lat: number
+  lng: number
+  created_at: Date | string
+  registry_id: string | null
+  crop: string | null
+  expected_qty_kg: number | null
+  harvest_window_start: string | null
+  harvest_window_end: string | null
+  available_kg: number
+  delivered_lots: number
+  no_shows: number
+  last_grade: 'A' | 'B' | 'C' | null
 }
 
-export async function POST(request: Request) {
+const lastTen = (value: string) => value.replace(/\D/g, '').slice(-10)
+
+/**
+ * Share of commitments delivered, smoothed with a prior of nine deliveries
+ * and one no-show so a new member starts at 90% rather than an unearned 100%
+ * or a punitive 0%. Withdrawing early carries no penalty, so it does not count.
+ */
+function reliabilityScore(delivered: number, noShows: number) {
+  return Math.round(((delivered + 9) / (delivered + noShows + 10)) * 100)
+}
+
+/** Member supply: one row per farmer and live registry entry, with uncommitted quantity and track record. */
+export async function GET() {
   try {
-    const body = await request.json()
-    const name = typeof body.name === 'string' ? body.name.trim() : 'Farmer Member'
-    const village = typeof body.village === 'string' ? body.village.trim() : 'Kheda'
-    const cropName = typeof body.crop_name === 'string' ? body.crop_name.trim() : (typeof body.crop === 'string' ? body.crop.trim() : 'PADDY')
-    const mobileNumber = normalizePhone(body.mobile_number) || normalizePhone(body.phone) || '+919825144102'
-    const quantity = Number(body.quantity || body.quantity_kg || body.qty || 500)
-    const qualityGrade = typeof body.quality_grade === 'string' ? body.quality_grade.trim() : 'A'
-    const harvestDate = typeof body.harvest_date === 'string' ? body.harvest_date : new Date().toISOString().split('T')[0]
-
-    if (!name || !village || !cropName || !Number.isFinite(quantity) || quantity <= 0) {
-      return Response.json({ error: 'Name, village, crop, and positive quantity are required.' }, { status: 400 })
-    }
-
-    let createdFarmer: any = null
-
-    // 1. Primary DB Persistence (Supports relational PostgreSQL/PGlite and memory fallback)
-    try {
-      const db = await getDb()
-      let fpoId = 'f0000000-0000-0000-0000-000000000001'
-      try {
-        const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
-        if (fpos?.[0]?.id) fpoId = fpos[0].id
-      } catch {}
-
-      let farmerId = `f-${Date.now()}`
-      try {
-        const rows = await db.query<any>(
-          `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
-           values ($1, $2, $3, 'gu', 1.0, $4, 22.56, 72.92) returning id`,
-          [fpoId, name, mobileNumber, village]
-        )
-        if (rows?.[0]?.id) farmerId = rows[0].id
-      } catch {
-        try {
-          const rows = await db.query<any>(
-            `insert into agrilink.farmers (name, village, phone, crop_name, quantity, quality_grade, harvest_date)
-             values ($1, $2, $3, $4, $5, $6, $7) returning id`,
-            [name, village, mobileNumber, cropName.toUpperCase(), quantity, qualityGrade, harvestDate]
-          )
-          if (rows?.[0]?.id) farmerId = rows[0].id
-        } catch {}
+    const db = await getDb()
+    const rows = await db.query<SupplyRow>(
+      `select f.id, f.name, f.phone, f.village, f.lat, f.lng, f.created_at,
+              r.id as registry_id, r.crop, r.expected_qty_kg, r.harvest_window_start, r.harvest_window_end,
+              greatest(0, coalesce(r.expected_qty_kg, 0) - coalesce((select sum(c.qty_committed_kg) from agrilink.commitments c
+                                                                   where c.registry_id = r.id and c.status in ('ACTIVE', 'FULFILLED')), 0)) as available_kg,
+              (select count(*)::int from agrilink.lots l where l.farmer_id = f.id and l.qty_accepted_kg > 0) as delivered_lots,
+              (select count(*)::int from agrilink.commitments c where c.farmer_id = f.id and c.status = 'NO_SHOW') as no_shows,
+              (select l.final_grade from agrilink.lots l where l.farmer_id = f.id and l.final_grade is not null order by l.captured_at desc limit 1) as last_grade
+         from agrilink.farmers f
+         left join agrilink.crop_registry r on r.farmer_id = f.id and r.status = 'ACTIVE'
+        order by f.name, r.crop`,
+    )
+    const accounts = new Map((await getAllUsers().catch(() => [])).filter((u) => u.role === 'farmer').map((u) => [lastTen(u.phone), u]))
+    const farmers = rows.map((r) => {
+      const account = accounts.get(lastTen(r.phone))
+      return {
+        id: r.id,
+        entry_id: r.registry_id ?? r.id,
+        name: r.name,
+        mobile_number: r.phone,
+        village: r.village,
+        lat: r.lat,
+        lng: r.lng,
+        crop_name: r.crop,
+        crop: r.crop,
+        quantity: r.available_kg,
+        registered_kg: r.expected_qty_kg ?? 0,
+        harvest_date: r.harvest_window_start,
+        harvest_window_end: r.harvest_window_end,
+        quality_grade: r.last_grade,
+        delivered_lots: r.delivered_lots,
+        no_shows: r.no_shows,
+        reliability_score: reliabilityScore(r.delivered_lots, r.no_shows),
+        // FPO enrolment is the verification for members who have no app account.
+        verified: account ? account.verificationStatus === 'verified' : true,
+        is_live_account: Boolean(account),
+        last_login_at: account?.lastLoginAt ?? null,
+        created_at: r.created_at,
       }
-
-      try {
-        await db.query(
-          `insert into agrilink.crop_registry (farmer_id, crop, expected_qty_kg, harvest_window_start, harvest_window_end)
-           values ($1, $2, $3, now()::date, (now() + interval '14 days')::date)`,
-          [farmerId, cropName.toUpperCase(), quantity]
-        )
-      } catch {}
-
-      createdFarmer = {
-        id: farmerId,
-        name,
-        mobile_number: mobileNumber,
-        village,
-        crop_name: cropName.toUpperCase(),
-        quantity,
-        quality_grade: qualityGrade,
-        harvest_date: harvestDate,
-        verified: true,
-      }
-    } catch (dbErr) {
-      console.warn('[farmers/POST] DB insert warning:', dbErr)
-    }
-
-    // 2. Supabase Sync (if configured)
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin.from('farmers').insert({
-          name,
-          village,
-          mobile_number: mobileNumber,
-          crop_name: cropName.toUpperCase(),
-          quantity,
-          quality_grade: qualityGrade,
-          harvest_date: harvestDate,
-          verified: true,
-        }).select('id,name,mobile_number,village,crop_name,quantity,quality_grade,harvest_date,verified').single()
-
-        if (!error && data) {
-          createdFarmer = data
-        }
-      } catch (sbErr) {
-        console.warn('[farmers/POST] Supabase sync non-fatal:', sbErr)
-      }
-    }
-
-    // 3. Update user metadata in pin-auth if matching user phone exists
-    try {
-      const normalPhone = mobileNumber.replace(/\D/g, '').slice(-10)
-      const user = await findUserByPhone(normalPhone)
-      if (user) {
-        user.metadata = {
-          ...(user.metadata || {}),
-          village,
-          crop: cropName.toUpperCase(),
-          crop_name: cropName.toUpperCase(),
-          quantity,
-          quality_grade: qualityGrade,
-          harvest_date: harvestDate,
-        }
-        await recordUserLogin(normalPhone)
-      }
-    } catch {}
-
-    if (!createdFarmer) {
-      createdFarmer = {
-        id: `f-${Date.now()}`,
-        name,
-        village,
-        mobile_number: mobileNumber,
-        crop_name: cropName.toUpperCase(),
-        quantity,
-        quality_grade: qualityGrade,
-        harvest_date: harvestDate,
-        verified: true,
-      }
-    }
-
-    return Response.json({ ok: true, farmer: createdFarmer, otp_required: false })
-  } catch (err) {
-    console.error('[farmers/POST] Error:', err)
-    return Response.json({ error: 'Unable to register farmer produce.' }, { status: 500 })
+    })
+    farmers.sort((a, b) => Number(b.is_live_account) - Number(a.is_live_account) || String(b.last_login_at ?? '').localeCompare(String(a.last_login_at ?? '')))
+    return Response.json({ farmers })
+  } catch (error) {
+    return errorResponse(error, 'Unable to load farmers.')
   }
 }
 
-export async function GET() {
+/** Declare a harvest: a farmer for themselves, or the coordinator enrolling a member by phone. */
+export async function POST(request: Request) {
   try {
-    let farmersList: any[] = []
-
-    // 1. Fetch from Supabase if connected
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin.from('farmers')
-          .select('id,name,mobile_number,village,crop_name,quantity,quality_grade,harvest_date,verified')
-          .order('created_at', { ascending: false })
-
-        if (!error && Array.isArray(data) && data.length > 0) {
-          farmersList = data
-        }
-      } catch {}
-    }
-
-    // 2. Fetch from internal DB / memory-fallback
-    try {
-      const db = await getDb()
-      let rows: any[] = []
-      try {
-        rows = await db.query<any>(
-          `select f.id, f.name, f.phone as mobile_number, f.village,
-                  coalesce(r.crop, 'PADDY') as crop_name,
-                  coalesce(r.expected_qty_kg, 500) as quantity,
-                  'A' as quality_grade,
-                  r.harvest_window_start::text as harvest_date,
-                  true as verified
-           from agrilink.farmers f
-           left join agrilink.crop_registry r on r.farmer_id = f.id
-           order by f.name`
-        )
-      } catch {
-        rows = await db.query<any>(`select * from agrilink.farmers`)
-      }
-
-      if (Array.isArray(rows) && rows.length > 0) {
-        for (const row of rows) {
-          const item = {
-            id: row.id,
-            name: row.name,
-            mobile_number: row.mobile_number || row.phone,
-            village: row.village,
-            crop_name: (row.crop_name || row.crop || 'PADDY').toUpperCase(),
-            quantity: Number(row.quantity || row.expected_qty_kg || 500),
-            quality_grade: row.quality_grade || 'A',
-            harvest_date: row.harvest_date || null,
-            verified: row.verified ?? true,
-          }
-          if (!farmersList.some((f) => f.id === item.id || (f.mobile_number && f.mobile_number === item.mobile_number))) {
-            farmersList.push(item)
-          }
-        }
-      }
-    } catch {}
-
-    // 3. Integrate all live farmer user accounts from auth registry
-    try {
-      const allUsers = await getAllUsers()
-      const farmerUsers = allUsers.filter((u) => u.role === 'farmer')
-
-      for (const u of farmerUsers) {
-        const uPhone = u.phone.replace(/\D/g, '').slice(-10)
-        const matchIdx = farmersList.findIndex((f) => {
-          const fPhone = String(f.mobile_number || f.phone || '').replace(/\D/g, '').slice(-10)
-          return (fPhone && fPhone === uPhone) || (f.name && f.name.toLowerCase() === u.fullName.toLowerCase())
-        })
-
-        const meta = (u.metadata || {}) as Record<string, any>
-        const declaredCrop = String(meta.crop_name || meta.crop || 'PADDY').toUpperCase()
-        const declaredQty = Number(meta.quantity || meta.qty || 500)
-        const declaredVillage = (meta.village as string) || 'Kheda Cluster'
-        const harvestDate = (meta.harvest_date as string) || (meta.harvestDate as string) || new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0]
-
-        if (matchIdx !== -1) {
-          // Enrich existing farmer with live user status
-          farmersList[matchIdx] = {
-            ...farmersList[matchIdx],
-            name: u.fullName || farmersList[matchIdx].name,
-            is_live_account: true,
-            last_login_at: u.lastLoginAt || u.createdAt,
-            village: farmersList[matchIdx].village || declaredVillage,
-            crop_name: farmersList[matchIdx].crop_name || declaredCrop,
-            quantity: farmersList[matchIdx].quantity || declaredQty,
-            harvest_date: farmersList[matchIdx].harvest_date || harvestDate,
-          }
-        } else {
-          // Prepend newly logged in farmer to the top of the feed
-          farmersList.unshift({
-            id: u.id || `f-${uPhone}`,
-            name: u.fullName,
-            mobile_number: `+91 ${uPhone}`,
-            village: declaredVillage,
-            crop_name: declaredCrop,
-            quantity: declaredQty,
-            quality_grade: (meta.quality_grade as string) || 'A',
-            harvest_date: harvestDate,
-            verified: u.verificationStatus === 'verified',
-            reliability_score: 96,
-            is_live_account: true,
-            last_login_at: u.lastLoginAt || u.createdAt,
-            created_at: u.createdAt,
-          })
-        }
-      }
-    } catch (uErr) {
-      console.warn('[farmers/GET] User merge notice:', uErr)
-    }
-
-    // Sort so live active / newly logged-in accounts appear right at the top
-    farmersList.sort((a, b) => {
-      if (a.is_live_account && !b.is_live_account) return -1
-      if (!a.is_live_account && b.is_live_account) return 1
-      if (a.last_login_at && b.last_login_at) {
-        return new Date(b.last_login_at).getTime() - new Date(a.last_login_at).getTime()
-      }
-      return 0
+    const user = await requireRole(request, ['farmer', 'admin'])
+    const body = await readJson(request)
+    const crop = String(body.crop_name ?? body.crop ?? '').split('/')[0].trim().toUpperCase()
+    if (!isCropId(crop)) throw new DomainError('Choose a supported crop.', 400)
+    const phone = user.role === 'farmer' ? userPhone(user) : lastTen(String(body.mobile_number ?? body.phone ?? ''))
+    if (!/^[6-9]\d{9}$/.test(phone)) throw new DomainError('Enter the farmer’s 10-digit mobile number.', 400)
+    const harvestDate = optionalString(body.harvest_date)
+    const hasPin = body.lat != null && body.lng != null && Number.isFinite(Number(body.lat)) && Number.isFinite(Number(body.lng))
+    const db = await getDb()
+    const result = await declareHarvest(db, {
+      phone,
+      name: (user.role === 'farmer' ? userName(user) : '') || optionalString(body.name) || '',
+      village: optionalString(body.village),
+      crop,
+      quantityKg: Number(body.quantity ?? body.quantity_kg),
+      harvestStart: harvestDate && isIsoDate(harvestDate) ? harvestDate : isoDate(clock.now()),
+      language: (optionalString(body.language) ?? undefined) as Lang | undefined,
+      landHectares: body.land_hectares == null ? null : Number(body.land_hectares),
+      location: hasPin ? { lat: Number(body.lat), lng: Number(body.lng) } : null,
     })
-
-    return Response.json({ farmers: farmersList })
-  } catch (err) {
-    return Response.json({ error: err instanceof Error ? err.message : 'Failed to fetch farmers' }, { status: 500 })
+    return Response.json({
+      ok: true,
+      created: result.created,
+      farmer: {
+        id: result.farmer.id,
+        name: result.farmer.name,
+        mobile_number: result.farmer.phone,
+        village: result.farmer.village,
+        crop_name: result.entry.crop,
+        quantity: result.entry.expectedQtyKg,
+        harvest_date: result.entry.harvestWindowStart,
+        harvest_window_end: result.entry.harvestWindowEnd,
+      },
+      registry: result.entry,
+    })
+  } catch (error) {
+    return errorResponse(error, 'Unable to register the harvest.')
   }
 }

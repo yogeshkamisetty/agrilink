@@ -14,6 +14,9 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [phone, setPhone] = useState('')
   const [pin, setPin] = useState('')
   const [confirmPin, setConfirmPin] = useState('')
+  const [otp, setOtp] = useState('')
+  const [otpSessionId, setOtpSessionId] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
   const [fullName, setFullName] = useState('')
   const [showPin, setShowPin] = useState(false)
   const [selectedRole, setSelectedRole] = useState<'farmer' | 'buyer' | 'admin'>('farmer')
@@ -27,6 +30,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [checkingPhone, setCheckingPhone] = useState(false)
 
   const normalPhone = phone.replace(/\D/g, '').slice(-10)
+
+  async function sendLoginOtp() {
+    if (!/^[6-9]\d{9}$/.test(normalPhone)) throw new Error('Please enter a valid 10-digit Indian mobile number.')
+    const res = await fetch('/api/auth/otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', phone: normalPhone }) })
+    const data = await res.json()
+    if (!res.ok || !data.sessionId) throw new Error(data.error || 'Unable to send OTP.')
+    setOtpSessionId(data.sessionId); setOtpSent(true); setError(data.isDemo ? 'Demo OTP: 123456' : 'OTP sent to your mobile.')
+  }
 
   // Real-time phone lookup from the database
   const handlePhoneChange = async (val: string) => {
@@ -108,17 +119,17 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         throw new Error('Please enter a valid 10-digit Indian mobile number.')
       }
 
-      if (pin.trim().length < 4) {
-        throw new Error('Please enter your 4-digit security MPIN.')
-      }
-
+      if (!otpSent) { await sendLoginOtp(); setBusy(false); return }
+      if (!/^\d{6}$/.test(otp) || !otpSessionId) throw new Error('Enter the 6-digit OTP sent to your mobile.')
       const res = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'login',
+          action: 'verify',
           phone: normalPhone,
-          pin: pin.trim(),
+          otp,
+          sessionId: otpSessionId,
+          role: recognizedUser?.role === 'buyer' ? 'buyer' : 'farmer',
         }),
       })
 
@@ -158,24 +169,19 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         }
       }
 
-      if (!/^\d{4,6}$/.test(pin.trim())) {
-        throw new Error('Please choose a 4-digit numeric security MPIN.')
-      }
-
-      if (pin.trim() !== confirmPin.trim()) {
-        throw new Error('The confirmation MPIN does not match. Please re-enter.')
-      }
-
+      if (!otpSent) { await sendLoginOtp(); setBusy(false); return }
+      if (!/^\d{6}$/.test(otp) || !otpSessionId) throw new Error('Enter the 6-digit OTP sent to your mobile.')
       const res = await fetch('/api/auth/otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'signup',
+          action: 'verify',
           phone: normalPhone,
           fullName: fullName.trim(),
           role: selectedRole,
           adminPasscode: adminPasscode.trim(),
-          pin: pin.trim(),
+          otp,
+          sessionId: otpSessionId,
         }),
       })
 
@@ -217,13 +223,13 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         <p className="mt-6 text-xs font-semibold uppercase tracking-[.2em] text-primary">
           {newUser ? 'Farmer & Buyer Registration' : 'Member Sign In'}
         </p>
-        <h1 className="mt-1 font-serif text-2xl sm:text-3xl">
-          {newUser ? 'Create your AgriLink account' : 'Sign in with Mobile & MPIN'}
+          <h1 className="mt-1 font-serif text-2xl sm:text-3xl">
+          {newUser ? 'Create your AgriLink account' : 'Sign in with Mobile OTP'}
         </h1>
         <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-muted-foreground">
           {newUser
             ? 'Open to all farmers, buyers, and local cooperatives across India. Quick mobile registration.'
-            : 'Enter your 10-digit mobile number and 4-digit security MPIN to open your dashboard.'}
+            : 'Verify your 10-digit mobile number with a one-time password to open your dashboard.'}
         </p>
 
         {/* Form: Login or Signup */}
@@ -361,68 +367,37 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
                   </span>
                 </div>
                 <p className="text-[10px] text-emerald-800/80 dark:text-emerald-300/80">
-                  Recognized from registry · Enter your 4-digit MPIN
+                  Recognized from registry · Verify the OTP sent to your mobile
                 </p>
               </div>
               <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
             </div>
           )}
 
-          {/* 4-Digit Security MPIN Field */}
+          {/* Mobile OTP field */}
           <div>
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {newUser ? 'Set 4-Digit MPIN' : 'Security MPIN'}
+                Mobile OTP
               </label>
-              <button
-                type="button"
-                onClick={() => setShowPin(!showPin)}
-                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-              >
-                {showPin ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                <span>{showPin ? 'Hide' : 'Show'}</span>
-              </button>
             </div>
             <div className="mt-1.5 relative flex rounded-xl border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
               <span className="flex items-center pl-3.5 text-muted-foreground">
-                <Lock className="size-4" />
+                <ShieldCheck className="size-4" />
               </span>
               <input
-                type={showPin ? 'text' : 'password'}
+                type="text"
                 inputMode="numeric"
                 maxLength={6}
-                required
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder={newUser ? 'Set 4-digit PIN (e.g. 1234)' : 'Enter 4-digit MPIN'}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder={otpSent ? 'Enter 6-digit OTP' : 'Click continue to send OTP'}
                 className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2.5 text-sm font-mono tracking-widest outline-none"
               />
             </div>
           </div>
 
-          {/* Signup specific: Confirm MPIN */}
-          {newUser && (
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Confirm 4-Digit MPIN
-              </label>
-              <div className="mt-1.5 relative flex rounded-xl border border-border bg-background focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
-                <span className="flex items-center pl-3.5 text-muted-foreground">
-                  <Lock className="size-4" />
-                </span>
-                <input
-                  type={showPin ? 'text' : 'password'}
-                  inputMode="numeric"
-                  maxLength={6}
-                  required
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="Re-enter 4-digit MPIN"
-                  className="min-w-0 flex-1 rounded-xl bg-transparent px-3 py-2.5 text-sm font-mono tracking-widest outline-none"
-                />
-              </div>
-            </div>
-          )}
+          {otpSent && <button type="button" onClick={() => sendLoginOtp().catch((e) => setError(e.message))} className="text-xs font-semibold text-primary hover:underline">Resend OTP</button>}
 
           {/* Action Submit Button */}
           <button

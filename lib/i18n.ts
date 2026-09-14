@@ -97,7 +97,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     statFarmerRealised: 'Farmer realised',
     statPilotVolume: 'Pilot volume',
     statBuffer: '15% standby buffer',
-    statIntermediaryMargin: 'Intermediary margin compressed by 42%',
+    statIntermediaryMargin: 'Direct marketplace price comparison',
 
     actionNotifyFarmers: 'Notify matched farmers',
     actionFarmersNotified: 'Farmers notified',
@@ -110,12 +110,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     actionPrintWaybill: 'Print Bill of Lading (PDF)',
     actionDispatch: 'Dispatch vehicle (₹1,200)',
     actionConfirmDelivery: 'Confirm buyer delivery & settle',
-    actionAcceptLot: 'Accept lot & disburse 30% advance',
+    actionAcceptLot: 'Accept lot & record advance',
 
     smsPreviewTitle: 'Farmer Vernacular SMS Preview',
     smsSampleOrder: 'AgriLink Alert: Buyer demand committed for {crop}. Price: ₹{price}/kg. Reply 1 to accept {qty}kg.',
     smsSampleLot: 'AgriLink Update: Lot #LOT-1001 Grade A verified. Weighed {qty}kg. Advance payment processing.',
-    smsSamplePayment: 'AgriLink DBT: ₹{amount} credited to your bank account for Lot #LOT-1001 via NPCI e-RUPI.',
+    smsSamplePayment: 'AgriLink: ₹{amount} settlement recorded for Lot #LOT-1001. Check your bank/FPO statement for the transfer.',
   },
 
   hi: {
@@ -153,7 +153,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     statFarmerRealised: 'किसान प्राप्त मूल्य',
     statPilotVolume: 'पायलट वॉल्यूम',
     statBuffer: '15% अतिरिक्त सुरक्षा बफर',
-    statIntermediaryMargin: 'बिचौलियों का मार्जिन 42% कम हुआ',
+    statIntermediaryMargin: 'सीधी कीमत तुलना',
 
     actionNotifyFarmers: 'किसानों को सूचित करें',
     actionFarmersNotified: 'सूचनाएं प्रेषित',
@@ -171,7 +171,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     smsPreviewTitle: 'किसान एसएमएस / व्हाट्सएप पूर्वावलोकन (हिंदी)',
     smsSampleOrder: 'एग्रीलिंक सूचना: {crop} के लिए मांग अनुबंध सुरक्षित। मूल्य: ₹{price}/किग्रा। {qty}किग्रा हेतु 1 भेजें।',
     smsSampleLot: 'एग्रीलिंक अपडेट: लाट #LOT-1001 ग्रेड A प्रमाणित। वजन {qty}किग्रा। 30% अग्रिम भुगतान जारी।',
-    smsSamplePayment: 'एग्रीलिंक DBT: ₹{amount} आपके बैंक खाते में NPCI e-RUPI द्वारा सीधे जमा कर दिए गए हैं।',
+    smsSamplePayment: 'एग्रीलिंक: लॉट #LOT-1001 के लिए ₹{amount} का भुगतान रिकॉर्ड हुआ। बैंक/FPO स्टेटमेंट देखें।',
   },
 
   te: {
@@ -209,7 +209,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     statFarmerRealised: 'రైతుకు లభించిన నికర ధర',
     statPilotVolume: 'పైలట్ పరిమాణం',
     statBuffer: '15% అదనపు రక్షణ బఫర్',
-    statIntermediaryMargin: 'మధ్యవర్తుల కమీషన్ 42% తగ్గింది',
+    statIntermediaryMargin: 'నేరుగా ధర పోలిక',
 
     actionNotifyFarmers: 'రైతులకు సమాచారం పంపండి',
     actionFarmersNotified: 'సమాచారం పంపబడింది',
@@ -227,7 +227,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     smsPreviewTitle: 'రైతు SMS / వాట్సాప్ ప్రివ్యూ (తెలుగు)',
     smsSampleOrder: 'అగ్రిలింక్ అలర్ట్: {crop} కోసం కొనుగోలుదారు ఒప్పందం ఖరారైంది. ధర: ₹{price}/కిలో. {qty}కిలో ఇవ్వడానికి 1 అని రిప్లై ఇవ్వండి.',
     smsSampleLot: 'అగ్రిలింక్ అప్‌డేట్: లాట్ #LOT-1001 గ్రేడ్ A ధృవీకరించబడింది. బరువు {qty}కిలో. అడ్వాన్స్ చెల్లింపు జరుగుతోంది.',
-    smsSamplePayment: 'అగ్రిలింక్ DBT: లాట్ #LOT-1001 కోసం NPCI e-RUPI ద్వారా ₹{amount} మీ బ్యాంక్ ఖాతాలో జమ చేయబడింది.',
+    smsSamplePayment: 'అగ్రిలింక్: లాట్ #LOT-1001 కోసం ₹{amount} సెటిల్‌మెంట్ నమోదు చేయబడింది. బ్యాంక్/FPO స్టేట్‌మెంట్ చూడండి.',
   },
 
   gu: {
@@ -265,7 +265,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     statFarmerRealised: 'ખેડૂતને મળેલ ભાવ',
     statPilotVolume: 'પાયલોટ વોલ્યુમ',
     statBuffer: '15% સુરક્ષા બફર સ્ટોક',
-    statIntermediaryMargin: 'વચેટિયાઓનું કમિશન 42% ઘટ્યું',
+    statIntermediaryMargin: 'સીધી કિંમત સરખામણી',
 
     actionNotifyFarmers: 'ખેડૂતોને મેસેજ મોકલો',
     actionFarmersNotified: 'મેસેજ મોકલાઈ ગયા',
@@ -283,7 +283,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     smsPreviewTitle: 'ખેડૂત એસએમએસ / વ્હોટ્સએપ પ્રિવ્યૂ (ગુજરાતી)',
     smsSampleOrder: 'એગ્રીલિંક એલર્ટ: {crop} માટે ખરીદદાર ઓર્ડર મંજૂર. ભાવ: ₹{price}/કિલો. {qty}કિલો માટે 1 લખી મોકલો.',
     smsSampleLot: 'એગ્રીલિંક અપડેટ: લોટ #LOT-1001 ગ્રેડ A માન્ય. વજન {qty}કિલો. એડવાન્સ ચૂકવણી પ્રોસેસમાં છે.',
-    smsSamplePayment: 'એગ્રીલિંક DBT: ₹{amount} તમારા બેંક ખાતામાં NPCI e-RUPI દ્વારા સફળતાપૂર્વક જમા થયા છે.',
+    smsSamplePayment: 'એગ્રીલિંક: લોટ #LOT-1001 માટે ₹{amount} સેટલમેન્ટ નોંધાયું. બેંક/FPO સ્ટેટમેન્ટ જુઓ.',
   },
 }
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { authHeaders } from '@/lib/auth-client'
 
 export type OverviewData = {
   orders: Array<{
@@ -67,7 +68,7 @@ export function useAgriLink() {
   const notifyOrder = async (orderId: string) => {
     const res = await fetch(`/api/orders/${orderId}/notify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ simulateReplies: true }),
     })
     if (!res.ok) {
@@ -78,10 +79,10 @@ export function useAgriLink() {
     return res.json()
   }
 
-  const createOrder = async (orderData: { buyerId?: string; crop: string; qtyTargetKg: number; pricePerKg: number; deliveryDate: string }) => {
+  const createOrder = async (orderData: { buyerId?: string; crop: string; qtyTargetKg: number; pricePerKg: number; deliveryDate: string; purpose?: string }) => {
     const res = await fetch('/api/orders', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(orderData),
     })
     if (!res.ok) {
@@ -95,7 +96,7 @@ export function useAgriLink() {
   const gradeLot = async (orderId: string, farmerId: string, photoDataUrl: string) => {
     const res = await fetch(`/api/orders/${orderId}/grade`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ farmerId, photoDataUrl }),
     })
     if (!res.ok) {
@@ -108,7 +109,7 @@ export function useAgriLink() {
   const collectLot = async (orderId: string, lotData: { farmerId: string; attemptId?: string; weighedKg: number; decision: string; grade?: string; reason?: string }) => {
     const res = await fetch(`/api/orders/${orderId}/collect`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(lotData),
     })
     if (!res.ok) {
@@ -122,7 +123,7 @@ export function useAgriLink() {
   const dispatchOrder = async (orderId: string, vehicleCost: number, vehicleLabel?: string) => {
     const res = await fetch(`/api/orders/${orderId}/dispatch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ vehicleCost, vehicleLabel }),
     })
     if (!res.ok) {
@@ -136,7 +137,7 @@ export function useAgriLink() {
   const deliverOrder = async (orderId: string, buyerId: string, rejections?: Array<{ lotId: string; reason: string }>) => {
     const res = await fetch(`/api/orders/${orderId}/deliver`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ buyerId, rejections }),
     })
     if (!res.ok) {
@@ -148,7 +149,7 @@ export function useAgriLink() {
   }
 
   const resetData = async () => {
-    const res = await fetch('/api/seed/reset', { method: 'POST' })
+    const res = await fetch('/api/seed/reset', { method: 'POST', headers: authHeaders() })
     if (!res.ok) {
       const err = await res.json()
       throw new Error(err.error || 'Failed to reset seed data')

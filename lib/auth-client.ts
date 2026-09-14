@@ -23,6 +23,17 @@ export interface AuthClientInstance {
   from: (table: string) => any
 }
 
+/** Headers for an API call, with the stored AgriLink session's bearer token when there is one. */
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  if (typeof window === 'undefined') return extra
+  try {
+    const token = JSON.parse(localStorage.getItem('agrilink_session') || 'null')?.access_token
+    return token ? { ...extra, Authorization: `Bearer ${token}` } : extra
+  } catch {
+    return extra
+  }
+}
+
 export function getAuthClient(): AuthClientInstance {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

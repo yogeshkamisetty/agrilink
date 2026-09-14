@@ -38,7 +38,7 @@ export function defaultDeliveryDate(today: string): string {
 // continuously over several weeks, so most windows are long; Harshad's crop
 // was planted late and cannot reach a delivery in the next three weeks.
 const FARMERS: FarmerSeed[] = [
-  { key: 'ramesh', name: 'Rameshbhai Patel', phone: '+91 90000 10101', language: 'gu', landHectares: 0.8, village: 'Boriavi', lat: 22.6167, lng: 72.9333, crops: [{ crop: 'TOMATO', kg: 50, window: [-7, 30] }, { crop: 'PADDY', kg: 500, window: [-10, 60] }], reply: { afterHours: 0.8, response: 'ACCEPT', qty: 50 } },
+  { key: 'ramesh', name: 'Rameshbhai Patel', phone: '+91 98251 44102', language: 'gu', landHectares: 0.8, village: 'Boriavi', lat: 22.6167, lng: 72.9333, crops: [{ crop: 'TOMATO', kg: 50, window: [-7, 30] }, { crop: 'PADDY', kg: 500, window: [-10, 60] }], reply: { afterHours: 0.8, response: 'ACCEPT', qty: 50 } },
   { key: 'savita', name: 'Savitaben Parmar', phone: '+91 90000 10102', language: 'gu', landHectares: 1.2, village: 'Petlad', lat: 22.4768, lng: 72.7998, crops: [{ crop: 'TOMATO', kg: 70, window: [-7, 30] }, { crop: 'POTATO', kg: 400, window: [-20, 30] }, { crop: 'WHEAT', kg: 700, window: [-10, 60] }], reply: { afterHours: 1.6, response: 'ACCEPT', qty: 70 } },
   { key: 'mohan', name: 'Mohanbhai Solanki', phone: '+91 90000 10103', language: 'gu', landHectares: 1.5, village: 'Sojitra', lat: 22.5387, lng: 72.7195, crops: [{ crop: 'TOMATO', kg: 80, window: [-5, 30] }, { crop: 'PADDY', kg: 800, window: [-10, 60] }], reply: { afterHours: 2.4, response: 'ACCEPT', qty: 80 } },
   { key: 'jignesh', name: 'Jignesh Chauhan', phone: '+91 90000 10104', language: 'gu', landHectares: 1.0, village: 'Bakrol', lat: 22.5796, lng: 72.958, crops: [{ crop: 'TOMATO', kg: 60, window: [-7, 30] }, { crop: 'POTATO', kg: 300, window: [-20, 30] }, { crop: 'WHEAT', kg: 600, window: [-10, 60] }], reply: { afterHours: 3.0, response: 'DECLINE' } },
@@ -53,7 +53,7 @@ const FARMERS: FarmerSeed[] = [
 ]
 
 const BUYERS: Array<{ key: string; name: string; type: BuyerType; address: string; city: string; lat: number; lng: number; contactName: string; contactPhone: string; enrolment?: number }> = [
-  { key: 'school', name: 'PM POSHAN Central Kitchen, Vallabh Vidyanagar', type: 'INSTITUTIONAL', address: 'Kitchen block, Nana Bazaar, Vallabh Vidyanagar', city: 'Anand', lat: 22.553, lng: 72.923, contactName: 'Meera Joshi', contactPhone: '+91 90000 20201', enrolment: 1100 },
+  { key: 'school', name: 'PM POSHAN Central Kitchen, Vallabh Vidyanagar', type: 'INSTITUTIONAL', address: 'Kitchen block, Nana Bazaar, Vallabh Vidyanagar', city: 'Anand', lat: 22.553, lng: 72.923, contactName: 'Meera Joshi', contactPhone: '+91 98252 77103', enrolment: 1100 },
   { key: 'jpk', name: 'Jan Poshan Kendra · FPS No. 214, Anand', type: 'FAIR_PRICE_SHOP', address: 'Shop 214, Ganesh Chowkdi, Anand', city: 'Anand', lat: 22.562, lng: 72.958, contactName: 'Dinesh Prajapati', contactPhone: '+91 90000 20202' },
   { key: 'rwa', name: "Shreeji Heights Residents' Association, Karamsad", type: 'RESIDENTIAL_SOCIETY', address: 'Main gate, Shreeji Heights, Karamsad', city: 'Anand', lat: 22.5405, lng: 72.9105, contactName: 'Hetal Shah', contactPhone: '+91 90000 20203' },
 ]
@@ -206,6 +206,52 @@ export async function seed(db: Db) {
       ],
     )
   })
+}
+
+type HistoryPlan = { buyerType: BuyerType; crop: CropId; kgPerServingDay: number; weeklyGrowth: number; noise: number; followsSchoolCalendar: boolean; seed: number }
+
+/**
+ * Synthetic weekly purchase history for the demand forecast, beyond the
+ * school kitchen's tomato. Illustrative volumes with a gentle trend and
+ * noise; every row is flagged synthetic and the forecast says so.
+ */
+const HISTORY_PLANS: HistoryPlan[] = [
+  { buyerType: 'INSTITUTIONAL', crop: 'PADDY', kgPerServingDay: 80, weeklyGrowth: 0, noise: 0.06, followsSchoolCalendar: true, seed: 2042 },
+  { buyerType: 'INSTITUTIONAL', crop: 'ONION', kgPerServingDay: 12, weeklyGrowth: 0, noise: 0.1, followsSchoolCalendar: true, seed: 3042 },
+  { buyerType: 'FAIR_PRICE_SHOP', crop: 'ONION', kgPerServingDay: 50, weeklyGrowth: 0.006, noise: 0.12, followsSchoolCalendar: false, seed: 4042 },
+  { buyerType: 'FAIR_PRICE_SHOP', crop: 'WHEAT', kgPerServingDay: 140, weeklyGrowth: 0.002, noise: 0.08, followsSchoolCalendar: false, seed: 5042 },
+  { buyerType: 'RESIDENTIAL_SOCIETY', crop: 'POTATO', kgPerServingDay: 20, weeklyGrowth: 0.01, noise: 0.15, followsSchoolCalendar: false, seed: 6042 },
+]
+
+/** Idempotent: only fills buyer × crop series that have no history yet, so it also upgrades databases seeded before it existed. */
+export async function ensureDemandHistory(db: Db) {
+  const buyers = await db.query<{ id: string; type: BuyerType }>(`select id, type from agrilink.buyers order by created_at`)
+  if (!buyers.length) return
+  const calendar = await db.query<{ day: string; kind: 'HOLIDAY' | 'EXAM' }>(`select day, kind from agrilink.academic_calendar`)
+  const byDay = new Map(calendar.map((c) => [c.day, c.kind]))
+  const thisWeek = weekStart(isoDate(clock.now()))
+
+  for (const plan of HISTORY_PLANS) {
+    const buyer = buyers.find((b) => b.type === plan.buyerType)
+    if (!buyer) continue
+    const [existing] = await db.query<{ n: number }>(`select count(*)::int as n from agrilink.order_history where buyer_id = $1 and crop = $2`, [buyer.id, plan.crop])
+    if ((existing?.n ?? 0) > 0) continue
+    const random = mulberry32(plan.seed)
+    for (let w = 26; w >= 1; w--) {
+      const start = addDays(thisWeek, -7 * w)
+      const days = Array.from({ length: 6 }, (_, d) => addDays(start, d))
+      const servingDays = plan.followsSchoolCalendar ? days.filter((d) => byDay.get(d) !== 'HOLIDAY').length : 6
+      if (servingDays === 0) continue
+      const examDays = plan.followsSchoolCalendar ? days.filter((d) => byDay.get(d) === 'EXAM').length : 0
+      const growth = 1 + plan.weeklyGrowth * (26 - w)
+      const jitter = 1 - plan.noise + random() * 2 * plan.noise
+      const qty = Math.round((plan.kgPerServingDay * (servingDays - examDays * 0.15) * growth * jitter) / 5) * 5
+      await db.query(
+        `insert into agrilink.order_history (buyer_id, crop, week_start, school_days, qty_kg) values ($1, $2, $3::date, $4, $5) on conflict (buyer_id, crop, week_start) do nothing`,
+        [buyer.id, plan.crop, start, servingDays, qty],
+      )
+    }
+  }
 }
 
 function seededQuote(kind: 'MANDI' | 'RETAIL', crop: CropId, price: number, market: string, date: string) {

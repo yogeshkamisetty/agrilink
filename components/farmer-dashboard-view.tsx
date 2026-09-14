@@ -1,28 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import {
-  Wheat,
-  CircleDollarSign,
-  Truck,
-  CheckCircle2,
-  Clock,
-  Phone,
-  PhoneCall,
-  Camera,
-  BadgeCheck,
-  Printer,
-  ShieldCheck,
-  Sprout,
-  Mic,
-  Receipt,
-  Check,
-  RefreshCw,
-  ShoppingBag,
-  X,
-  Zap,
-} from 'lucide-react'
-import { Language, getT } from '@/lib/i18n'
+import { useCallback, useEffect, useState } from 'react'
+import { BadgeCheck, Camera, Check, CheckCircle2, CircleDollarSign, Clock, Loader2, MessageSquare, Mic, Phone, Receipt, RefreshCw, ShoppingBag, Sprout, Truck, Wheat, X } from 'lucide-react'
+import { authHeaders } from '@/lib/auth-client'
+import { Language } from '@/lib/i18n'
+import type { BoardOrder } from '@/lib/server/marketplace'
+import type { FarmerOverview } from '@/lib/server/views'
 import { GradeCamCamera } from './gradecam-camera'
 
 interface FarmerDashboardViewProps {
@@ -45,1177 +28,528 @@ interface FarmerDashboardViewProps {
   setFarmerTab?: (tab: 'slip' | 'camera') => void
 }
 
-const cropImages: Record<string, string> = {
-  paddy: '/crops/paddy.png',
-  rice: '/crops/paddy.png',
-  tomato: '/crops/tomato.png',
-  wheat: '/crops/wheat.png',
-  onion: '/crops/onion.png',
-  potato: '/crops/potato.png',
+type GradeAttempt = { aiStatus: 'GRADED' | 'LOW_CONFIDENCE' | 'UNAVAILABLE'; aiGrade: string | null; aiConfidence: number | null; aiReasoning: string | null; aiDefects: string[] }
+
+const CROP_IMAGES: Record<string, string> = { PADDY: '/crops/paddy.png', TOMATO: '/crops/tomato.png', WHEAT: '/crops/wheat.png', ONION: '/crops/onion.png', POTATO: '/crops/potato.png' }
+const STAGE: Record<string, string> = {
+  POSTED: 'Waiting for the buyer',
+  FUNDED: 'Buyer has paid the advance',
+  SOURCING: 'Commitments being collected',
+  COLLECTING: 'Collection and grading',
+  DISPATCHED: 'On the way to the buyer',
+  SETTLED: 'Settled',
+  REJECTED: 'Cancelled',
 }
 
-export function FarmerDashboardView({
-  order,
-  buyer,
-  currentUserName,
-  lang,
-  activeNav,
-  onNavigate,
-  farmerOfferAccepted,
-  onAcceptCommitment,
-  onDeclareHarvest,
-  onOpenVoice,
-  onOpenReceipt,
-  onRedistributeExcess,
-  onCapturePhoto,
-  aiResult,
-  busy,
-  farmerTab = 'slip',
-  setFarmerTab,
-}: FarmerDashboardViewProps) {
-  const [demandCommitted, setDemandCommitted] = useState<Record<string, boolean>>({})
-  const [committingId, setCommittingId] = useState<string | null>(null)
-  const [successToast, setSuccessToast] = useState<string | null>(null)
+const LABELS = {
+  en: { welcome: 'Welcome', declare: 'Declare harvest', voice: 'Voice assistant', committed: 'Committed produce', vsMandi: 'Compared with the mandi', next: 'Next delivery', received: 'Money received', harvests: 'My registered harvests', commitments: 'My commitments', messages: 'Messages from the FPO', overview: 'My harvest & pickup', demands: 'Buyer demands', quality: 'Quality check', passbook: 'Passbook & payments', allocated: 'An order has been sent to you', accept: 'Accept', decline: 'Decline' },
+  hi: { welcome: 'नमस्ते', declare: 'नई फसल दर्ज करें', voice: 'बोलकर पूछें', committed: 'पक्की फसल', vsMandi: 'मंडी से तुलना', next: 'अगली डिलीवरी', received: 'मिला भुगतान', harvests: 'मेरी दर्ज फसलें', commitments: 'मेरे वादे', messages: 'FPO के संदेश', overview: 'मेरी फसल और उठाव', demands: 'खरीदार मांग', quality: 'क्वालिटी जांच', passbook: 'पासबुक और भुगतान', allocated: 'आपको एक ऑर्डर भेजा गया है', accept: 'स्वीकार करें', decline: 'मना करें' },
+  te: { welcome: 'నమస్కారం', declare: 'పంటను నమోదు చేయండి', voice: 'వాయిస్ సహాయం', committed: 'ఖరారైన పంట', vsMandi: 'మండీతో పోలిక', next: 'తదుపరి డెలివరీ', received: 'అందిన చెల్లింపు', harvests: 'నా నమోదైన పంటలు', commitments: 'నా ఒప్పందాలు', messages: 'FPO సందేశాలు', overview: 'నా పంట & పికప్', demands: 'కొనుగోలుదారు డిమాండ్లు', quality: 'నాణ్యత తనిఖీ', passbook: 'పాస్‌బుక్ & చెల్లింపులు', allocated: 'మీకు ఒక ఆర్డర్ పంపబడింది', accept: 'అంగీకరించండి', decline: 'తిరస్కరించండి' },
+}
 
-  // SIH 2026 Direct Order Allocation State for Smallholders
-  const [allocationStatus, setAllocationStatus] = useState<'PENDING' | 'ACCEPTED' | 'REJECTED'>('PENDING')
-  const [allocationBusy, setAllocationBusy] = useState(false)
+const inr = (value: number) => `₹${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(value)}`
+const kgLabel = (value: number) => `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 1 }).format(value)} kg`
+const dayLabel = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+const cropLabel = (crop: string) => crop.charAt(0) + crop.slice(1).toLowerCase()
 
-  const handleAcceptAllocation = async () => {
-    setAllocationBusy(true)
-    try {
-      if (order?.id) {
-        await fetch(`/api/orders/${order.id}/action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'farmer_accept' }),
-        }).catch(() => null)
+function broadcast(type: string) {
+  window.dispatchEvent(new CustomEvent('agrilink:order-created'))
+  try {
+    const bc = new BroadcastChannel('agrilink_sync')
+    bc.postMessage({ type })
+    bc.close()
+  } catch {}
+}
+
+export function FarmerDashboardView({ currentUserName, lang, activeNav, onNavigate, onDeclareHarvest, onOpenVoice }: FarmerDashboardViewProps) {
+  const t = (LABELS as Record<string, typeof LABELS.en>)[lang] ?? LABELS.en
+  const [me, setMe] = useState<FarmerOverview | null>(null)
+  const [meError, setMeError] = useState<string | null>(null)
+  const [orders, setOrders] = useState<BoardOrder[]>([])
+  const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [commitQty, setCommitQty] = useState<Record<string, number>>({})
+  const [grading, setGrading] = useState(false)
+  const [gradeResult, setGradeResult] = useState<GradeAttempt | null>(null)
+
+  const load = useCallback(async () => {
+    const [meRes, ordersRes] = await Promise.all([
+      fetch('/api/farmer/me', { headers: authHeaders() }).catch(() => null),
+      fetch('/api/orders', { headers: authHeaders() }).catch(() => null),
+    ])
+    if (meRes) {
+      const json = await meRes.json().catch(() => ({}))
+      if (meRes.ok) {
+        setMe(json)
+        setMeError(null)
+      } else {
+        setMeError(json.error || 'Your farm record could not be loaded.')
       }
-      setAllocationStatus('ACCEPTED')
-      setSuccessToast(
-        lang === 'hi'
-          ? 'फसल आवंटन स्वीकार कर लिया गया है! 30% अग्रिम बैंक खाते में जमा होगा।'
-          : 'Order allocation accepted! 30% advance will be deposited to your bank account upon weighment.'
-      )
-      setTimeout(() => setSuccessToast(null), 6000)
-    } finally {
-      setAllocationBusy(false)
     }
-  }
-
-  const handleRejectAllocation = async () => {
-    setAllocationBusy(true)
-    try {
-      if (order?.id) {
-        await fetch(`/api/orders/${order.id}/action`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'farmer_reject', crop: order.crop, qtyTargetKg: order.qty_target_kg }),
-        }).catch(() => null)
-      }
-      setAllocationStatus('REJECTED')
-      setSuccessToast(
-        lang === 'hi'
-          ? 'ऑर्डर रद्द कर दिया गया। प्रणाली ने स्वतः इसे अगले निकटतम किसान को भेज दिया है।'
-          : 'Allocation released. System automatically re-routed this request to the next nearest farmer in your cluster.'
-      )
-      setTimeout(() => setSuccessToast(null), 6000)
-    } finally {
-      setAllocationBusy(false)
+    if (ordersRes?.ok) {
+      const json = await ordersRes.json().catch(() => ({}))
+      if (Array.isArray(json.orders)) setOrders(json.orders)
     }
-  }
-
-  const t = getT(lang)
-  const farmerName = currentUserName?.trim() || 'Ramesh Kumar'
-  const crop = order?.crop || 'PADDY'
-  const price = order?.pricePerKg || 28
-  const mandiPrice = 22
-  const farmerCommittedKg = 500
-  const grossValue = farmerCommittedKg * price
-  const advanceAmount = Math.round(grossValue * 0.3)
-  const transportCost = 560
-  const balanceAmount = grossValue - advanceAmount - transportCost
-  const extraIncome = (price - mandiPrice) * farmerCommittedKg
-
-  // Dynamic baseline demands with current year/dates used as initial state before fetch
-  const nowMs = Date.now()
-  const initialDemands = [
-    {
-      id: 'ord-tomato-101',
-      crop: 'Tomato',
-      buyer: 'Civil Hospital Trust Kitchen, Anand',
-      targetKg: 500,
-      committedKg: 350,
-      stillNeededKg: 150,
-      pricePerKg: 24,
-      deliveryDate: new Date(nowMs + 86400000 * 4).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      badge: 'Urgent Need',
-      image: '/crops/tomato.png',
-    },
-    {
-      id: 'ord-wheat-102',
-      crop: 'Wheat',
-      buyer: 'Jan Poshan Kendra · FPS 214',
-      targetKg: 1200,
-      committedKg: 900,
-      stillNeededKg: 300,
-      pricePerKg: 26,
-      deliveryDate: new Date(nowMs + 86400000 * 7).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      badge: 'Bulk Sourcing',
-      image: '/crops/wheat.png',
-    },
-    {
-      id: 'ord-onion-103',
-      crop: 'Onion',
-      buyer: 'Kheda Community Hostel Mess',
-      targetKg: 400,
-      committedKg: 220,
-      stillNeededKg: 180,
-      pricePerKg: 22,
-      deliveryDate: new Date(nowMs + 86400000 * 5).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-      badge: 'Community Pool',
-      image: '/crops/onion.png',
-    },
-  ]
-
-  const [liveDemands, setLiveDemands] = useState(initialDemands)
+  }, [])
 
   useEffect(() => {
-    let mounted = true
-    const fetchOrders = async () => {
-      try {
-        const res = await fetch('/api/orders')
-        if (!res.ok) return
-        const data = await res.json()
-        if (data.orders && Array.isArray(data.orders) && data.orders.length > 0 && mounted) {
-          const mapped = data.orders.map((o: any) => {
-            const cropRaw = o.crop || o.crop_required || 'PADDY'
-            const cropKey = String(cropRaw).toLowerCase()
-            const img = cropImages[cropKey] || '/crops/paddy.png'
-            const target = Number(o.qty_target_kg || o.quantity_required || 1000)
-            const committed = Number(o.qty_committed_kg || 0)
-            const stillNeeded = Math.max(0, target - committed)
-            const deliveryDateObj = o.delivery_date ? new Date(o.delivery_date) : new Date(Date.now() + 86400000 * 5)
-            const dateStr = deliveryDateObj.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-            return {
-              id: o.id || `dem-${Math.random()}`,
-              crop: cropRaw.charAt(0).toUpperCase() + cropRaw.slice(1).toLowerCase(),
-              buyer: o.buyer_name || o.delivery_location || 'Institutional Buyer',
-              targetKg: target,
-              committedKg: committed,
-              stillNeededKg: stillNeeded,
-              pricePerKg: Number(o.price_per_kg || 28),
-              deliveryDate: dateStr,
-              badge: stillNeeded === 0 || o.status === 'AGGREGATED' ? 'Fulfilled' : o.status === 'FUNDED' ? 'Escrow Secured' : 'Open Sourcing',
-              image: img,
-            }
-          })
-          setLiveDemands(mapped)
-        }
-      } catch {}
-    }
-
-    fetchOrders()
-    // Poll every 2.5s for seamless multi-user live updates
-    const timer = setInterval(fetchOrders, 2500)
-    const handleOrderCreated = () => fetchOrders()
-
-    window.addEventListener('agrilink:order-created', handleOrderCreated)
-
-    // Cross-tab real-time communication via BroadcastChannel
+    load()
+    const timer = setInterval(load, 5000)
+    window.addEventListener('agrilink:order-created', load)
+    window.addEventListener('agrilink:harvest-updated', load)
     let bc: BroadcastChannel | null = null
     try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        bc = new BroadcastChannel('agrilink_sync')
-        bc.onmessage = () => {
-          if (mounted) fetchOrders()
-        }
-      }
+      bc = new BroadcastChannel('agrilink_sync')
+      bc.onmessage = () => load()
     } catch {}
-
     return () => {
-      mounted = false
       clearInterval(timer)
-      window.removeEventListener('agrilink:order-created', handleOrderCreated)
+      window.removeEventListener('agrilink:order-created', load)
+      window.removeEventListener('agrilink:harvest-updated', load)
       try {
         bc?.close()
       } catch {}
     }
-  }, [])
+  }, [load])
 
-  const handleCommitDemand = async (demandId: string, cropName: string, rate: number, openCapacity?: number) => {
-    setCommittingId(demandId)
+  function flash(tone: 'ok' | 'error', text: string) {
+    setToast({ tone, text })
+    setTimeout(() => setToast((current) => (current?.text === text ? null : current)), 8000)
+  }
+
+  async function act(orderId: string, body: Record<string, unknown>) {
+    setBusyId(orderId)
     try {
-      const commitQty = Math.min(openCapacity !== undefined && openCapacity > 0 ? openCapacity : 100, 100)
-
-      // 1. Send live commitment to backend API
-      await fetch(`/api/orders/${demandId}/action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'farmer_commit',
-          farmerName,
-          farmerId: 'f-ramesh-101',
-          crop: cropName,
-          committedKg: commitQty,
-        }),
-      }).catch(() => null)
-
-      // 2. Update local state optimistically
-      setDemandCommitted((prev) => ({ ...prev, [demandId]: true }))
-      setLiveDemands((prev) =>
-        prev.map((d) => {
-          if (d.id === demandId) {
-            const newNeeded = Math.max(0, d.stillNeededKg - commitQty)
-            return {
-              ...d,
-              stillNeededKg: newNeeded,
-              badge: newNeeded === 0 ? 'Fulfilled' : d.badge,
-            }
-          }
-          return d
-        })
-      )
-
-      // 3. Broadcast real-time update to all tabs and windows
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-        try {
-          const bc = new BroadcastChannel('agrilink_sync')
-          bc.postMessage({ type: 'COMMITMENT_UPDATED', orderId: demandId, commitQty })
-          bc.close()
-        } catch {}
-      }
-
-      setSuccessToast(
-        lang === 'hi'
-          ? `${cropName} के लिए ${commitQty} किलो का आवंटन पक्का हुआ! भाव: ₹${rate}/किलो।`
-          : `Harvest commitment of ${commitQty} KG confirmed for ${cropName} at ₹${rate}/kg! Confirmation SMS sent.`
-      )
-      setTimeout(() => setSuccessToast(null), 5000)
-    } catch {
-      setSuccessToast('Failed to record harvest commitment. Please try again.')
-      setTimeout(() => setSuccessToast(null), 4000)
+      const res = await fetch(`/api/orders/${orderId}/action`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'That did not go through. Please try again.')
+      flash('ok', json.message || 'Done.')
+      broadcast('FARMER_ACTION')
+      await load()
+    } catch (e) {
+      flash('error', e instanceof Error ? e.message : 'That did not go through. Please try again.')
     } finally {
-      setCommittingId(null)
+      setBusyId(null)
     }
   }
 
-  // Bilingual UI labels for Farmer clarity
-  const labels = {
-    greeting: lang === 'hi' ? 'नमस्ते' : lang === 'te' ? 'నమస్కారం' : 'Welcome back',
-    kycBadge: lang === 'hi' ? 'आधार सत्यापित किसान' : lang === 'te' ? 'ఆధార్ ధృవీకరించబడిన రైతు' : 'Aadhaar KYC Verified',
-    village: lang === 'hi' ? 'खेड़ा ग्राम क्लस्टर · आणंद, गुजरात' : lang === 'te' ? 'ఖేడా గ్రామ క్లస్టర్ · ఆనంద్' : 'Kheda Village Cluster · Anand, Gujarat',
-    btnDeclare: lang === 'hi' ? 'नई फसल दर्ज करें' : lang === 'te' ? 'కొత్త పంటను నమోదు చేయండి' : 'Declare New Harvest',
-    btnVoice: lang === 'hi' ? 'बोलकर पूछें' : lang === 'te' ? 'మాట్లాడి సహాయం పొందండి' : 'Voice Assistant',
-    btnCall: lang === 'hi' ? 'समन्वयक को कॉल करें' : lang === 'te' ? 'కోఆర్డినేటర్‌కు కాల్ చేయండి' : 'Call Coordinator',
-    totalPayoutTitle: lang === 'hi' ? 'कुल सुनिश्चित भुगतान' : lang === 'te' ? 'మొత్తం హామీ చెల్లింపు' : 'Total Guaranteed Payout',
-    activeCropTitle: lang === 'hi' ? 'मेरी पक्की फसल' : lang === 'te' ? 'నా ఖరారైన పంట' : 'My Committed Produce',
-    pickupTitle: lang === 'hi' ? 'गाड़ी का समय (उठाव)' : lang === 'te' ? 'వాహనం వచ్చే సమయం' : 'Scheduled Pickup',
-    qualityTitle: lang === 'hi' ? 'क्वालिटी दर्जा (ग्रेड)' : lang === 'te' ? 'నాణ్యత గ్రేడ్' : 'Quality Clearance',
-    advancePaid: lang === 'hi' ? 'अग्रिम प्राप्त' : lang === 'te' ? 'అడ్వాన్స్ చెల్లించబడింది' : 'Advance Paid',
-    balanceDue: lang === 'hi' ? 'बाकी भुगतान' : lang === 'te' ? 'మిగిలిన బ్యాలెన్స్' : 'Balance on Pickup',
+  async function gradePhoto(dataUrl: string) {
+    const next = me?.summary.nextDelivery
+    if (!next) {
+      flash('error', 'Photos are checked against a committed lot. Commit your harvest to an order first.')
+      return
+    }
+    setGrading(true)
+    try {
+      const res = await fetch(`/api/orders/${next.orderId}/grade`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ photoDataUrl: dataUrl }) })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'The photo could not be checked.')
+      setGradeResult(json.attempt)
+    } catch (e) {
+      setGradeResult(null)
+      flash('error', e instanceof Error ? e.message : 'The photo could not be checked.')
+    } finally {
+      setGrading(false)
+    }
   }
+
+  const farmerName = me?.farmer.name ?? currentUserName ?? ''
+  const summary = me?.summary
+  const allocations = orders.filter((o) => o.is_allocated_to_me)
+  const available = new Map((me?.registry ?? []).map((r) => [r.crop, Math.max(0, r.expectedQtyKg - r.committedKg)]))
+  const openDemands = orders.filter((o) => o.open_for_commitment)
+  const upcoming = orders.filter((o) => o.order_tier === 'BULK' && (o.status === 'POSTED' || o.status === 'FUNDED') && o.review_status !== 'pending' && o.review_status !== 'rejected')
+  const received = (summary?.advancesReceived ?? 0) + (summary?.settledNet ?? 0)
+
+  const tabs = [
+    { key: 'Overview' as const, label: t.overview, Icon: Wheat },
+    { key: 'Orders' as const, label: t.demands, Icon: ShoppingBag, count: openDemands.length },
+    { key: 'Collection & grade' as const, label: t.quality, Icon: BadgeCheck },
+    { key: 'Settlements' as const, label: t.passbook, Icon: Receipt },
+  ]
 
   return (
     <div className="space-y-6">
-      {/* Toast Notification */}
-      {successToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-2xl bg-emerald-600 text-white px-5 py-3.5 shadow-2xl animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <CheckCircle2 className="size-5 shrink-0" />
-          <span className="text-sm font-semibold">{successToast}</span>
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex max-w-md items-start gap-3 rounded-2xl px-5 py-3.5 shadow-2xl ${toast.tone === 'ok' ? 'bg-emerald-600 text-white' : 'bg-destructive text-white'}`}>
+          {toast.tone === 'ok' ? <CheckCircle2 className="mt-0.5 size-5 shrink-0" /> : <X className="mt-0.5 size-5 shrink-0" />}
+          <span className="text-sm font-semibold">{toast.text}</span>
         </div>
       )}
 
-      {/* 1. Farmer Welcome & Action Banner */}
-      <div className="rounded-3xl border border-border bg-card p-5 sm:p-7 shadow-sm">
+      <div className="rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex size-14 sm:size-16 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary font-serif text-2xl font-bold border border-primary/20 shadow-xs">
-              🌾
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                  <ShieldCheck className="size-3.5" />
-                  {labels.kycBadge}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              {me && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-foreground">
+                  <Sprout className="size-3.5 text-emerald-600" /> Member, {me.fpo.name}
                 </span>
-                <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground font-medium">
-                  {labels.village}
-                </span>
-              </div>
-              <h2 className="mt-2 font-serif text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
-                {labels.greeting}, {farmerName}
-              </h2>
-              <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                {lang === 'hi'
-                  ? 'आपकी फसल का उचित मूल्य सीधे आपके खाते में। कोई बिचौलिया नहीं, कोई अनुचित कटौती नहीं।'
-                  : lang === 'te'
-                  ? 'మీ పంటకు సరైన ధర నేరుగా మీ బ్యాంక్ ఖాతాలో జమ అవుతుంది.'
-                  : 'Guaranteed farmgate procurement directly connected to verified buyers. Zero middleman cuts.'}
-              </p>
+              )}
+              {me && <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{me.farmer.village}</span>}
             </div>
+            <h2 className="mt-2 font-serif text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              {t.welcome}
+              {farmerName ? `, ${farmerName}` : ''}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">Sell your harvest through your FPO at a price agreed before you pick it.</p>
           </div>
-
-          {/* Quick tactile action buttons */}
-          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-            <button
-              onClick={onDeclareHarvest}
-              className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]"
-              title="Declare upcoming crop harvest"
-            >
-              <Sprout className="size-4" />
-              <span>{labels.btnDeclare}</span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button onClick={onDeclareHarvest} className="inline-flex min-h-[46px] items-center gap-2 rounded-2xl bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground shadow-sm hover:bg-primary/90">
+              <Sprout className="size-4" /> {t.declare}
             </button>
-
-            <button
-              onClick={onOpenVoice}
-              className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/20 active:scale-[0.98]"
-              title="Open Voice Assistant in your language"
-            >
-              <Mic className="size-4 animate-pulse text-primary" />
-              <span>{labels.btnVoice}</span>
+            <button onClick={onOpenVoice} className="inline-flex min-h-[46px] items-center gap-2 rounded-2xl border border-primary/30 bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary hover:bg-primary/20">
+              <Mic className="size-4" /> {t.voice}
             </button>
-
-            <a
-              href="tel:+919825012345"
-              className="inline-flex min-h-[46px] items-center justify-center gap-2 rounded-2xl border border-border bg-secondary px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary/80 active:scale-[0.98]"
-              title="Call Village Coordinator (Anita Desai: 98250 12345)"
-            >
-              <Phone className="size-4 text-emerald-600" />
-              <span className="hidden sm:inline">{labels.btnCall}</span>
-              <span className="sm:hidden">Call</span>
-            </a>
           </div>
         </div>
 
-        {/* 2. Four Key Farmer Stat Cards */}
-        <div className="mt-6 grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4 pt-6 border-t border-border">
-          {/* Stat 1: Total Payout */}
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">{labels.totalPayoutTitle}</span>
-              <div className="flex size-7 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700">
-                <CircleDollarSign className="size-4" />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="font-serif text-2xl sm:text-3xl font-bold text-emerald-700 dark:text-emerald-400">
-                ₹{grossValue.toLocaleString()}
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                <span className="font-semibold text-emerald-700">₹{advanceAmount.toLocaleString()}</span> {labels.advancePaid} · <span className="font-semibold text-foreground">₹{balanceAmount.toLocaleString()}</span> {labels.balanceDue}
-              </p>
-            </div>
-          </div>
+        {meError && <p className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{meError}</p>}
+        {!me && !meError && (
+          <p className="mt-5 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" /> Loading your farm record…
+          </p>
+        )}
 
-          {/* Stat 2: Active Crop */}
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">{labels.activeCropTitle}</span>
-              <div className="flex size-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
-                <Wheat className="size-4" />
-              </div>
+        {summary && (
+          <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border pt-6 sm:gap-4 lg:grid-cols-4">
+            <div className="rounded-2xl border border-border bg-background/40 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Wheat className="size-3.5" />{t.committed}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground sm:text-3xl">{kgLabel(summary.committedKg)}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">worth {inr(summary.contractValue)} at agreed prices</p>
             </div>
-            <div className="mt-2">
-              <div className="font-serif text-2xl sm:text-3xl font-bold text-foreground">
-                {farmerCommittedKg} KG
-              </div>
+            <div className="rounded-2xl border border-border bg-background/40 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><CircleDollarSign className="size-3.5" />{t.vsMandi}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground sm:text-3xl">
+                {summary.mandiComparison ? `${summary.mandiComparison.gain >= 0 ? '+' : '−'}${inr(Math.abs(summary.mandiComparison.gain))}` : '—'}
+              </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                {crop} at <span className="font-bold text-primary">₹{price}/kg</span> (+27% vs mandi)
+                {summary.mandiComparison ? `${inr(summary.mandiComparison.contractValue)} agreed vs ${inr(summary.mandiComparison.mandiValue)} at the mandi rate on order day` : 'appears once you commit to an order'}
               </p>
             </div>
-          </div>
-
-          {/* Stat 3: Next Pickup */}
-          <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">{labels.pickupTitle}</span>
-              <div className="flex size-7 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700">
-                <Truck className="size-4" />
-              </div>
+            <div className="rounded-2xl border border-border bg-background/40 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Truck className="size-3.5" />{t.next}</p>
+              {summary.nextDelivery ? (
+                <>
+                  <p className="mt-2 text-2xl font-semibold text-foreground sm:text-3xl">{dayLabel(summary.nextDelivery.deliveryDate)}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {kgLabel(summary.nextDelivery.qtyCommittedKg)} {cropLabel(summary.nextDelivery.crop).toLowerCase()} for {summary.nextDelivery.buyerName} · {STAGE[summary.nextDelivery.orderStatus]}
+                    {summary.nextDelivery.vehicleLabel ? ` · ${summary.nextDelivery.vehicleLabel}` : ''}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">No pickup scheduled</p>
+              )}
             </div>
-            <div className="mt-2">
-              <div className="font-serif text-2xl sm:text-3xl font-bold text-foreground">
-                07:15 AM
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Tomorrow · Tata Ace (GJ-07)
-              </p>
-            </div>
-          </div>
-
-          {/* Stat 4: Quality */}
-          <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted-foreground">{labels.qualityTitle}</span>
-              <div className="flex size-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700">
-                <BadgeCheck className="size-4" />
-              </div>
-            </div>
-            <div className="mt-2">
-              <div className="font-serif text-2xl sm:text-3xl font-bold text-amber-700 dark:text-amber-400">
-                Grade A
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                98.4% Purity · Zero Price Cut
-              </p>
+            <div className="rounded-2xl border border-border bg-background/40 p-4">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Receipt className="size-3.5" />{t.received}</p>
+              <p className="mt-2 text-2xl font-semibold text-foreground sm:text-3xl">{inr(received)}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{inr(summary.advancesReceived)} advances · {inr(summary.settledNet)} settlement balances</p>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* SIH 2026: Direct Purchase Order Allocation Card for Farmer */}
-      <div className="rounded-3xl border-2 border-primary/40 bg-card p-5 sm:p-6 shadow-md overflow-hidden relative">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                ⚡ New Farmgate Purchase Order Allocated to You
+      {allocations.map((o) => (
+        <div key={o.id} className="rounded-3xl border-2 border-primary/40 bg-card p-5 shadow-md sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-0.5 text-xs font-bold text-foreground">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" /> {t.allocated}
               </span>
-              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                DoCA Direct Market Protocol
-              </span>
+              <h3 className="font-serif text-xl font-bold text-foreground sm:text-2xl">
+                {kgLabel(o.qty_target_kg)} {cropLabel(o.crop).toLowerCase()} for {o.buyer_name}
+              </h3>
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground sm:text-sm">
+                <span>
+                  Price <strong className="font-mono text-foreground">{inr(o.price_per_kg)}/kg</strong>
+                  {o.mandi_price_per_kg != null && ` (mandi ${inr(o.mandi_price_per_kg)}/kg)`}
+                </span>
+                <span>Deliver by <strong className="text-foreground">{dayLabel(o.delivery_date)}</strong></span>
+                <span>You are the nearest member with enough registered</span>
+              </p>
             </div>
-            <h3 className="font-serif text-xl sm:text-2xl font-bold text-foreground">
-              {crop} (धान) · {order?.qty_target_kg && order.qty_target_kg <= 50 ? order.qty_target_kg : 350} KG requested by {buyer?.name || 'PM POSHAN Central Kitchen'}
-            </h3>
-            <p className="text-xs sm:text-sm text-muted-foreground flex flex-wrap items-center gap-3">
-              <span>Guaranteed Rate: <strong className="text-primary font-mono">₹{price}/kg</strong> (APMC Mandi: ₹22/kg)</span>
-              <span>·</span>
-              <span>Collection: <strong>Tomorrow 07:15 AM · Tata Ace</strong></span>
-              <span>·</span>
-              <span>Advance: <strong className="text-emerald-600">30% on weighment</strong></span>
-            </p>
+            <div className="flex shrink-0 items-center gap-2.5">
+              <button onClick={() => act(o.id, { action: 'farmer_accept' })} disabled={busyId === o.id} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-emerald-700 disabled:opacity-60">
+                {busyId === o.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} {t.accept}
+              </button>
+              <button onClick={() => act(o.id, { action: 'farmer_reject' })} disabled={busyId === o.id} className="inline-flex items-center gap-1.5 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-sm font-bold text-destructive hover:bg-destructive/20 disabled:opacity-60" title="The order moves to the next nearest farmer">
+                <X className="size-4" /> {t.decline}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2">
+        {tabs.map(({ key, label, Icon, count }) => (
+          <button
+            key={key}
+            onClick={() => onNavigate(key)}
+            className={`flex shrink-0 items-center gap-2 rounded-2xl px-4 py-3 text-xs font-bold transition-all sm:text-sm ${activeNav === key ? 'bg-primary text-primary-foreground shadow-sm' : 'border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+          >
+            <Icon className="size-4" /> {label}
+            {count != null && count > 0 && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] text-foreground">{count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {activeNav === 'Overview' && me && (
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+          <div className="space-y-6">
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
+                <h3 className="font-serif text-xl font-bold text-foreground">{t.harvests}</h3>
+                <button onClick={onDeclareHarvest} className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary/80">
+                  <Sprout className="size-3.5" /> {t.declare}
+                </button>
+              </div>
+              {me.registry.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No harvest registered yet. Declare what you expect to pick so buyers’ orders can reach you.</p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {me.registry.map((r) => {
+                    const pct = r.expectedQtyKg > 0 ? Math.min(100, Math.round((r.committedKg / r.expectedQtyKg) * 100)) : 0
+                    return (
+                      <div key={r.id} className="flex items-center gap-4 rounded-2xl border border-border bg-background/40 p-3">
+                        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary/60 p-1">
+                          {CROP_IMAGES[r.crop] ? <img src={CROP_IMAGES[r.crop]} alt="" className="size-full object-contain" /> : <Sprout className="size-6 text-primary" />}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <p className="font-semibold text-foreground">{cropLabel(r.crop)}</p>
+                            <p className="text-xs tabular-nums text-muted-foreground">{kgLabel(r.committedKg)} of {kgLabel(r.expectedQtyKg)} committed</p>
+                          </div>
+                          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground">Harvest window {dayLabel(r.harvestWindowStart)} – {dayLabel(r.harvestWindowEnd)}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+              <h3 className="border-b border-border pb-4 font-serif text-xl font-bold text-foreground">{t.commitments}</h3>
+              {me.commitments.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No commitments yet. Open demands are under “{t.demands}”.</p>
+              ) : (
+                <div className="mt-2 divide-y divide-border">
+                  {me.commitments.map((c) => (
+                    <div key={`${c.orderId}-${c.isStandby}`} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {kgLabel(c.qtyCommittedKg)} {cropLabel(c.crop).toLowerCase()} · {c.buyerName}
+                          {c.isStandby && <span className="ml-2 rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">standby</span>}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {c.code} · deliver by {dayLabel(c.deliveryDate)} · {STAGE[c.orderStatus]}
+                        </p>
+                      </div>
+                      <p className="font-mono text-sm font-semibold text-foreground">{inr(c.pricePerKg)}/kg</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            {allocationStatus === 'PENDING' ? (
-              <>
-                <button
-                  onClick={handleAcceptAllocation}
-                  disabled={allocationBusy}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer"
-                >
-                  <Check className="size-4" />
-                  <span>{lang === 'hi' ? 'स्वीकार करें' : 'Accept Order Allocation'}</span>
-                </button>
-                <button
-                  onClick={handleRejectAllocation}
-                  disabled={allocationBusy}
-                  className="inline-flex items-center gap-1.5 rounded-2xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer"
-                  title="Decline order and automatically re-route to next nearest farmer in cluster"
-                >
-                  <X className="size-4" />
-                  <span>{lang === 'hi' ? 'अस्वीकार करें (अगले किसान को भेजें)' : 'Decline (Pass to Next)'}</span>
-                </button>
-              </>
-            ) : allocationStatus === 'ACCEPTED' ? (
-              <div className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-emerald-800 dark:text-emerald-300">
-                <CheckCircle2 className="size-4 text-emerald-600" />
-                <span>Allocation Accepted · Scheduled for Tomorrow</span>
-              </div>
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="flex items-center gap-2 border-b border-border pb-4 font-serif text-xl font-bold text-foreground">
+              <MessageSquare className="size-5 text-muted-foreground" /> {t.messages}
+            </h3>
+            {me.messages.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Offers, confirmations and payment notes will appear here, as sent to your phone.</p>
             ) : (
-              <div className="inline-flex items-center gap-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 px-4 py-2.5 text-xs sm:text-sm font-bold text-amber-800 dark:text-amber-300">
-                <RefreshCw className="size-4 text-amber-600" />
-                <span>Declined · Auto-re-routed to Next Nearest Farmer</span>
-              </div>
+              <ul className="mt-3 space-y-2.5">
+                {me.messages.map((m) => (
+                  <li key={m.id} className="rounded-2xl bg-secondary/60 p-3 text-xs">
+                    <p className="text-foreground">{m.body}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      {m.channel} · {new Date(m.sentAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>
-      </div>
-
-      {/* 3. Farmer Navigation Tabs */}
-      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <button
-          onClick={() => onNavigate('Overview')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-xs sm:text-sm font-bold transition-all shrink-0 ${
-            activeNav === 'Overview'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Wheat className="size-4" />
-          <span>{lang === 'hi' ? 'मेरी फसल और उठाव' : lang === 'te' ? 'నా పంట & పికప్' : 'My Harvest & Pickup'}</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('Orders')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-xs sm:text-sm font-bold transition-all shrink-0 ${
-            activeNav === 'Orders'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <ShoppingBag className="size-4" />
-          <span>{lang === 'hi' ? 'खरीदार मांग (ऑर्डर्स)' : lang === 'te' ? 'కొనుగోలుదారు డిమాండ్లు' : 'Buyer Demands'}</span>
-          <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono text-emerald-800 dark:text-emerald-300">
-            {liveDemands.length} Live
-          </span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('Collection & grade')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-xs sm:text-sm font-bold transition-all shrink-0 ${
-            activeNav === 'Collection & grade'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <BadgeCheck className="size-4" />
-          <span>{lang === 'hi' ? 'क्वालिटी जांच व पर्ची' : lang === 'te' ? 'నాణ్యత తనిఖీ' : 'Quality Check & Camera'}</span>
-        </button>
-
-        <button
-          onClick={() => onNavigate('Settlements')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-xs sm:text-sm font-bold transition-all shrink-0 ${
-            activeNav === 'Settlements'
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Receipt className="size-4" />
-          <span>{lang === 'hi' ? 'खाता पासबुक और रसीद' : lang === 'te' ? 'పాస్‌బుక్ & రసీదు' : 'Passbook & Payments'}</span>
-        </button>
-      </div>
-
-      {/* 4. Tab 1: MY HARVEST & PICKUP */}
-      {activeNav === 'Overview' && (
-        <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            {/* Active Lot Card */}
-            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between gap-4 pb-5 border-b border-border">
-                  <div className="flex items-center gap-4">
-                    <div className="relative size-16 sm:size-20 shrink-0 rounded-2xl bg-secondary/80 p-2.5 border border-border flex items-center justify-center overflow-hidden">
-                      <img
-                        src={cropImages[crop.toLowerCase()] || '/hero-produce.png'}
-                        alt={crop}
-                        className="size-full object-contain drop-shadow-md"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
-                          Lot #LOT-1001
-                        </span>
-                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                          Pre-Harvest Locked
-                        </span>
-                      </div>
-                      <h3 className="mt-1.5 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-                        {crop} (धान) · {farmerCommittedKg} KG
-                      </h3>
-                      <p className="mt-0.5 text-xs sm:text-sm text-muted-foreground">
-                        Buyer: <strong>{buyer?.name || 'PM POSHAN Central Kitchen'}</strong>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-right shrink-0">
-                    <span className="text-xs text-muted-foreground">Guaranteed Rate</span>
-                    <p className="font-serif text-2xl sm:text-3xl font-bold text-primary">
-                      ₹{price}<span className="text-xs font-sans text-muted-foreground">/kg</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* 4-Step Farmgate Progress Track */}
-                <div className="mt-6">
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-                    {lang === 'hi' ? 'खेत से भुगतान तक की प्रगति' : 'Harvest to Payout Progress'}
-                  </p>
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-3">
-                      <CheckCircle2 className="size-5 text-emerald-600 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs">
-                        <p className="font-bold text-emerald-900 dark:text-emerald-300">1. Harvest Produce Declared</p>
-                        <p className="text-emerald-700 dark:text-emerald-400 mt-0.5">
-                          500 KG {crop} registered from your Kheda farm plot.
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono text-emerald-700 font-semibold">Done</span>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-3">
-                      <CheckCircle2 className="size-5 text-emerald-600 shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs">
-                        <p className="font-bold text-emerald-900 dark:text-emerald-300">2. Contract Sourced & Price Locked</p>
-                        <p className="text-emerald-700 dark:text-emerald-400 mt-0.5">
-                          Agreed rate ₹28/kg is 100% protected against mandi crash.
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono text-emerald-700 font-semibold">Done</span>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-2xl bg-primary/10 border border-primary/30 p-3">
-                      <Clock className="size-5 text-primary shrink-0 mt-0.5" />
-                      <div className="flex-1 text-xs">
-                        <p className="font-bold text-primary">3. Collection Vehicle Arrival (Next Step)</p>
-                        <p className="text-muted-foreground mt-0.5">
-                          Tata Ace arrives tomorrow at <strong>07:15 AM</strong>. Weighment & 30% advance on bag loading.
-                        </p>
-                      </div>
-                      <span className="rounded-full bg-primary text-primary-foreground px-2 py-0.5 text-[10px] font-bold">
-                        Tomorrow
-                      </span>
-                    </div>
-
-                    <div className="flex items-start gap-3 rounded-2xl bg-secondary/50 border border-border p-3 opacity-80">
-                      <div className="size-5 rounded-full border border-muted-foreground/40 flex items-center justify-center text-[10px] font-mono text-muted-foreground shrink-0 mt-0.5">
-                        4
-                      </div>
-                      <div className="flex-1 text-xs">
-                        <p className="font-bold text-foreground">4. Direct Bank Account Payout (DBT)</p>
-                        <p className="text-muted-foreground mt-0.5">
-                          Remaining ₹{balanceAmount.toLocaleString()} credited directly to Jan Dhan SBI account upon delivery.
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-mono text-muted-foreground">Pending Drop</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Excess Surplus Action */}
-              <div className="mt-6 pt-5 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">
-                  Have more crop harvested than committed?
-                </div>
-                {onRedistributeExcess && (
-                  <button
-                    onClick={onRedistributeExcess}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
-                  >
-                    <Sprout className="size-3.5" />
-                    <span>Redistribute Surplus Produce</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Right Column: Driver Card & Price Comparison */}
-            <div className="space-y-6">
-              {/* Driver & Pickup Card */}
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="size-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <h4 className="font-serif text-xl font-bold text-foreground">
-                      {lang === 'hi' ? 'वाहन व चालक विवरण' : 'Vehicle & Driver Details'}
-                    </h4>
-                  </div>
-                  <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-mono font-medium text-muted-foreground">
-                    Tata Ace
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-4 rounded-2xl bg-secondary/60 p-4 border border-border">
-                  <div className="relative size-14 shrink-0 rounded-2xl bg-card border border-border overflow-hidden flex items-center justify-center">
-                    <img src="/features/agro-logistics.png" alt="Pickup Truck" className="size-full object-contain p-1" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm text-foreground truncate">Rajesh Patel (Driver)</p>
-                    <p className="text-xs text-muted-foreground font-mono">Tata Ace · GJ-07-TY-4912</p>
-                    <p className="text-xs text-primary font-semibold mt-0.5 flex items-center gap-1">
-                      <Clock className="size-3" /> Pickup: 07:15 AM Tomorrow
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-2 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between py-1 border-b border-border/60">
-                    <span>Meeting Point:</span>
-                    <span className="font-semibold text-foreground">Kheda Village Primary School Yard</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1 border-b border-border/60">
-                    <span>Bags to Load:</span>
-                    <span className="font-semibold text-foreground">10 Bags (50 kg each)</span>
-                  </div>
-                  <div className="flex items-center justify-between py-1">
-                    <span>Advance at Loading:</span>
-                    <span className="font-bold text-emerald-700 dark:text-emerald-400">₹{advanceAmount.toLocaleString()} (Instant e-RUPI)</span>
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <a
-                    href="tel:+919825144102"
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-white px-4 py-3 text-sm font-bold shadow-sm hover:bg-emerald-700 transition-colors"
-                  >
-                    <PhoneCall className="size-4" />
-                    <span>Call Driver Rajesh (+91 98251 44102)</span>
-                  </a>
-                </div>
-              </div>
-
-              {/* Price Proof / Extra Income Card */}
-              <div className="rounded-3xl border border-primary/30 bg-primary/5 p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary font-bold">
-                    Fair Price Guarantee
-                  </span>
-                  <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
-                    +27.2% More
-                  </span>
-                </div>
-                <h4 className="font-serif text-xl font-bold text-foreground">
-                  {lang === 'hi' ? 'मंडी से ज्यादा कमाई' : 'You Earn More Than Local Mandi'}
-                </h4>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Local APMC Mandi rate today: <strong>₹{mandiPrice}/kg</strong>. AgriLink pre-harvest contracted rate: <strong>₹{price}/kg</strong>.
-                </p>
-
-                <div className="mt-4 rounded-2xl border border-primary/20 bg-card p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Mandi Payout (at ₹{mandiPrice}):</span>
-                    <span className="font-mono font-medium text-muted-foreground">₹{(farmerCommittedKg * mandiPrice).toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-foreground">AgriLink Payout (at ₹{price}):</span>
-                    <span className="font-serif text-base font-bold text-primary">₹{grossValue.toLocaleString()}</span>
-                  </div>
-                  <div className="pt-2 border-t border-border flex items-center justify-between text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                    <span>Extra Money in Your Pocket:</span>
-                    <span>+₹{extraIncome.toLocaleString()}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center gap-2 text-[11px] text-muted-foreground">
-                  <Check className="size-3.5 text-primary shrink-0" />
-                  <span>Zero commission deduction (No Arhatiya fee)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
-      {/* 5. Tab 2: BUYER DEMANDS (Demand Forecast Board for Farmer) */}
       {activeNav === 'Orders' && (
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border">
-              <div>
-                <span className="font-mono text-xs font-semibold uppercase tracking-wider text-primary">
-                  {lang === 'hi' ? 'सत्यापित खरीदार मांग' : 'Direct Buyer Sourcing Board'}
-                </span>
-                <h3 className="mt-1 font-serif text-2xl font-bold text-foreground">
-                  {lang === 'hi' ? 'आगामी फसलों की मांग और अग्रिम अनुबंध' : 'Upcoming Buyer Demands Waiting for Crops'}
-                </h3>
-                <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-                  {lang === 'hi'
-                    ? 'स्कूलों, अस्पतालों और संस्थानों को अपनी फसल बेचें। फसल काटने से पहले भाव पक्का करें।'
-                    : 'Commit your upcoming harvest to institutional buyers at pre-agreed guaranteed prices.'}
-                </p>
-              </div>
+        <div className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-sm">
+          <div className="border-b border-border pb-4">
+            <h3 className="font-serif text-2xl font-bold text-foreground">{t.demands}</h3>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">Funded orders that are taking commitments. You can commit up to what you have registered and not yet promised; anything past the order’s 115% cap is not taken.</p>
+          </div>
 
-              <div className="flex items-center gap-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 shrink-0">
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>
-                  {liveDemands.length}{' '}
-                  {lang === 'hi'
-                    ? 'सत्यापित मांगें उपलब्ध'
-                    : lang === 'te'
-                    ? 'ప్రత్యక్ష డిమాండ్లు అందుబాటులో ఉన్నాయి'
-                    : 'Verified Demands Active'}
-                </span>
-              </div>
-            </div>
-
-            {/* Demand Cards Grid */}
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
-              {liveDemands.map((demand) => {
-                const isCommitted = demandCommitted[demand.id] || false
-                const isCommitting = committingId === demand.id
-
+          {openDemands.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No order is taking commitments right now.</p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {openDemands.map((d) => {
+                const mine = available.get(d.crop) ?? 0
+                const needed = Math.max(0, d.qty_target_kg - d.qty_committed_kg)
+                const qty = commitQty[d.id] ?? Math.min(mine, needed > 0 ? needed : mine)
                 return (
-                  <div
-                    key={demand.id}
-                    className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between hover:border-primary/40 transition-colors shadow-xs"
-                  >
+                  <div key={d.id} className="flex flex-col justify-between rounded-2xl border border-border bg-background/40 p-5">
                     <div>
                       <div className="flex items-start justify-between gap-3">
-                        <div className="relative size-14 shrink-0 rounded-2xl bg-secondary/80 p-2 border border-border flex items-center justify-center overflow-hidden">
-                          <img src={demand.image} alt={demand.crop} className="size-full object-contain" />
+                        <div className="flex size-12 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary/60 p-1">
+                          {CROP_IMAGES[d.crop] ? <img src={CROP_IMAGES[d.crop]} alt="" className="size-full object-contain" /> : <Sprout className="size-6 text-primary" />}
                         </div>
-                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-                          {demand.badge}
-                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground">{d.code}</span>
                       </div>
-
-                      <h4 className="mt-3 font-serif text-xl font-bold text-foreground">
-                        {demand.crop}
-                      </h4>
-                      <p className="text-xs text-muted-foreground font-medium">
-                        {demand.buyer}
-                      </p>
-
-                      <div className="mt-4 rounded-xl bg-secondary/60 p-3 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Guaranteed Rate:</span>
-                          <span className="font-serif font-bold text-primary text-base">₹{demand.pricePerKg}/kg</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Needed by:</span>
-                          <span className="font-semibold text-foreground">{demand.deliveryDate}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Open Capacity:</span>
-                          <span className="font-semibold text-foreground">{demand.stillNeededKg} KG remaining</span>
-                        </div>
+                      <h4 className="mt-3 font-serif text-xl font-bold text-foreground">{cropLabel(d.crop)}</h4>
+                      <p className="text-xs text-muted-foreground">{d.buyer_name}</p>
+                      <div className="mt-3 space-y-1.5 rounded-xl bg-secondary/60 p-3 text-xs">
+                        <p className="flex justify-between"><span className="text-muted-foreground">Price</span><span className="font-semibold text-foreground">{inr(d.price_per_kg)}/kg{d.mandi_price_per_kg != null && <span className="font-normal text-muted-foreground"> · mandi {inr(d.mandi_price_per_kg)}</span>}</span></p>
+                        <p className="flex justify-between"><span className="text-muted-foreground">Deliver by</span><span className="font-semibold text-foreground">{dayLabel(d.delivery_date)}</span></p>
+                        <p className="flex justify-between"><span className="text-muted-foreground">Still needed</span><span className="font-semibold text-foreground">{kgLabel(needed)} {needed === 0 && '(standby only)'}</span></p>
+                        <p className="flex justify-between"><span className="text-muted-foreground">You have uncommitted</span><span className="font-semibold text-foreground">{kgLabel(mine)}</span></p>
                       </div>
                     </div>
-
-                    <div className="mt-5 pt-4 border-t border-border">
-                      {isCommitted || demand.stillNeededKg === 0 ? (
-                        <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 py-2.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                          <CheckCircle2 className="size-4" />
-                          <span>{demand.stillNeededKg === 0 ? 'Demand 100% Fulfilled' : 'Allocation Confirmed'}</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleCommitDemand(demand.id, demand.crop, demand.pricePerKg, demand.stillNeededKg)}
-                          disabled={isCommitting}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-2.5 text-xs font-bold hover:bg-primary/90 transition-colors shadow-xs"
-                        >
-                          {isCommitting ? (
-                            <RefreshCw className="size-3.5 animate-spin" />
-                          ) : (
-                            <Check className="size-3.5" />
-                          )}
-                          <span>Commit My {demand.crop}</span>
+                    {mine > 0 ? (
+                      <div className="mt-4 flex items-center gap-2">
+                        <input type="number" min={1} max={mine} value={qty} onChange={(e) => setCommitQty((p) => ({ ...p, [d.id]: Math.max(0, Number(e.target.value) || 0) }))} className="w-24 rounded-xl border border-border bg-background px-2 py-2 text-center font-mono text-sm outline-none focus:border-primary" aria-label="Kilograms to commit" />
+                        <button onClick={() => act(d.id, { action: 'farmer_commit', committedKg: qty })} disabled={busyId === d.id || qty <= 0} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                          {busyId === d.id ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Commit
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <p className="mt-4 text-[11px] text-muted-foreground">Register {cropLabel(d.crop).toLowerCase()} to take part.</p>
+                    )}
                   </div>
                 )
               })}
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* 6. Tab 3: QUALITY CHECK & CAM (Grade A Certification) */}
-      {activeNav === 'Collection & grade' && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 border-b border-border pb-3">
-            <button
-              onClick={() => setFarmerTab?.('slip')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
-                farmerTab === 'slip'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <BadgeCheck className="size-4" />
-              <span>Official Grade A Quality Certificate</span>
-            </button>
-
-            <button
-              onClick={() => setFarmerTab?.('camera')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all ${
-                farmerTab === 'camera'
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'bg-card border border-border text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Camera className="size-4" />
-              <span>Test Crop with GradeCam Camera</span>
-            </button>
-          </div>
-
-          {farmerTab === 'slip' ? (
-            <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
-              {/* Quality Certificate */}
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-                <div className="flex items-start justify-between pb-5 border-b border-border">
-                  <div>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-700 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full">
-                      APMC Grade A Standard
-                    </span>
-                    <h3 className="mt-2 font-serif text-2xl font-bold text-foreground">
-                      Digital Quality Inspection Slip
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Lot #LOT-1001 · 500 KG {crop} · Verified by QC Coordinator Anita Desai
-                    </p>
+          {upcoming.length > 0 && (
+            <div>
+              <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Clock className="size-4 text-muted-foreground" /> Coming up</h4>
+              <p className="mb-3 text-xs text-muted-foreground">Approved orders that open for commitments once the buyer pays the advance — useful for planning your harvest.</p>
+              <div className="divide-y divide-border rounded-2xl border border-border">
+                {upcoming.map((o) => (
+                  <div key={o.id} className="flex flex-col gap-1 p-3 text-xs sm:flex-row sm:items-center sm:justify-between">
+                    <span className="text-foreground">{kgLabel(o.qty_target_kg)} {cropLabel(o.crop).toLowerCase()} · {o.buyer_name}</span>
+                    <span className="text-muted-foreground">{inr(o.price_per_kg)}/kg · by {dayLabel(o.delivery_date)} · {STAGE[o.status]}</span>
                   </div>
-                  <div className="flex size-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-700">
-                    <BadgeCheck className="size-6" />
-                  </div>
-                </div>
-
-                {/* Score breakdown */}
-                <div className="mt-6 space-y-3">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                    <div className="rounded-2xl bg-secondary/60 p-3.5 border border-border">
-                      <span className="text-muted-foreground">Overall Purity:</span>
-                      <p className="font-serif text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-1">98.4%</p>
-                      <p className="text-[10px] text-muted-foreground">Grade A standard</p>
-                    </div>
-
-                    <div className="rounded-2xl bg-secondary/60 p-3.5 border border-border">
-                      <span className="text-muted-foreground">Moisture Content:</span>
-                      <p className="font-serif text-lg font-bold text-foreground mt-1">13.4%</p>
-                      <p className="text-[10px] text-muted-foreground">Within 14% max limit</p>
-                    </div>
-
-                    <div className="rounded-2xl bg-secondary/60 p-3.5 border border-border col-span-2 sm:col-span-1">
-                      <span className="text-muted-foreground">Foreign Matter:</span>
-                      <p className="font-serif text-lg font-bold text-foreground mt-1">0.8%</p>
-                      <p className="text-[10px] text-muted-foreground">Allowed max 2.0%</p>
-                    </div>
-                  </div>
-
-                  {/* Protection Banner */}
-                  <div className="mt-5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex items-start gap-3">
-                    <ShieldCheck className="size-5 text-emerald-700 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-bold text-emerald-900 dark:text-emerald-300">
-                        Zero Price Cut Guarantee
-                      </p>
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-relaxed mt-0.5">
-                        Because your produce is certified Grade A prior to loading, the collection driver and buyer cannot make subjective deductions for moisture, dust, or size.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
-
-              {/* Inspector & Receipt Preview */}
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <h4 className="font-serif text-xl font-bold text-foreground">
-                    Inspector & Dual-Signoff
-                  </h4>
-                  <div className="mt-4 space-y-3 text-xs">
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/60">
-                      <span className="text-muted-foreground">FPO Inspector:</span>
-                      <span className="font-bold text-foreground">Anita Desai (Anand Cluster)</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/60">
-                      <span className="text-muted-foreground">Inspection Method:</span>
-                      <span className="font-bold text-foreground">Visual GradeCam + Physical Sample</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/60">
-                      <span className="text-muted-foreground">Pass Certificate ID:</span>
-                      <span className="font-mono font-bold text-primary">QC-KHD-2025-081</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-5 border-t border-border">
-                  <button
-                    onClick={onOpenReceipt}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-secondary text-foreground py-3 text-xs font-bold hover:bg-secondary/80 transition-colors border border-border"
-                  >
-                    <Printer className="size-4 text-primary" />
-                    <span>Print Quality & Weighment Slip</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-              <div className="mb-5">
-                <h3 className="font-serif text-2xl font-bold text-foreground">
-                  GradeCam AI Visual Quality Scanner
-                </h3>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-                  Point camera at a sample of your harvest lot to verify Grade A quality before vehicle arrives.
-                </p>
-              </div>
-
-              <GradeCamCamera onCapture={onCapturePhoto} disabled={busy} />
-
-              {aiResult && (
-                <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-emerald-800">Scanned Result: Grade {aiResult.grade}</span>
-                    <p className="text-xs text-muted-foreground">{aiResult.reasoning}</p>
-                  </div>
-                  <span className="font-mono text-sm font-bold text-emerald-700">{aiResult.confidence}% Match</span>
-                </div>
-              )}
             </div>
           )}
         </div>
       )}
 
-      {/* 7. Tab 4: PASSBOOK & PAYMENTS (Kisan Digital Passbook) */}
+      {activeNav === 'Collection & grade' && (
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="flex items-center gap-2 font-serif text-2xl font-bold text-foreground"><Camera className="size-5 text-muted-foreground" /> GradeCam pre-check</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Photograph a sample of the lot for your next delivery. The AI suggests a grade against AGMARK criteria; the FPO coordinator makes the final call at collection.
+            </p>
+            <div className="mt-4">
+              <GradeCamCamera onCapture={gradePhoto} disabled={grading || !summary?.nextDelivery} />
+            </div>
+            {!summary?.nextDelivery && <p className="mt-3 text-xs text-muted-foreground">Commit to an order first — the check is recorded against that lot.</p>}
+            {grading && (
+              <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Checking the photo…
+              </p>
+            )}
+            {gradeResult && (
+              <div className="mt-4 rounded-2xl border border-border bg-background/40 p-4 text-xs">
+                {gradeResult.aiStatus === 'UNAVAILABLE' ? (
+                  <p className="text-foreground">AI grading is unavailable ({gradeResult.aiReasoning}). The coordinator will grade the lot by hand.</p>
+                ) : (
+                  <>
+                    <p className="font-semibold text-foreground">
+                      {gradeResult.aiStatus === 'GRADED' ? `Suggested grade ${gradeResult.aiGrade}` : `Unsure${gradeResult.aiGrade ? ` — possibly grade ${gradeResult.aiGrade}` : ''}`}
+                      {gradeResult.aiConfidence != null && <span className="font-normal text-muted-foreground"> · {Math.round(gradeResult.aiConfidence * 100)}% confidence</span>}
+                    </p>
+                    {gradeResult.aiReasoning && <p className="mt-1 text-muted-foreground">{gradeResult.aiReasoning}</p>}
+                    {gradeResult.aiDefects.length > 0 && <p className="mt-1 text-muted-foreground">Seen: {gradeResult.aiDefects.join('; ')}</p>}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
+            <h3 className="font-serif text-xl font-bold text-foreground">Graded lots</h3>
+            {(me?.sales ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Lots appear here once they are weighed and graded at collection.</p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                {me!.sales.map(({ lot }) => (
+                  <div key={lot.id} className="rounded-2xl border border-border bg-background/40 p-3 text-xs">
+                    <p className="flex justify-between gap-2">
+                      <span className="font-semibold text-foreground">{lot.code} · {cropLabel(lot.crop)}</span>
+                      <span className="text-foreground">{lot.decision === 'REJECTED' ? 'Not accepted' : `Grade ${lot.finalGrade}`}</span>
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      Weighed {kgLabel(lot.qtyWeighedKg)} · accepted {kgLabel(lot.qtyAcceptedKg)} · {lot.decision === 'OVERRIDDEN' ? `AI grade changed by the coordinator: ${lot.overrideReason}` : lot.decision === 'MANUAL' ? 'graded by the coordinator' : lot.decision === 'REJECTED' ? lot.overrideReason : 'AI grade accepted'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeNav === 'Settlements' && (
-        <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            {/* Indian Passbook Card */}
-            <div className="rounded-3xl border border-border bg-card p-6 sm:p-7 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-5 border-b border-border">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
-                      NPCI e-RUPI DBT Active
-                    </span>
-                    <span className="text-xs font-mono text-muted-foreground">Jan Dhan Linked</span>
+        <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+          <div className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-7">
+            <h3 className="border-b border-border pb-4 font-serif text-2xl font-bold text-foreground">{t.passbook}</h3>
+            {(me?.sales ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Payments appear here from your first accepted lot: the advance on harvest day, then the balance after delivery.</p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {me!.sales.map(({ lot, settlement, advance, proof }) => (
+                  <div key={lot.id} className="rounded-2xl border border-border bg-background/40 p-4 text-sm">
+                    <p className="flex justify-between gap-2 text-xs text-muted-foreground">
+                      <span>{lot.code} · {lot.orderCode} · {lot.buyerName}</span>
+                      <span>{STAGE[lot.orderStatus]}</span>
+                    </p>
+                    {settlement ? (
+                      <div className="mt-2 space-y-1">
+                        <p className="flex justify-between"><span className="text-muted-foreground">{kgLabel(settlement.acceptedKg)} × {inr(settlement.pricePerKg)}</span><span className="font-semibold text-foreground">{inr(settlement.grossAmount)}</span></p>
+                        <p className="flex justify-between text-xs"><span className="text-muted-foreground">Advance already paid</span><span className="text-foreground">−{inr(settlement.advanceDeducted)}</span></p>
+                        <p className="flex justify-between text-xs"><span className="text-muted-foreground">Share of transport</span><span className="text-foreground">−{inr(settlement.transportShare)}</span></p>
+                        <p className="flex justify-between border-t border-border pt-1 font-semibold"><span className="text-foreground">Balance paid</span><span className="text-foreground">{inr(settlement.netPayable)}</span></p>
+                        {proof?.farmerGain != null && (
+                          <p className="text-[11px] text-muted-foreground">
+                            You realised {inr(proof.farmerRealised)}/kg after transport — {proof.farmerGain >= 0 ? `${inr(proof.farmerGain)} above` : `${inr(Math.abs(proof.farmerGain))} below`} the mandi reference of {inr(proof.mandi!)}/kg.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 flex justify-between"><span className="text-muted-foreground">Advance on harvest day ({kgLabel(lot.qtyAcceptedKg)} accepted)</span><span className="font-semibold text-foreground">{inr(advance ?? 0)}</span></p>
+                    )}
                   </div>
-                  <h3 className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-                    Kisan Digital Passbook (किसान पासबुक)
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Account Holder: <strong>{farmerName}</strong> · Bank: State Bank of India (A/C: *******4519)
-                  </p>
-                </div>
-
-                <button
-                  onClick={onOpenReceipt}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-secondary border border-border px-4 py-2.5 text-xs font-bold text-foreground hover:bg-secondary/80 transition-colors shrink-0"
-                >
-                  <Printer className="size-4 text-primary" />
-                  <span>Download Passbook Slip</span>
-                </button>
+                ))}
               </div>
+            )}
+          </div>
 
-              {/* Current Active Lot Calculation */}
-              <div className="mt-6 rounded-2xl bg-secondary/50 p-5 border border-border space-y-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Current Sourcing Settlement (#LOT-1001)
-                </p>
-
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Gross Produce Value (500 KG × ₹28/kg):</span>
-                    <span className="font-serif font-bold text-foreground text-base">₹{grossValue.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <CheckCircle2 className="size-4" /> 30% Advance on Loading (e-RUPI):
-                    </span>
-                    <span className="font-mono font-bold">+₹{advanceAmount.toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-muted-foreground text-xs">
-                    <span>FPO Shared Route Transport Share:</span>
-                    <span className="font-mono">-₹{transportCost.toLocaleString()}</span>
-                  </div>
-
-                  <div className="pt-3 border-t border-border flex items-center justify-between text-base font-bold text-primary">
-                    <span>Final Balance Payable on Delivery:</span>
-                    <span className="font-serif text-2xl">₹{balanceAmount.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Passbook Transaction History Table */}
-              <div className="mt-6">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
-                  Recent Direct Bank Transfers (DBT)
-                </p>
-
-                <div className="divide-y divide-border border border-border rounded-2xl overflow-hidden text-xs">
-                  <div className="p-3.5 flex items-center justify-between bg-card">
-                    <div>
-                      <p className="font-bold text-foreground">30% Advance Deposit (Lot #LOT-1001)</p>
-                      <p className="text-[11px] text-muted-foreground">18 Oct 2025 · e-RUPI Voucher credited to Jan Dhan</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono text-sm font-bold text-emerald-600">+₹{advanceAmount.toLocaleString()}</span>
-                      <p className="text-[10px] text-emerald-700 font-semibold">Credited</p>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 flex items-center justify-between bg-card">
-                    <div>
-                      <p className="font-bold text-foreground">Wheat Pilot Harvest Settlement</p>
-                      <p className="text-[11px] text-muted-foreground">12 Oct 2025 · Direct NEFT payout (400 KG Wheat)</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono text-sm font-bold text-emerald-600">+₹10,400</span>
-                      <p className="text-[10px] text-emerald-700 font-semibold">Settled</p>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 flex items-center justify-between bg-card">
-                    <div>
-                      <p className="font-bold text-foreground">Tomato Sourcing Balance Payout</p>
-                      <p className="text-[11px] text-muted-foreground">28 Sep 2025 · UPI Payout (Civil Hospital contract)</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-mono text-sm font-bold text-emerald-600">+₹6,720</span>
-                      <p className="text-[10px] text-emerald-700 font-semibold">Settled</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
+            <h4 className="font-serif text-lg font-bold text-foreground">How you are paid</h4>
+            <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+              <li>Advance: when your lot is accepted at collection, from the buyer’s advance held in the FPO’s bank account.</li>
+              <li>Balance: after the buyer inspects the delivery — agreed price × accepted weight, less the advance and your share of transport by weight.</li>
+              <li>Every payment is also sent to your phone as a message in your language.</li>
+            </ul>
+            <div className="mt-4 space-y-2 rounded-2xl border border-border bg-card p-3.5 text-xs">
+              <p className="flex items-center justify-between"><span className="text-muted-foreground">Kisan Call Centre</span><span className="font-mono font-bold text-foreground">1800-180-1551</span></p>
             </div>
-
-            {/* Escrow & Bank Trust Card */}
-            <div className="space-y-6">
-              <div className="rounded-3xl border border-border bg-card p-6 shadow-sm flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="relative size-12 shrink-0 rounded-2xl bg-secondary p-1 border border-border flex items-center justify-center overflow-hidden">
-                      <img src="/features/digital-escrow.png" alt="Digital Escrow" className="size-full object-contain" />
-                    </div>
-                    <div>
-                      <h4 className="font-serif text-lg font-bold text-foreground">
-                        NPCI Escrow Guaranteed
-                      </h4>
-                      <p className="text-xs text-muted-foreground">No payment default risk</p>
-                    </div>
-                  </div>
-
-                  <p className="mt-4 text-xs text-muted-foreground leading-relaxed">
-                    Buyer payment is locked in an official NPCI digital escrow prior to crop collection. Once the produce is dropped off at the school kitchen, the remaining ₹{balanceAmount.toLocaleString()} is immediately wired to your account.
-                  </p>
-                </div>
-
-                <div className="mt-6 pt-5 border-t border-border flex items-center gap-3">
-                  <ShieldCheck className="size-5 text-primary shrink-0" />
-                  <p className="text-[11px] text-muted-foreground">
-                    100% legal backing under APMC model bylaws & e-RUPI framework.
-                  </p>
-                </div>
-              </div>
-
-              {/* Kisan DBT & Banking Support */}
-              <div className="rounded-3xl border border-primary/20 bg-primary/5 p-6 shadow-sm">
-                <h4 className="font-serif text-lg font-bold text-foreground">
-                  {lang === 'hi' ? 'किसान सहायता एवं DBT समाधान' : lang === 'te' ? 'రైతు సహాయం & DBT మద్దతు' : 'Kisan Banking & DBT Support'}
-                </h4>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {lang === 'hi'
-                    ? 'खाते में पैसे या भुगतान संबंधी किसी भी प्रश्न के लिए 24x7 निशुल्क किसान हेल्पलाइन उपलब्ध है।'
-                    : 'For direct bank credit or settlement questions, free government Kisan Helpline is available 24x7.'}
-                </p>
-
-                <div className="mt-4 rounded-2xl bg-card p-3.5 border border-border space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Kisan Call Center:</span>
-                    <span className="font-mono font-bold text-primary">1800-180-1551 (Toll Free)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Transaction Fee:</span>
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">₹0 (Zero Charges)</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Local Sahayak:</span>
-                    <span className="font-medium text-foreground">Anita Desai (Anand Cluster)</span>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <a
-                    href="tel:18001801551"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-2.5 text-xs font-bold hover:bg-primary/90 transition-colors"
-                  >
-                    <Phone className="size-3.5" />
-                    <span>Call Kisan Helpline (1800-180-1551)</span>
-                  </a>
-                </div>
-              </div>
-            </div>
+            <a href="tel:18001801551" className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-xs font-bold text-primary-foreground hover:bg-primary/90">
+              <Phone className="size-3.5" /> Call Kisan Call Centre
+            </a>
           </div>
         </div>
       )}

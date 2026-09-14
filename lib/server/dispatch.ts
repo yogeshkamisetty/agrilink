@@ -1,6 +1,8 @@
+import { tripCost, vehicleClass } from '@/lib/domain/fleet'
 import { allocateTransport, round2 } from '@/lib/domain/money'
 import type { RoutePlan, RouteStop } from '@/lib/domain/routing'
-import type { Buyer, Consignment, Order, StoredRoute } from '@/lib/types'
+import type { Shipment } from '@/lib/domain/vrp'
+import type { Buyer, Consignment, Fpo, Order, StoredRoute } from '@/lib/types'
 import { clock } from './clock'
 import { uuidArray, type Db } from './db'
 import { DomainError } from './errors'
@@ -11,7 +13,31 @@ import { tick } from './sourcing'
 
 /** Hired pickup (Tata Ace class): a loading charge plus a per-km rate. Editable at dispatch. */
 export function suggestVehicleCost(km: number): number {
-  return Math.max(500, Math.round((200 + 10 * km) / 50) * 50)
+  return tripCost(vehicleClass('MINI_TRUCK'), km)
+}
+
+export function depotStop(fpo: Fpo): RouteStop {
+  return { id: 'depot', kind: 'DEPOT', label: `${fpo.village} collection centre`, detail: fpo.name, lat: fpo.lat, lng: fpo.lng }
+}
+
+/** Where an order's produce is picked up: accepted lots once collection has started, active primary commitments before. */
+async function pickupSources(db: Db, order: Order) {
+  const lots = (await getLots(db, order.id)).filter((l) => l.qtyAcceptedKg > 0)
+  if (lots.length) return { planned: false, sources: lots.map((l) => ({ farmerId: l.farmerId, kg: l.qtyAcceptedKg, at: l.capturedAt })) }
+  const commitments = (await getCommitments(db, order.id)).filter((c) => c.status === 'ACTIVE' && !c.isStandby)
+  return { planned: true, sources: commitments.map((c) => ({ farmerId: c.farmerId, kg: c.qtyCommittedKg, at: c.createdAt })) }
+}
+
+/** One order as a shipment for multi-order consolidation. */
+export async function shipmentFor(db: Db, order: Order): Promise<Shipment & { planned: boolean }> {
+  const [{ planned, sources }, buyer] = await Promise.all([pickupSources(db, order), getBuyer(db, order.buyerId)])
+  const farmers = await getFarmersByIds(db, sources.map((s) => s.farmerId))
+  const pickups: RouteStop[] = sources.map((s) => {
+    const f = farmers.get(s.farmerId)!
+    return { id: s.farmerId, kind: 'PICKUP', label: f.village, detail: `${f.name} · ${s.kg} kg ${order.crop.toLowerCase()} · ${order.code}`, kg: s.kg, lat: f.lat, lng: f.lng }
+  })
+  const kg = round2(sources.reduce((sum, s) => sum + s.kg, 0))
+  return { orderId: order.id, code: order.code, planned, pickups, drop: { id: buyer.id, kind: 'DROP', label: buyer.name, detail: `Drop · ${order.code}`, kg, lat: buyer.lat, lng: buyer.lng } }
 }
 
 async function loadOrders(db: Db, orderIds: string[]) {
@@ -30,18 +56,15 @@ async function loadOrders(db: Db, orderIds: string[]) {
  */
 async function buildStops(db: Db, orders: Order[]) {
   const fpo = await getFpo(db, orders[0].fpoId)
-  const depot: RouteStop = { id: 'depot', kind: 'DEPOT', label: `${fpo.village} collection centre`, detail: fpo.name, lat: fpo.lat, lng: fpo.lng }
+  const depot = depotStop(fpo)
   const pickupKg = new Map<string, { kg: number; lines: string[]; firstAt: string }>()
   const drops: RouteStop[] = []
   const buyers = new Map<string, Buyer>()
   let planned = false
 
   for (const order of orders) {
-    const lots = (await getLots(db, order.id)).filter((l) => l.qtyAcceptedKg > 0)
-    const sources = lots.length
-      ? lots.map((l) => ({ farmerId: l.farmerId, kg: l.qtyAcceptedKg, at: l.capturedAt }))
-      : (await getCommitments(db, order.id)).filter((c) => c.status === 'ACTIVE' && !c.isStandby).map((c) => ({ farmerId: c.farmerId, kg: c.qtyCommittedKg, at: c.createdAt }))
-    if (!lots.length) planned = true
+    const { planned: fromCommitments, sources } = await pickupSources(db, order)
+    if (fromCommitments) planned = true
     for (const s of sources) {
       const entry = pickupKg.get(s.farmerId) ?? { kg: 0, lines: [], firstAt: s.at }
       entry.kg = round2(entry.kg + s.kg)

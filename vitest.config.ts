@@ -9,5 +9,7 @@ export default defineConfig({
     exclude: ['node_modules/**', '.next/**', 'services/**'],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    // Tests get a fresh in-memory database instead of writing into the developer's local one.
+    env: { AGRILINK_DATA_DIR: 'memory://' },
   },
 })

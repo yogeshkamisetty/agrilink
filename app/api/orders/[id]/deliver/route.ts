@@ -1,26 +1,24 @@
-import { confirmDelivery } from '@/lib/server/delivery'
+import { requireBuyerId } from '@/lib/server/actors'
+import { requireRole } from '@/lib/server/auth'
 import { getDb } from '@/lib/server/db'
+import { confirmDelivery } from '@/lib/server/delivery'
+import { errorResponse, readJson } from '@/lib/server/http'
+import { getOrder } from '@/lib/server/repo'
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+/** The buyer's binding inspection at the drop point; a coordinator may record it for a buyer without the app. */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const body = await request.json()
-    const { buyerId, rejections = [] } = body
-    if (!buyerId) {
-      return Response.json({ error: 'buyerId is required' }, { status: 400 })
-    }
+    const user = await requireRole(request, ['buyer', 'admin'])
     const db = await getDb()
-    const result = await confirmDelivery(db, {
-      orderId: id,
-      buyerId,
-      rejections,
-    })
+    const body = await readJson(request)
+    const buyerId = user.role === 'admin' ? (await getOrder(db, id)).buyerId : await requireBuyerId(db, user)
+    const rejections = (Array.isArray(body.rejections) ? body.rejections : [])
+      .filter((r) => r && typeof r === 'object')
+      .map((r) => ({ lotId: String((r as Record<string, unknown>).lotId ?? ''), reason: String((r as Record<string, unknown>).reason ?? '') }))
+    const result = await confirmDelivery(db, { orderId: id, buyerId, rejections })
     return Response.json(result)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Delivery confirmation failed'
-    return Response.json({ error: message }, { status: 400 })
+    return errorResponse(error, 'Delivery confirmation failed.')
   }
 }

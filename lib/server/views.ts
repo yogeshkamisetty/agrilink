@@ -214,7 +214,7 @@ export async function overviewView(db: Db) {
     })),
     metrics: {
       pilotVolumePct: metric.pct,
-      activeOrdersCount: orders.filter(({ order }) => !['SETTLED'].includes(order.status)).length,
+      activeOrdersCount: orders.filter(({ order }) => !['SETTLED', 'REJECTED'].includes(order.status)).length,
       totalVolumeKg: round2(orders.reduce((sum, { order }) => sum + order.qtyTargetKg, 0)),
     },
   }
@@ -300,6 +300,74 @@ export async function farmerSales(db: Db, farmerId: string) {
     sales.push({ lot, settlement, advance, proof })
   }
   return { farmer, sales }
+}
+
+export type FarmerOverview = Awaited<ReturnType<typeof farmerOverview>>
+
+type FarmerCommitmentRow = {
+  orderId: string
+  code: string
+  crop: CropId
+  pricePerKg: number
+  deliveryDate: string
+  orderStatus: Order['status']
+  buyerName: string
+  mandiRef: Order['mandiRef']
+  qtyCommittedKg: number
+  isStandby: boolean
+  status: Commitment['status']
+  vehicleLabel: string | null
+  dispatchedAt: string | null
+}
+
+/** The farmer's home screen, from records: registered harvests, live commitments, the next pickup, and money received. */
+export async function farmerOverview(db: Db, farmerId: string) {
+  const inbox = await farmerInbox(db, farmerId)
+  const sales = await farmerSales(db, farmerId)
+  const registry = mapRows<RegistryEntry & { committedKg: number }>(
+    await db.query(
+      `select r.*, coalesce((select sum(c.qty_committed_kg) from agrilink.commitments c where c.registry_id = r.id and c.status in ('ACTIVE', 'FULFILLED')), 0) as committed_kg
+         from agrilink.crop_registry r where r.farmer_id = $1 and r.status = 'ACTIVE' order by r.harvest_window_start`,
+      [farmerId],
+    ),
+  )
+  const commitments = mapRows<FarmerCommitmentRow>(
+    await db.query(
+      `select o.id as order_id, o.code, o.crop, o.price_per_kg, o.delivery_date, o.status as order_status, o.mandi_ref, b.name as buyer_name,
+              c.qty_committed_kg, c.is_standby, c.status, cn.vehicle_label, cn.dispatched_at
+         from agrilink.commitments c
+         join agrilink.orders o on o.id = c.order_id
+         join agrilink.buyers b on b.id = o.buyer_id
+         left join agrilink.consignments cn on cn.id = o.consignment_id
+        where c.farmer_id = $1 and c.status in ('ACTIVE', 'FULFILLED')
+        order by o.delivery_date, o.code`,
+      [farmerId],
+    ),
+  )
+
+  const open = commitments.filter((c) => !c.isStandby && c.orderStatus !== 'SETTLED')
+  const priced = open.filter((c) => c.mandiRef?.pricePerKg != null)
+  const pricedValue = round2(priced.reduce((s, c) => s + c.qtyCommittedKg * c.pricePerKg, 0))
+  const mandiValue = round2(priced.reduce((s, c) => s + c.qtyCommittedKg * c.mandiRef!.pricePerKg, 0))
+
+  return {
+    farmer: inbox.farmer,
+    fpo: inbox.fpo,
+    registry,
+    commitments,
+    offers: inbox.offers,
+    messages: inbox.messages.slice(-8).reverse(),
+    sales: sales.sales,
+    summary: {
+      committedKg: round2(open.reduce((s, c) => s + c.qtyCommittedKg, 0)),
+      contractValue: round2(open.reduce((s, c) => s + c.qtyCommittedKg * c.pricePerKg, 0)),
+      // Only commitments whose order captured a mandi reference can be compared with the mandi.
+      mandiComparison: priced.length ? { contractValue: pricedValue, mandiValue, gain: round2(pricedValue - mandiValue) } : null,
+      advancesReceived: round2(sales.sales.reduce((s, x) => s + (x.advance ?? 0), 0)),
+      settledNet: round2(sales.sales.reduce((s, x) => s + (x.settlement?.netPayable ?? 0), 0)),
+      nextDelivery: commitments.find((c) => !c.isStandby && ['SOURCING', 'COLLECTING', 'DISPATCHED'].includes(c.orderStatus)) ?? null,
+    },
+  }
 }
 
 // ─── Coordinator & shared ───────────────────────────────────────────────────

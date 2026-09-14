@@ -1,4 +1,5 @@
 import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
+import { getVillageLatLng } from '@/lib/domain/allocation'
 import { getDb } from './db'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 
@@ -29,13 +30,14 @@ const ITERATIONS = 10000
 const KEY_LEN = 32
 const DIGEST = 'sha256'
 
+const LOCAL_DEV_SECRET = 'agrilink-local-development-only-session-secret'
+
 function getSecret(): string {
-  return (
-    process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    'agrilink-zero-api-secure-session-secret-2026'
-  )
+  const configured = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (configured) return configured
+  // A default checked into a public repository lets anyone mint an admin token.
+  if (process.env.NODE_ENV === 'production') throw new Error('AUTH_SECRET must be set in production to sign session tokens.')
+  return LOCAL_DEV_SECRET
 }
 
 /**
@@ -317,6 +319,52 @@ export async function findUserByPhone(phone: string): Promise<UserAccount | null
   return null
 }
 
+const lastTenDigits = `right(regexp_replace(%col%, '[^0-9]', '', 'g'), 10)`
+
+/**
+ * Link an account to its marketplace record — a member farmer or a buyer — creating it once per
+ * mobile number. Farmers get no harvest here: supply comes only from harvest declarations.
+ * Locations default to the FPO's own collection centre until a village or address is known.
+ */
+async function ensureMarketplaceRecord(phone: string, name: string, role: 'farmer' | 'buyer', meta: Record<string, unknown>) {
+  try {
+    const db = await getDb()
+    const [fpo] = await db.query<{ id: string; lat: number; lng: number; village: string; district: string }>(`select id, lat, lng, village, district from agrilink.fpos order by created_at limit 1`)
+    if (!fpo || !name) return
+    const village = typeof meta.village === 'string' && meta.village.trim() ? meta.village.trim() : null
+    if (role === 'farmer') {
+      const [existing] = await db.query(`select 1 from agrilink.farmers where ${lastTenDigits.replace('%col%', 'phone')} = $1 limit 1`, [phone])
+      if (existing) return
+      const location = village ? getVillageLatLng(village) : { lat: fpo.lat, lng: fpo.lng }
+      await db.query(`insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng) values ($1, $2, $3, 'gu', 1.0, $4, $5, $6)`, [
+        fpo.id,
+        name,
+        `+91 ${phone}`,
+        village ?? fpo.village,
+        location.lat,
+        location.lng,
+      ])
+      return
+    }
+    const [existing] = await db.query(`select 1 from agrilink.buyers where ${lastTenDigits.replace('%col%', 'contact_phone')} = $1 limit 1`, [phone])
+    if (existing) return
+    const buyerType = ['INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY', 'CONSUMER'].includes(String(meta.organizationType ?? '').toUpperCase()) ? String(meta.organizationType).toUpperCase() : 'INSTITUTIONAL'
+    const city = typeof meta.city === 'string' && meta.city.trim() ? meta.city.trim() : fpo.district
+    await db.query(`insert into agrilink.buyers (name, type, address, city, lat, lng, contact_name, contact_phone) values ($1, $2, $3, $4, $5, $6, $7, $8)`, [
+      name,
+      buyerType,
+      'Address to be confirmed',
+      city,
+      fpo.lat,
+      fpo.lng,
+      name,
+      `+91 ${phone}`,
+    ])
+  } catch (error) {
+    console.warn('[pin-auth] Marketplace record not created:', error)
+  }
+}
+
 /**
  * Register a new farmer, buyer, or coordinator permanently in the database
  */
@@ -356,56 +404,8 @@ export async function registerUser(params: {
       targetId = inserted.id
     }
 
-    // If farmer, register into agrilink.farmers directory so they appear in live harvest feed
-    if (params.role === 'farmer') {
-      const village = (meta.village as string) || 'Kheda Cluster'
-      const crop = (meta.crop as string) || 'PADDY'
-      const quantity = Number(meta.quantity || 500)
-      const harvestDate = (meta.harvestDate as string) || new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0]
-
-      try {
-        let fpoId = 'f0000000-0000-0000-0000-000000000001'
-        try {
-          const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
-          if (fpos?.[0]?.id) fpoId = fpos[0].id
-        } catch {}
-
-        let farmerId = `f-${normalPhone}`
-        try {
-          const rows = await db.query<any>(
-            `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
-             values ($1, $2, $3, 'gu', 1.0, $4, 22.56, 72.92)
-             on conflict do nothing
-             returning id`,
-            [fpoId, params.fullName.trim(), `+91 ${normalPhone}`, village]
-          )
-          if (rows?.[0]?.id) farmerId = rows[0].id
-
-          await db.query(
-            `insert into agrilink.crop_registry (farmer_id, crop, expected_qty_kg, harvest_window_start, harvest_window_end)
-             values ($1, $2, $3, now()::date, (now() + interval '14 days')::date)`,
-            [farmerId, crop.toUpperCase(), quantity]
-          ).catch(() => {})
-        } catch {
-          await db.query(
-            `insert into agrilink.farmers (name, village, phone, crop_name, quantity, quality_grade, harvest_date)
-             values ($1, $2, $3, $4, $5, 'A', $6)`,
-            [params.fullName.trim(), village, `+91 ${normalPhone}`, crop.toUpperCase(), quantity, harvestDate]
-          )
-        }
-      } catch (fErr) {
-        console.warn('[pin-auth] Farmer insert notice:', fErr)
-      }
-    }
-
-    // If buyer, register into agrilink.buyers directory
-    if (params.role === 'buyer') {
-      await db.query(
-        `insert into agrilink.buyers (name, type, address, city, lat, lng, contact_name, contact_phone)
-         values ($1, 'INSTITUTIONAL', 'Central Market Road', 'Anand', 22.56, 72.93, $2, $3)
-         on conflict do nothing`,
-        [params.fullName.trim(), params.fullName.trim(), `+91 ${normalPhone}`]
-      ).catch(() => {})
+    if (params.role === 'farmer' || params.role === 'buyer') {
+      await ensureMarketplaceRecord(normalPhone, params.fullName.trim(), params.role, meta)
     }
   } catch (err) {
     console.warn('[pin-auth] Database save notice:', err)
@@ -675,49 +675,12 @@ export async function updateUserProfile(params: {
       [params.fullName || null, params.role || null, JSON.stringify(meta), normalPhone]
     )
 
-    // If farmer, sync to agrilink.farmers
-    if (params.role === 'farmer' && (params.village || params.fullName)) {
-      const village = params.village || 'Kheda Cluster'
-      const crop = 'Mixed Crops'
-      const farmerName = params.fullName || user?.fullName || 'Farmer'
-      let fpoId = 'f0000000-0000-0000-0000-000000000001'
-      try {
-        const fpos = await db.query<{ id: string }>(`select id from agrilink.fpos limit 1`)
-        if (fpos?.[0]?.id) fpoId = fpos[0].id
-      } catch {}
-
-      try {
-        await db.query(
-          `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
-           values ($1, $2, $3, 'gu', 1.0, $4, 22.56, 72.92)
-           on conflict do nothing`,
-          [fpoId, farmerName, `+91 ${normalPhone}`, village]
-        )
-      } catch {
-        try {
-          await db.query(
-            `insert into agrilink.farmers (name, village, phone, crop_name, quantity, quality_grade)
-             values ($1, $2, $3, $4, 0, 'A')
-             on conflict do nothing`,
-            [farmerName, village, `+91 ${normalPhone}`, crop]
-          )
-        } catch {}
-      }
-    }
-
-    // If buyer, sync to agrilink.buyers
-    if (params.role === 'buyer' && (params.organizationName || params.fullName)) {
-      await db.query(
-        `insert into agrilink.buyers (name, type, address, city, lat, lng, contact_name, contact_phone)
-         values ($1, 'INSTITUTIONAL', 'Central Market Road', coalesce($2, 'Anand'), 22.56, 72.93, $3, $4)
-         on conflict do nothing`,
-        [
-          params.organizationName || params.fullName || 'AgriLink Buyer',
-          params.district || 'Anand',
-          params.fullName || 'Buyer Contact',
-          `+91 ${normalPhone}`,
-        ]
-      ).catch(() => {})
+    if (params.role === 'farmer' || params.role === 'buyer') {
+      await ensureMarketplaceRecord(normalPhone, params.organizationName || params.fullName || user?.fullName || '', params.role, {
+        village: params.village,
+        city: params.district,
+        organizationType: params.organizationType,
+      })
     }
   } catch (dbErr) {
     console.warn('[pin-auth] updateUserProfile db error:', dbErr)

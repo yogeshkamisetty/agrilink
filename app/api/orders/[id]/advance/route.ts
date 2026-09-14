@@ -1,24 +1,20 @@
+import { requireBuyerId } from '@/lib/server/actors'
+import { requireRole } from '@/lib/server/auth'
 import { getDb } from '@/lib/server/db'
-import { commitAdvance } from '@/lib/server/sourcing'
+import { errorResponse } from '@/lib/server/http'
 import { getOrder } from '@/lib/server/repo'
+import { commitAdvance } from '@/lib/server/sourcing'
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+/** The ordering buyer commits the advance; an FPO coordinator may record a buyer's transfer on their behalf. */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const body = await request.json().catch(() => ({}))
+    const user = await requireRole(request, ['buyer', 'admin'])
     const db = await getDb()
-    let buyerId = body.buyerId || body.buyer_id
-    if (!buyerId) {
-      const order = await getOrder(db, id)
-      buyerId = order.buyerId
-    }
+    const buyerId = user.role === 'admin' ? (await getOrder(db, id)).buyerId : await requireBuyerId(db, user)
     const order = await commitAdvance(db, id, buyerId)
     return Response.json({ order })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to commit advance'
-    return Response.json({ error: message }, { status: 400 })
+    return errorResponse(error, 'Failed to commit the advance.')
   }
 }

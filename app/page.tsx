@@ -95,73 +95,73 @@ export default function HomePage() {
     gradecam: {
       badge: 'AI Vision Quality Inspection',
       title: 'GradeCam™ Computer Vision',
-      subtitle: 'Objective quality scoring at the farmgate in under 4 seconds',
+      subtitle: 'AI-suggested grades, confirmed by a person at the collection point',
       description:
-        'Eliminate subjective grading disputes. Our on-device vision model analyzes color uniformity, defect margins, and weight caliber against AGMARKNET Grade A standards with human verifier sign-off.',
+        'Fewer grading disputes: a vision-language model grades a photo of each lot against AGMARK criteria and lists the defects it can see. Below 60% confidence it steps aside and the FPO coordinator grades by hand; any change to the AI grade is recorded with a reason.',
       img: '/features/ai-gradecam.png',
       stats: [
-        { label: 'Grading Accuracy', val: '98.4%' },
-        { label: 'Evaluation Speed', val: '<4 sec' },
-        { label: 'Dispute Reduction', val: '92%' },
+        { label: 'Grades', val: 'A · B · C' },
+        { label: 'Final say', val: 'Coordinator' },
+        { label: 'Unsure AI', val: 'Manual grade' },
       ],
       points: [
-        'Automatic skin defect & pest damage perimeter detection',
-        'Direct calibration with AGMARKNET quality standards',
-        'Cryptographic audit slip attached to batch barcode',
+        'Visible defects listed with a confidence score',
+        'Grades mapped to AGMARK classes (A ≈ Class I, B ≈ Class II)',
+        'Photo, AI verdict and any override kept with the lot',
       ],
     },
     logistics: {
       badge: 'Dynamic Supply Logistics',
       title: 'Smart Multi-Stop Aggregation',
-      subtitle: 'Optimized farmgate collection routes with real-time GPS telemetry',
+      subtitle: 'Collection runs planned from farmer commitments',
       description:
-        'Consolidate smallholder harvests across multiple villages into scheduled routes. Algorithms plan optimal pickup sequences, calculate vehicle capacity load factors, and track dispatch in real time.',
+        'Orders delivering on the same day share vehicles when that is cheaper. Each run visits every farm before any drop, is sequenced to cut kilometres, and uses the smallest vehicle that carries the load; transport cost is then split across lots by weight.',
       img: '/features/agro-logistics.png',
       stats: [
-        { label: 'Transit Loss', val: '3.8%' },
-        { label: 'Fuel Saved', val: '28%' },
-        { label: 'Avg Pickup Time', val: '14 min' },
+        { label: 'Sequencing', val: '2-opt' },
+        { label: 'Consolidation', val: 'Savings' },
+        { label: 'Cost split', val: 'By kg' },
       ],
       points: [
-        'Automated multi-stop TSP route optimization algorithm',
-        'Real-time driver manifests with turn-by-turn farmer pickup nodes',
-        'Live temperature and compartment capacity monitoring',
+        'Pickups before drops on every vehicle run',
+        'Right-sized vehicle class for each consolidated load',
+        'Route and cost compared with sending each order alone',
       ],
     },
     escrow: {
-      badge: 'Digital Clearing House',
-      title: 'Instant Escrow & Digital Passbook',
-      subtitle: 'Guaranteed 15% buffer advances and same-day UPI bank transfers',
+      badge: 'Transparent Settlement',
+      title: 'Advance & Digital Passbook',
+      subtitle: 'Harvest-day advances for farmers, pay-for-what-you-accept for buyers',
       description:
-        'Protect both producers and buyers. Buyers deposit committed advance into automated escrow. Once GradeCam certifies collection, farmer payouts disburse directly to their bank accounts via UPI.',
+        'Buyers commit an advance to the FPO’s bank account before farmers are asked to harvest. Farmers receive an advance when their lot is accepted at collection and the balance after the buyer’s inspection, with transport shared by weight.',
       img: '/features/digital-escrow.png',
       stats: [
-        { label: 'Payout Speed', val: 'Instant' },
-        { label: 'Payment Default', val: '0.0%' },
-        { label: 'FPO Buffer', val: '15%' },
+        { label: 'Farmer advance', val: 'At collection' },
+        { label: 'Balance', val: 'After inspection' },
+        { label: 'Default advance', val: '40%' },
       ],
       points: [
-        'Automated milestone escrow release upon digital weighment',
-        'Transparent passbook receipts sent via SMS, IVR & WhatsApp',
-        'Complete audit trail with GST compliant e-invoicing',
+        'Money path per order: buyer → FPO account → farmers and transporter',
+        'Every payment line sent to the farmer by SMS in their language',
+        'Buyer invoiced only for lots accepted at delivery',
       ],
     },
     trust: {
-      badge: 'Certified Supply Chain',
-      title: 'Aadhaar & e-NAM Trust Registry',
-      subtitle: '100% verified farmer identities and traceable lot provenance',
+      badge: 'Traceable Supply',
+      title: 'Member Registry & Lot Traceability',
+      subtitle: 'Every lot tied to a registered member, a graded photo and a collection point',
       description:
-        'Every participant in the AgriLink network is verified through mobile OTP and consent-based Aadhaar validation. Every crate is barcoded back to the original field plot and harvest timestamp.',
+        'Members join through their FPO and sign in with their mobile number. Each lot records who grew it, the collection photo and GPS point, the AI grade, and the coordinator’s decision.',
       img: '/brand/agrilink-seal.png',
       stats: [
-        { label: 'Verified Farmers', val: '100%' },
-        { label: 'Traceability', val: 'Plot Level' },
-        { label: 'Trust Rating', val: '4.9/5' },
+        { label: 'Lot record', val: 'Photo + grade' },
+        { label: 'Traceability', val: 'Farmer → buyer' },
+        { label: 'Price refs', val: 'AGMARKNET · DoCA' },
       ],
       points: [
-        'Tamper-evident batch IDs linked to farmer plot coordinates',
-        'e-NAM national agriculture market protocol interoperability',
-        'Live AGMARKNET price feeds prevent predatory mandi cuts',
+        'Lot codes linked to farmer, order and collection GPS',
+        'Mandi and retail references captured on every order',
+        'Prices below the mandi reference are refused',
       ],
     },
   }
@@ -173,7 +173,7 @@ export default function HomePage() {
         <span className="inline-flex items-center gap-2">
           <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
           <strong className="font-semibold text-white">AgriLink 2.0 Live:</strong>
-          AI Computer Vision Grading, Dynamic Cold-Chain Routes & Automated Escrow Settlements.
+          AI-assisted grading, demand forecasting and consolidated collection runs for FPOs.
           <Link href="/signup" className="ml-2 font-bold text-emerald-300 underline hover:text-white transition-colors">
             Start free pilot &rarr;
           </Link>
@@ -447,16 +447,16 @@ export default function HomePage() {
 
             <div className="mt-10 grid grid-cols-1 min-[380px]:grid-cols-3 gap-4 sm:gap-6 border-t border-border pt-8 text-left">
               <div>
-                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">₹1.8Cr+</strong>
-                <p className="mt-1 text-xs text-muted-foreground">Settled directly to farmers</p>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">~33%</strong>
+                <p className="mt-1 text-xs text-muted-foreground">Tomato farmers’ share of what consumers pay today (RBI, 2024)</p>
               </div>
               <div>
-                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">3.8%</strong>
-                <p className="mt-1 text-xs text-muted-foreground">Average transit spoilage</p>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">₹1.53 L cr</strong>
+                <p className="mt-1 text-xs text-muted-foreground">Food lost after harvest each year (NABCONS, 2022)</p>
               </div>
               <div>
-                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">100%</strong>
-                <p className="mt-1 text-xs text-muted-foreground">Aadhaar verified roster</p>
+                <strong className="font-serif text-2xl min-[380px]:text-3xl sm:text-4xl font-bold text-foreground">≥ mandi</strong>
+                <p className="mt-1 text-xs text-muted-foreground">Every order priced at or above the day’s mandi rate</p>
               </div>
             </div>
           </div>
@@ -473,7 +473,7 @@ export default function HomePage() {
               </div>
               <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-4 text-xs">
                 <span className="flex items-center gap-1.5 font-semibold text-emerald-800">
-                  <CheckCircle2 className="size-4 text-emerald-700" /> 100% Quality Graded Batches
+                  <CheckCircle2 className="size-4 text-emerald-700" /> Every lot graded at collection
                 </span>
                 <span className="font-mono text-muted-foreground">Anand FPO District Node</span>
               </div>
@@ -484,9 +484,9 @@ export default function HomePage() {
               <div className="mt-5 space-y-3">
                 {[
                   ['Farmer harvest planning', 'Crop volume, harvest window and FPO lot registry'],
-                  ['FPO aggregation & route', 'Multi-stop collection with GPS turn-by-turn manifest'],
-                  ['AI visual quality check', 'GradeCam™ automated defect analysis and verification'],
-                  ['Buyer fulfillment & payout', 'Committed delivery and instant escrow bank clearance'],
+                  ['FPO aggregation & route', 'Consolidated multi-stop collection runs'],
+                  ['AI visual quality check', 'GradeCam suggests a grade, the coordinator confirms'],
+                  ['Buyer fulfillment & payout', 'Binding inspection at delivery, then settlement'],
                 ].map(([title, detail], index) => (
                   <div key={title} className="flex gap-3.5 rounded-2xl bg-muted/50 p-3.5">
                     <span className="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -770,17 +770,17 @@ export default function HomePage() {
               Interoperability & Standards
             </p>
             <h3 className="mt-2 font-serif text-2xl font-bold text-[#173b2b]">
-              Compliant with National Agricultural Frameworks
+              Built on public data and standards
             </h3>
           </div>
 
           <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {[
-              { title: 'AGMARKNET', desc: 'Live APMC Mandi Price Adapter' },
-              { title: 'e-NAM Ready', desc: 'National Agriculture Market Protocol' },
-              { title: 'NPCI / UPI', desc: 'Instant Escrow Bank Clearing' },
-              { title: 'Aadhaar Vault', desc: 'Consent-Based Trust Verification' },
-              { title: 'ISO 22000', desc: 'Food Safety Management Systems' },
+              { title: 'AGMARKNET', desc: 'Daily mandi modal prices via data.gov.in' },
+              { title: 'DoCA prices', desc: 'Retail reference for the price corridor' },
+              { title: 'AGMARK grades', desc: 'Criteria behind GradeCam suggestions' },
+              { title: 'SMS · WhatsApp · IVR', desc: 'Offers reach feature-phone farmers' },
+              { title: 'OpenStreetMap', desc: 'Collection route maps' },
             ].map((std) => (
               <div
                 key={std.title}
@@ -799,43 +799,39 @@ export default function HomePage() {
       <section id="testimonials" className="border-t border-border py-20">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Proven Impact</p>
+            <p className="text-xs font-semibold uppercase tracking-[.2em] text-primary">Pilot personas</p>
             <h2 className="mt-3 font-serif text-4xl font-bold sm:text-5xl">
-              Trusted on Ground Across Anand District
+              Who the Anand district pilot is designed for
             </h2>
+            <p className="mt-3 text-sm text-muted-foreground">Illustrative personas used to shape the pilot — not customer testimonials.</p>
           </div>
 
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {[
               {
                 quote:
-                  'Before AgriLink, our smallholder members lost 20% of their harvest to transit rot and delayed payments. With GradeCam and direct buyer escrow, we get paid the moment our tomato crates are loaded.',
-                author: 'Rameshbhai Patel',
-                role: 'Lead Coordinator',
-                org: 'Boriavi Farmers Collective',
+                  'I sell tomato to whichever trader comes first. I need a buyer who commits before I pick, a price that cannot fall below the mandi, and an advance the day my crates are accepted.',
+                author: 'Smallholder member',
+                role: 'Persona · 0.8 ha, tomato and paddy',
+                org: 'Anand district FPO',
               },
               {
                 quote:
-                  'We source 4,000 kg of vegetables weekly for institutional kitchens. AgriLink gives us exact delivery manifests, certified Grade A produce, and automated invoices with zero middlemen fraud.',
-                author: 'Meera Joshi',
-                role: 'Procurement Director',
-                org: 'PM POSHAN Central Kitchen, Vallabh Vidyanagar',
+                  'Our kitchen cooks for 1,100 children six days a week. We need volumes planned around the school calendar, graded produce, and an invoice only for what we accept at the gate.',
+                author: 'School kitchen buyer',
+                role: 'Persona · institutional procurement',
+                org: 'Mid-day meal central kitchen',
               },
               {
                 quote:
-                  'The WhatsApp and IVR dispatch alerts allow even our elderly farmers who use basic feature phones to confirm harvest volumes without downloading heavy apps.',
-                author: 'Savitaben Parmar',
-                role: 'FPO Secretary',
-                org: 'Petlad Agricultural Producer Co.',
+                  'Many of our farmers use basic phones. Offers have to arrive by SMS and voice call in Gujarati or Hindi, with a coordinator calling anyone who does not reply.',
+                author: 'FPO coordinator',
+                role: 'Persona · member operations',
+                org: 'Farmer producer company',
               },
             ].map((t) => (
               <article key={t.author} className="flex flex-col justify-between rounded-3xl border border-border bg-card p-6 shadow-xs">
                 <div>
-                  <div className="flex gap-1 text-amber-500 mb-4">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} className="size-4 fill-amber-400 text-amber-400" />
-                    ))}
-                  </div>
                   <p className="text-sm leading-relaxed text-muted-foreground italic">
                     &ldquo;{t.quote}&rdquo;
                   </p>
@@ -863,7 +859,7 @@ export default function HomePage() {
                 AgriLink
               </Link>
               <p className="mt-3 max-w-sm text-xs leading-relaxed text-muted-foreground">
-                India&apos;s trusted farm-to-market platform. Connecting farmers, local farm groups, buyers, and transport with quality grading and direct bank payments.
+                A farm-to-market platform for FPOs. Connecting farmers, local farm groups, buyers, and transport with quality grading and direct bank payments.
               </p>
               <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <MapPin className="size-3.5 text-primary" /> Anand District Innovation Pilot, Gujarat

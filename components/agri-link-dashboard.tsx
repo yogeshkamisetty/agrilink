@@ -23,7 +23,8 @@ import { VoiceAssistantModal } from './voice-assistant-modal'
 import { FarmerDashboardView } from './farmer-dashboard-view'
 import { BolnaCallModal } from './bolna-call-modal'
 import { BuyerMarketplace } from './buyer-marketplace'
-import { getAuthClient } from '@/lib/auth-client'
+import { BuyerOrderTracker } from './buyer-order-tracker'
+import { authHeaders, getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
 type Screen = 'Overview' | 'Orders' | 'Farmer network' | 'Collection & grade' | 'Routes' | 'Settlements'
@@ -84,7 +85,7 @@ const INITIAL_NOTIFICATIONS: AppNotification[] = [
   {
     id: 'notif-4',
     title: 'AGMARKNET price bulletin',
-    detail: 'Dahod district modal price updated to ₹24.50/kg for Grade A Paddy. Contract margin is +27.2%.',
+    detail: 'Mandi reference prices refresh from AGMARKNET when an order is placed; the order keeps the figure it was priced against.',
     time: '2h ago',
     type: 'system',
     unread: false,
@@ -441,7 +442,7 @@ export function AgriLinkDashboard({
   const [harvestCrop, setHarvestCrop] = useState('PADDY')
   const [harvestQty, setHarvestQty] = useState('600')
   const [harvestVillage, setHarvestVillage] = useState('Kheda')
-  const [harvestWindow, setHarvestWindow] = useState('20–25 Oct 2025')
+  const [harvestWindow, setHarvestWindow] = useState('')
   const [farmerCommittedLocalKg, setFarmerCommittedLocalKg] = useState(500)
   const [farmerOfferAccepted, setFarmerOfferAccepted] = useState(false)
   const [farmerCollectionTab, setFarmerCollectionTab] = useState<'slip' | 'camera'>('slip')
@@ -702,7 +703,7 @@ export function AgriLinkDashboard({
 
       const res = await fetch('/api/aggregation', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           order_id: activeOrder.id,
           batch_code: batchCode,
@@ -824,7 +825,7 @@ export function AgriLinkDashboard({
     try {
       const res = await fetch(`/api/orders/${activeOrder.id}/advance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ buyerId: activeBuyer?.id }),
       })
       if (!res.ok) {
@@ -832,12 +833,12 @@ export function AgriLinkDashboard({
         throw new Error(errJson.error || 'Failed to fund escrow advance')
       }
       await refresh()
-      setActionMessage('15% Escrow advance funded! Demand order is now active and sourcing.')
+      setActionMessage('Advance committed. The FPO can now ask farmers to harvest.')
       setNotifications((prev) => [
         {
           id: `escrow-${Date.now()}`,
-          title: 'Escrow Advance Funded',
-          detail: `15% escrow advance locked for order #${activeOrder.code || 'AG-1001'}. Farmer allocation underway.`,
+          title: 'Advance committed',
+          detail: `Advance recorded for order ${activeOrder.code}. Farmers can now commit.`,
           time: 'Just now',
           type: 'finance',
           unread: true,
@@ -857,21 +858,24 @@ export function AgriLinkDashboard({
     setShowHarvestModal(false)
     setActionBusy(true)
 
-    const phone = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_phone') || '+919825144102' : '+919825144102'
     try {
-      await fetch('/api/farmers', {
+      // The server takes the farmer's phone from the signed-in session.
+      const res = await fetch('/api/farmers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
-          name: currentUserName || 'Farmer Member',
-          village: harvestVillage || 'Kheda',
+          name: currentUserName,
+          village: harvestVillage,
           crop_name: harvestCrop,
           quantity: Number(harvestQty),
-          mobile_number: phone,
-          quality_grade: 'A',
           harvest_date: harvestWindow,
         }),
       })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setActionMessage(errJson.error || 'Harvest could not be registered.')
+        return
+      }
       await refresh()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
@@ -934,19 +938,23 @@ export function AgriLinkDashboard({
     setShowOnboardFarmerModal(false)
 
     try {
-      await fetch('/api/farmers', {
+      const res = await fetch('/api/farmers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           name: newFarmerName.trim(),
-          village: newFarmerVillage.trim() || 'Anand',
+          village: newFarmerVillage.trim(),
           crop_name: newFarmerCrop.split('/')[0].trim(),
-          quantity: Number(newFarmerKg) || 500,
-          mobile_number: newFarmerPhone.trim() || '+919825144102',
-          quality_grade: 'A',
-          harvest_date: 'Upcoming Harvest',
+          quantity: Number(newFarmerKg),
+          mobile_number: newFarmerPhone.trim(),
         }),
       })
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        setRosterFarmers((prev) => prev.filter((f) => f.id !== newEntry.id))
+        setActionMessage(errJson.error || 'Farmer could not be enrolled.')
+        return
+      }
       await refresh()
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
@@ -979,17 +987,17 @@ export function AgriLinkDashboard({
     if (!activeOrder) return
     setActionBusy(true)
     try {
-      const res = await gradeLot(activeOrder.id, selectedFarmerId, dataUrl)
-      if (res.attempt) {
-        setAiResult({
-          status: res.attempt.aiStatus,
-          grade: res.attempt.aiGrade || 'A',
-          confidence: Math.round((res.attempt.aiConfidence || 0.92) * 100),
-          reasoning: res.attempt.aiReasoning || 'Produce displays uniform color and size within Grade A standards.',
-        })
-      }
+      const { attempt } = await gradeLot(activeOrder.id, selectedFarmerId, dataUrl)
+      // Show exactly what the model said; an unavailable or unsure model means a manual grade, never an assumed one.
+      setAiResult({
+        status: attempt.aiStatus,
+        grade: attempt.aiGrade ?? '—',
+        confidence: Math.round((attempt.aiConfidence ?? 0) * 100),
+        reasoning: attempt.aiReasoning || (attempt.aiStatus === 'UNAVAILABLE' ? 'AI grading is unavailable — grade this lot manually.' : ''),
+      })
     } catch (err) {
-      setAiResult({ status: 'GRADED', grade: 'A', confidence: 91, reasoning: 'Simulated AI inspection passed.' })
+      setAiResult(null)
+      setActionMessage(err instanceof Error ? err.message : 'GradeCam inspection failed')
     } finally {
       setActionBusy(false)
     }
@@ -1475,7 +1483,7 @@ export function AgriLinkDashboard({
                     batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
                     vehicleName={optimalAllocation?.vehicle?.name}
                     km={optimalAllocation?.routePlan?.km}
-                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
+                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 0}
                   />
                 )
               )}
@@ -1496,7 +1504,7 @@ export function AgriLinkDashboard({
                     batchLocked={batchLocked || activeOrder?.status === 'AGGREGATED'}
                     vehicleName={optimalAllocation?.vehicle?.name}
                     km={optimalAllocation?.routePlan?.km}
-                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 32}
+                    fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 0}
                     isLive={true}
                   />
                   <Network
@@ -1534,7 +1542,8 @@ export function AgriLinkDashboard({
                 />
               )}
 
-              {activeNav === 'Routes' && (
+              {activeNav === 'Routes' && role === 'Buyer' && <BuyerOrderTracker focus="delivery" />}
+              {activeNav === 'Routes' && role !== 'Buyer' && (
                 <RoutesScreen
                   role={role}
                   order={activeOrder}
@@ -1549,7 +1558,8 @@ export function AgriLinkDashboard({
                 />
               )}
 
-              {activeNav === 'Settlements' && (
+              {activeNav === 'Settlements' && role === 'Buyer' && <BuyerOrderTracker focus="payments" />}
+              {activeNav === 'Settlements' && role !== 'Buyer' && (
                 <Settlements
                   role={role}
                   order={activeOrder}
@@ -1920,17 +1930,17 @@ function Overview({
             icon={<Wheat className="size-5" />}
           />
           <Stat
-            title="Agreed Mandi Premium"
+            title="Agreed price"
             value={`₹${price}/kg`}
-            detail="vs ₹22 AGMARKNET mandi price"
-            trend="+27.2% uplift"
+            detail="Fixed when the order was placed"
+            trend="Mandi comparison in your passbook"
             icon={<Leaf className="size-5" />}
           />
           <Stat
             title="Projected Direct Payout"
             value={`₹${farmerGrossPayout.toLocaleString()}`}
-            detail="Direct to Jan Dhan DBT account"
-            trend="e-RUPI Escrow"
+            detail="Advance on acceptance, balance after delivery"
+            trend="Paid through the FPO account"
             icon={<CircleDollarSign className="size-5" />}
           />
         </div>
@@ -1951,10 +1961,10 @@ function Overview({
             icon={<Boxes className="size-5" />}
           />
           <Stat
-            title="Escrow Advance Reserved"
-            value={`₹${Math.round(target * price * 0.15).toLocaleString()}`}
-            detail="Protected by NPCI digital escrow"
-            trend="Funds Secured"
+            title={order?.status === 'POSTED' ? 'Advance to commit' : 'Advance committed'}
+            value={`₹${Math.round(target * price * (order?.advancePct ?? 0.4)).toLocaleString('en-IN')}`}
+            detail={`${Math.round((order?.advancePct ?? 0.4) * 100)}% of order value, held in the FPO’s bank account`}
+            trend={order?.status === 'POSTED' ? 'Not yet committed' : 'Recorded in the order ledger'}
             icon={<Wallet className="size-5" />}
           />
         </div>
@@ -1977,8 +1987,8 @@ function Overview({
           <Stat
             title={t?.statFarmerRealised || 'Farmer realised'}
             value={`₹${price}/kg`}
-            detail="vs ₹22 AGMARKNET mandi price"
-            trend="+27.2%"
+            detail="Fixed when the order was placed"
+            trend="Above the mandi reference"
             icon={<Leaf className="size-5" />}
           />
         </div>
@@ -2114,22 +2124,22 @@ function Overview({
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Quality & Trust</p>
-                  <h3 className="mt-1 font-serif text-xl font-bold">Procurement Guarantee</h3>
+                  <h3 className="mt-1 font-serif text-xl font-bold">How orders are protected</h3>
                 </div>
                 <ShieldCheck className="size-6 text-primary" />
               </div>
               <div className="space-y-3 text-xs">
                 <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span><strong>AI GradeCam:</strong> 98.4% visual accuracy against AGMARKNET Grade A standards.</span>
+                  <span><strong>Graded at collection:</strong> GradeCam suggests an AGMARK-based grade; the FPO coordinator decides and records any override.</span>
                 </div>
                 <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span><strong>Zero Middleman Markups:</strong> 27.2% fair value shift directly to farming clusters.</span>
+                  <span><strong>Fair price floor:</strong> no order is accepted below the mandi reference captured on the day it is placed.</span>
                 </div>
                 <div className="flex items-center gap-2.5 rounded-xl bg-secondary/60 p-3">
                   <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span><strong>Escrow Auto-Settlement:</strong> Funds released only upon buyer drop-point acceptance.</span>
+                  <span><strong>Pay for what you accept:</strong> the balance is invoiced only for lots you accept at the drop point.</span>
                 </div>
               </div>
             </div>
@@ -2570,28 +2580,28 @@ function Orders({
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
-                          <Badge tone="warn">Escrow Deposit Pending</Badge>
-                          <span className="text-xs font-semibold text-amber-800">15% Security Advance</span>
+                          <Badge tone="warn">Advance pending</Badge>
+                          <span className="text-xs font-semibold text-amber-800">{Math.round((order?.advancePct ?? 0.4) * 100)}% of order value</span>
                         </div>
-                        <h4 className="mt-1 font-serif text-lg font-bold">Lock ₹{Math.round(target * price * 0.15).toLocaleString()} Escrow Advance</h4>
+                        <h4 className="mt-1 font-serif text-lg font-bold">Commit ₹{Math.round(target * price * (order?.advancePct ?? 0.4)).toLocaleString('en-IN')} advance</h4>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Deposit 15% into NPCI digital escrow to unlock farmer cluster harvesting and guaranteed delivery.
+                          The advance goes to the FPO’s bank account and funds farmers’ harvest-day advances. Farmers are only asked to harvest against funded orders.
                         </p>
                       </div>
                       <Button onClick={onFundAdvance} disabled={busy}>
-                        <Wallet className="size-4" /> Deposit Escrow Advance
+                        <Wallet className="size-4" /> Commit advance
                       </Button>
                     </div>
                   </div>
                 )}
-                <Step done={true} title="Purchase demand posted" detail="Contract locked with 15% escrow deposit reserved" />
-                <Step done={order?.status !== 'POSTED'} title="Supply matched & aggregated" detail="1,200 kg committed across verified smallholder clusters" />
-                <Step done={true} title="GradeCam inspection passed" detail="Visual computer vision verified against AGMARKNET Grade A" />
-                <Step done={false} title="Consignment delivery & escrow release" detail="Track delivery in Routes and release payment on drop-off" />
+                <Step done={true} title="Purchase order posted" detail="Price and delivery date fixed" />
+                <Step done={order?.status !== 'POSTED'} title="Advance committed & farmers asked" detail="Farmers within reach commit up to 115% of the order" />
+                <Step done={order?.status === 'DISPATCHED' || order?.status === 'SETTLED'} title="Graded at collection" detail="AI-suggested grade, confirmed by the FPO coordinator" />
+                <Step done={order?.status === 'SETTLED'} title="Delivery inspection & balance" detail="Pay the balance for the lots you accept at the drop point" />
               </>
             ) : (
               <>
-                <Step done={true} title="Demand committed" detail="Buyer contract posted & 15% advance reserved" />
+                <Step done={true} title="Demand committed" detail="Buyer order posted and advance committed" />
                 <Step
                   done={notified}
                   title="Farmers notified"
@@ -3102,7 +3112,7 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
                     <p className="text-xs font-semibold text-foreground">Dual-Review Protocol Assessment Record</p>
                     <p className="text-[11px] text-muted-foreground">Physical inspection by QC Coordinator Anita Desai · Visual match confirmed by Buyer</p>
                   </div>
-                  <span className="font-mono text-xs font-bold text-emerald-600">PASSED · 98.4% QUALITY SCORE</span>
+                  <span className="font-mono text-xs font-bold text-muted-foreground">SAMPLE LAYOUT</span>
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 text-xs">
                   <div className="rounded-xl bg-card p-3 border border-border">
@@ -3146,8 +3156,8 @@ function Collection({ role, order, farmerId, setFarmerId, weighedKg, setWeighedK
                 </div>
                 <h3 className="mt-2 font-serif text-xl font-bold">Grade A Quality Assured</h3>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <Mini label="Visual Match" value="98.4%" />
-                  <Mini label="Certificate Status" value="DUAL-SEALED" />
+                  <Mini label="AI grade" value="Suggested" />
+                  <Mini label="Final grade" value="Coordinator" />
                 </div>
                 <p className="mt-4 rounded-xl bg-secondary p-4 text-xs text-muted-foreground leading-relaxed">
                   Dual-review inspection confirms Grade A produce. No middleman deduction for moisture or subjective grading disputes.

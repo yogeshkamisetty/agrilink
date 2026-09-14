@@ -89,19 +89,19 @@ export function DeclareHarvestModal({
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-foreground">Estimated Harvest Window</label>
+            <label className="text-xs font-semibold text-foreground">Harvest starts on</label>
             <input
-              type="text"
+              type="date"
               required
               value={windowDates}
               onChange={(e) => setWindowDates(e.target.value)}
-              placeholder="e.g. 20–28 Oct 2025"
               className="mt-1.5 w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
+            <p className="mt-1 text-[11px] text-muted-foreground">Perishables are offered for a week from this date, storable crops for a month.</p>
           </div>
 
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 leading-relaxed">
-            ✓ <strong>AgriLink Farmgate Guarantee:</strong> 30% advance paid instantly upon loading into the FPO vehicle, with balance settled directly to your bank account via e-RUPI DBT upon weighment clearance.
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-xs text-foreground leading-relaxed">
+            <strong>How payment works:</strong> when your lot is weighed and accepted at collection, an advance on its value is paid from the buyer’s advance held by the FPO. The balance follows the buyer’s inspection, less your share of transport.
           </div>
 
           <div className="flex flex-col-reverse min-[380px]:flex-row items-stretch min-[380px]:items-center justify-end gap-2 sm:gap-2.5 pt-3 border-t border-border">

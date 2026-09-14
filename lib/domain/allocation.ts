@@ -1,3 +1,4 @@
+import { LARGEST_VEHICLE, smallestFitting, tripCost } from './fleet'
 import { roadKm, type LatLng } from './geo'
 import { planRoute, type RoutePlan, type RouteStop } from './routing'
 
@@ -59,7 +60,10 @@ export type VehicleRecommendation = {
   maxCapacityKg: number
   loadFactorPct: number
   fuelType: string
-  co2SavingsKg: number
+  /** Indicative hire cost for the run (see fleet.ts). */
+  tripCostRs: number
+  /** How much shorter the sequenced route is than visiting farms in listed order. */
+  kmSaved: number
 }
 
 export type OptimalAllocationResult = {
@@ -116,15 +120,13 @@ export function allocateFarmersOptimal(params: AllocateFarmersParams): OptimalAl
   const standbyTargetKg = Math.round(targetKg * standbyPct)
   const totalNeededKg = targetKg + standbyTargetKg
 
-  // 1. Filter candidates matching the target crop
+  // 1. Only farmers who registered this crop, with stock left, can supply it. A short pool
+  //    means a shortfall to report — never a reason to pull in farmers growing something else.
   const normCrop = crop.toUpperCase()
-  const matched = candidates.filter((c) => {
+  const pool = candidates.filter((c) => {
     const fCrop = (c.crop || '').toUpperCase()
-    return fCrop.includes(normCrop) || normCrop.includes(fCrop)
+    return fCrop !== '' && (fCrop.includes(normCrop) || normCrop.includes(fCrop)) && Number(c.availableKg) > 0
   })
-
-  // Fallback to all candidates if matching pool is too small for demo/hackathon flexibility
-  const pool = matched.length >= 2 ? matched : candidates
 
   // 2. Score each candidate
   const scored = pool.map((farmer) => {
@@ -165,7 +167,7 @@ export function allocateFarmersOptimal(params: AllocateFarmersParams): OptimalAl
   const allocations: FarmerAllocation[] = []
 
   for (const item of scored) {
-    const available = Number(item.farmer.availableKg) || 300
+    const available = Number(item.farmer.availableKg) || 0
     let takePrimary = 0
     let takeStandby = 0
 
@@ -236,43 +238,26 @@ export function allocateFarmersOptimal(params: AllocateFarmersParams): OptimalAl
 
   const routePlan = planRoute(depotStop, pickupStops, [dropStop])
 
-  // 6. Select Recommended Vehicle Capacity
-  let vehicleName = 'Tata Ace CNG (Mini Truck)'
-  let maxCapacityKg = 850
-  let fuelType = 'CNG Green Freight'
-
-  if (totalAllocatedKg > 1400) {
-    vehicleName = 'Eicher Pro 2049 (Medium Commercial)'
-    maxCapacityKg = 2500
-    fuelType = 'Clean Diesel (BS-VI)'
-  } else if (totalAllocatedKg > 800) {
-    vehicleName = 'Mahindra Bolero Maxi Truck Plus'
-    maxCapacityKg = 1400
-    fuelType = 'Clean Diesel (BS-VI)'
-  }
-
-  const loadFactorPct = Math.min(100, Math.round((totalAllocatedKg / maxCapacityKg) * 100))
-  const fuelSavedPct = routePlan.naiveKm > 0 ? Math.max(0, Math.round(((routePlan.naiveKm - routePlan.km) / routePlan.naiveKm) * 100)) : 28
-  const co2SavingsKg = Math.round(routePlan.km * 0.18 * (fuelSavedPct / 100) * 10) / 10
-
+  // 6. Right-size the vehicle for the pooled load (indicative hire tariffs, see fleet.ts)
+  const vehicleClass = smallestFitting(totalAllocatedKg, routePlan.km) ?? LARGEST_VEHICLE
+  const vehicleCount = Math.max(1, Math.ceil(totalAllocatedKg / vehicleClass.capacityKg))
   const vehicle: VehicleRecommendation = {
-    name: vehicleName,
-    maxCapacityKg,
-    loadFactorPct,
-    fuelType,
-    co2SavingsKg,
+    name: vehicleCount > 1 ? `${vehicleCount} × ${vehicleClass.label}` : vehicleClass.label,
+    maxCapacityKg: vehicleClass.capacityKg * vehicleCount,
+    loadFactorPct: Math.min(100, Math.round((totalAllocatedKg / (vehicleClass.capacityKg * vehicleCount)) * 100)),
+    fuelType: vehicleClass.id === 'E_LOADER' ? 'Electric' : 'Hired commercial vehicle',
+    tripCostRs: tripCost(vehicleClass, routePlan.km) * vehicleCount,
+    kmSaved: Math.max(0, Math.round((routePlan.naiveKm - routePlan.km) * 10) / 10),
   }
 
   // 7. Explanatory Summary Rationale
   const primaryCount = allocations.filter((a) => a.primaryKg > 0).length
   const standbyCount = allocations.filter((a) => a.standbyKg > 0).length
   const primaryFarmers = allocations.filter((a) => a.primaryKg > 0)
-  const avgReliability =
-    primaryCount > 0
-      ? Math.round(primaryFarmers.reduce((sum, a) => sum + (a.farmer.reliability || 90), 0) / primaryCount)
-      : 94
+  const avgReliability = primaryCount > 0 ? Math.round(primaryFarmers.reduce((sum, a) => sum + (a.farmer.reliability || 90), 0) / primaryCount) : 0
 
-  const summaryText = `Optimized allocation selected ${primaryCount} smallholder${primaryCount === 1 ? '' : 's'} (${avgReliability}% avg reliability) for primary ${totalPrimaryKg} KG fulfillment, plus ${standbyCount} smallholder${standbyCount === 1 ? '' : 's'} providing +${totalStandbyKg} KG (+${Math.round((totalStandbyKg / targetKg) * 100)}%) standby buffer reserve. Collection route optimized via TSP 2-opt (${routePlan.km} km, ${fuelSavedPct}% fuel saved).`
+  const shortfall = isTargetMet ? '' : `Registered ${crop.toLowerCase()} covers only ${totalPrimaryKg} of ${targetKg} KG. `
+  const summaryText = `${shortfall}Optimized allocation selected ${primaryCount} smallholder${primaryCount === 1 ? '' : 's'} (${avgReliability}% avg reliability) for primary ${totalPrimaryKg} KG fulfillment, plus ${standbyCount} smallholder${standbyCount === 1 ? '' : 's'} providing +${totalStandbyKg} KG (+${Math.round((totalStandbyKg / targetKg) * 100)}%) standby buffer reserve. Collection route ${routePlan.km} km after nearest-neighbour + 2-opt sequencing (${vehicle.kmSaved} km shorter than the listed order) on ${vehicle.name}.`
 
   return {
     allocations,

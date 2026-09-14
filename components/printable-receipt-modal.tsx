@@ -47,9 +47,9 @@ export function PrintableReceiptModal({
             </div>
             <div className="min-w-0">
               <h3 className="font-semibold text-xs sm:text-sm truncate">
-                {type === 'receipt' ? 'APMC Sale & Settlement Certificate' : 'Consignment Bill of Lading'}
+                {type === 'receipt' ? 'Settlement slip (sample layout)' : 'Collection waybill (sample layout)'}
               </h3>
-              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Official certified documentation for audit</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground truncate">Illustrative figures — not an invoice or official record</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -84,17 +84,17 @@ export function PrintableReceiptModal({
                       A
                     </div>
                     <div>
-                      <h1 className="font-serif text-xl font-bold tracking-tight">Kheda District Farmer Producer Co-operative Ltd</h1>
-                      <p className="text-xs text-muted-foreground font-mono">APMC Reg No: GJ-KHD-APMC-8842 · GSTIN: 24AAAFK1924L1ZP</p>
+                      <h1 className="font-serif text-xl font-bold tracking-tight">FPO settlement slip</h1>
+                      <p className="text-xs text-muted-foreground font-mono">Registration and tax details come from the FPO’s own records</p>
                     </div>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    National Agriculture Market (e-NAM) & AGMARKNET Certified Collection Point
+                    Sample layout — the figures below are illustrative, not taken from an order
                   </p>
                 </div>
                 <div className="flex sm:flex-col sm:items-end items-center justify-between gap-2">
                   <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-xs font-bold text-primary border border-primary/20">
-                    TAX INVOICE / VOUCHER
+                    SAMPLE
                   </span>
                   <p className="font-mono text-xs text-muted-foreground">Date: {new Date().toLocaleDateString('en-IN')}</p>
                 </div>
@@ -108,7 +108,7 @@ export function PrintableReceiptModal({
                   <p className="text-xs text-muted-foreground">Kheda Village, Anand Cluster, Gujarat</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">Phone: +91 98251 44102</p>
                   <span className="mt-2 inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
-                    <ShieldCheck className="size-3" /> Aadhaar Vault Verified
+                    <ShieldCheck className="size-3" /> FPO member
                   </span>
                 </div>
                 <div>
@@ -116,7 +116,7 @@ export function PrintableReceiptModal({
                   <p className="mt-1 font-semibold text-sm">{buyer?.name || 'PM POSHAN Central Kitchen'}</p>
                   <p className="text-xs text-muted-foreground">Order Ref: {orderCode} · Lot #LOT-1001-KHD</p>
                   <p className="text-xs text-muted-foreground">Delivery Window: {deliveryDate}</p>
-                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">Clearing Rail: NPCI e-RUPI / Bank DBT</p>
+                  <p className="mt-1 font-mono text-[11px] text-muted-foreground">Paid by bank transfer from the FPO account</p>
                 </div>
               </div>
 
@@ -128,19 +128,19 @@ export function PrintableReceiptModal({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-xs text-foreground">GradeCam™ Quality Certificate</span>
+                      <span className="font-semibold text-xs text-foreground">Collection grade</span>
                       <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">
-                        Grade A Assured
+                        Grade A
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Uniformity index 98.2% · Moisture 11.4% · Zero pesticide residue deviation.
+                      Grade and weight as recorded by the coordinator at collection.
                     </p>
                   </div>
                 </div>
                 <div className="font-mono text-xs text-right sm:border-l sm:border-border sm:pl-4">
-                  <p className="text-muted-foreground">Inspection ID</p>
-                  <p className="font-bold text-foreground">GC-2025-9921</p>
+                  <p className="text-muted-foreground">Lot</p>
+                  <p className="font-bold text-foreground">Sample</p>
                 </div>
               </div>
 
@@ -159,7 +159,7 @@ export function PrintableReceiptModal({
                     <tr>
                       <td className="px-4 py-3.5">
                         <p className="font-semibold">{crop} (Grade A Table Produce)</p>
-                        <p className="text-[11px] text-muted-foreground">Weighed at Kheda FPO Digital Weighbridge</p>
+                        <p className="text-[11px] text-muted-foreground">Weighed at the FPO collection point</p>
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono">{qty} kg</td>
                       <td className="px-4 py-3.5 text-right font-mono">₹{price.toFixed(2)}/kg</td>
@@ -177,11 +177,11 @@ export function PrintableReceiptModal({
                     <span>₹{gross.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                    <span>Less: 30% Collection Advance Paid:</span>
+                    <span>Less: advance paid at collection:</span>
                     <span>− ₹{advance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Less: Transport Allocation (4%):</span>
+                    <span>Less: share of transport:</span>
                     <span>− ₹{transport.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div className="border-t border-border pt-2 flex justify-between font-bold text-primary text-base">
@@ -194,13 +194,9 @@ export function PrintableReceiptModal({
               {/* Settlement Proof & Clearing Footer */}
               <div className="border-t border-border pt-6 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">NPCI e-RUPI Escrow Proof</p>
-                  <p className="font-mono text-xs text-foreground font-medium mt-1">
-                    TXN HASH: <span className="text-primary">0x7f4e91...b820a4</span>
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Direct Bank Transfer (DBT) authenticated under RBI guidelines.
-                  </p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Payment reference</p>
+                  <p className="font-mono text-xs text-foreground font-medium mt-1">Bank transfer reference from the FPO account</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Sample layout.</p>
                 </div>
                 <div className="flex gap-8 text-center text-xs">
                   <div>
@@ -225,7 +221,7 @@ export function PrintableReceiptModal({
                       W
                     </div>
                     <div>
-                      <h1 className="font-serif text-xl font-bold tracking-tight">AgriLink Consignment Bill of Lading</h1>
+                      <h1 className="font-serif text-xl font-bold tracking-tight">Collection waybill (sample layout)</h1>
                       <p className="text-xs text-muted-foreground font-mono">Consignment Manifest #{orderCode}-BOL</p>
                     </div>
                   </div>
@@ -243,25 +239,25 @@ export function PrintableReceiptModal({
               <div className="grid gap-4 sm:grid-cols-3 rounded-xl border border-border bg-secondary/30 p-4 text-xs sm:text-sm">
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Transporter</p>
-                  <p className="mt-1 font-semibold">Anand Agro Logistics Fleet</p>
-                  <p className="text-xs text-muted-foreground">Carrier License: GJ-LOG-2024</p>
+                  <p className="mt-1 font-semibold">Hired vehicle</p>
+                  <p className="text-xs text-muted-foreground">Recorded by the coordinator at dispatch</p>
                 </div>
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Vehicle Assigned</p>
-                  <p className="mt-1 font-semibold font-mono">Tata Ace (GJ-07-TY-4912)</p>
-                  <p className="text-xs text-muted-foreground">Payload Capacity: 1,500 kg</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Vehicle</p>
+                  <p className="mt-1 font-semibold font-mono">As entered at dispatch</p>
+                  <p className="text-xs text-muted-foreground">Class chosen by load</p>
                 </div>
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Driver Contact</p>
-                  <p className="mt-1 font-semibold">Anand Parmar</p>
-                  <p className="text-xs text-muted-foreground">+91 98251 00000</p>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Driver</p>
+                  <p className="mt-1 font-semibold">—</p>
+                  <p className="text-xs text-muted-foreground">Sample layout</p>
                 </div>
               </div>
 
               {/* Waypoint Stops Manifest */}
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mb-3">
-                  Waypoint Routing Sequence (Total Distance: 18.4 km)
+                  Stop sequence (sample stops)
                 </p>
                 <div className="overflow-x-auto rounded-xl border border-border">
                   <table className="w-full text-left text-xs sm:text-sm">
@@ -284,14 +280,14 @@ export function PrintableReceiptModal({
                       </tr>
                       <tr>
                         <td className="px-3.5 py-3 font-mono font-bold">2 (Pickup)</td>
-                        <td className="px-3.5 py-3">Ramesh Kumar (Kheda Village) · +91 98251 44102</td>
+                        <td className="px-3.5 py-3">Member farmer (sample)</td>
                         <td className="px-3.5 py-3 font-mono text-xs">22.7200, 72.7100</td>
                         <td className="px-3.5 py-3 text-right font-mono font-semibold">+500 kg</td>
                         <td className="px-3.5 py-3 text-right font-mono">07:15 AM</td>
                       </tr>
                       <tr>
                         <td className="px-3.5 py-3 font-mono font-bold">3 (Pickup)</td>
-                        <td className="px-3.5 py-3">Savitri Devi (Borsad Village) · +91 98250 88219</td>
+                        <td className="px-3.5 py-3">Member farmer (sample)</td>
                         <td className="px-3.5 py-3 font-mono text-xs">22.4100, 72.9000</td>
                         <td className="px-3.5 py-3 text-right font-mono font-semibold">+700 kg</td>
                         <td className="px-3.5 py-3 text-right font-mono">08:00 AM</td>
@@ -311,11 +307,10 @@ export function PrintableReceiptModal({
               {/* Chain of Custody & Receiver Sign-off */}
               <div className="border-t border-border pt-6 grid gap-6 sm:grid-cols-2 text-xs">
                 <div className="rounded-xl border border-border p-4 bg-secondary/15">
-                  <p className="font-semibold text-foreground">Tamper-Evident Seal Verification</p>
+                  <p className="font-semibold text-foreground">Chain of custody</p>
                   <p className="text-muted-foreground mt-1">
-                    Seal Barcode #AGRI-SEAL-9921 attached at depot. Verified intact across all transit waypoints.
+                    Lot codes on the manifest are checked against the lots unloaded at the drop point.
                   </p>
-                  <p className="font-mono text-[11px] text-muted-foreground mt-2">AgriLink IoT GPS Logger Active</p>
                 </div>
                 <div className="rounded-xl border border-border p-4 flex flex-col justify-between">
                   <p className="font-semibold">Drop-Point Receiving Verification</p>

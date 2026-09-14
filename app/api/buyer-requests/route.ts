@@ -1,134 +1,65 @@
 import { NextResponse } from 'next/server'
-import { requireRole, requireUser } from '@/lib/server/auth'
-import { supabaseAdmin } from '@/lib/supabase-admin'
+import { isCropId } from '@/lib/domain/crops'
+import { isoDate } from '@/lib/domain/dates'
+import { suggestedPrice } from '@/lib/domain/money'
+import { SMALL_ORDER_THRESHOLD_KG } from '@/lib/domain/order-routing'
+import { requireBuyerId } from '@/lib/server/actors'
+import { requireRole } from '@/lib/server/auth'
+import { clock } from '@/lib/server/clock'
 import { getDb } from '@/lib/server/db'
+import { DomainError } from '@/lib/server/errors'
+import { errorResponse, optionalString, readJson } from '@/lib/server/http'
+import { boardOrders, placeOrder, type BoardOrder } from '@/lib/server/marketplace'
+import { getMandiPrice, getRetailPrice } from '@/lib/server/prices'
+import { defaultDeliveryDate } from '@/lib/server/seed'
 
-const LARGE_ORDER_KG = 50
+function requestShape(order: BoardOrder) {
+  return {
+    id: order.id,
+    code: order.code,
+    crop: order.crop,
+    quantity_kg: order.qty_target_kg,
+    price_per_kg: order.price_per_kg,
+    delivery_date: order.delivery_date,
+    purpose: order.purpose,
+    review_required: order.order_tier === 'BULK',
+    review_status: order.review_status,
+    status: order.status,
+    created_at: order.created_at,
+  }
+}
 
+/** The quick request form sends only crop and quantity: price it at the fair price between mandi and retail, for the next standard delivery day. */
 export async function POST(request: Request) {
   try {
-    let buyerId: string
-    try {
-      const buyer = await requireRole(request, 'buyer')
-      buyerId = buyer.id
-    } catch {
-      buyerId = 'buyer-school-001'
-    }
-
-    const body = (await request.json()) as { crop?: string; quantity_kg?: number; purpose?: string }
-    const quantity = Number(body.quantity_kg)
-    if (!body.crop?.trim() || !Number.isFinite(quantity) || quantity <= 0) {
-      return NextResponse.json({ error: 'Crop and a positive quantity are required.' }, { status: 400 })
-    }
-    const reviewRequired = quantity > LARGE_ORDER_KG
-    if (reviewRequired && (!body.purpose || body.purpose.trim().length < 12)) {
-      return NextResponse.json({ error: 'Orders above 50 kg require a clear purchase purpose for admin review.' }, { status: 400 })
-    }
-
-    const crop = body.crop.trim().toUpperCase()
-    const purpose = body.purpose?.trim() || null
-    const reviewStatus = reviewRequired ? 'pending' : 'not_required'
-
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin
-          .from('buyer_purchase_requests')
-          .insert({
-            buyer_id: buyerId,
-            crop,
-            quantity_kg: quantity,
-            purpose,
-            review_required: reviewRequired,
-            review_status: reviewStatus,
-          })
-          .select()
-          .single()
-        if (!error && data) return NextResponse.json({ request: data, threshold_kg: LARGE_ORDER_KG })
-      } catch {}
-    }
-
-    // Fallback to relational db
+    const user = await requireRole(request, 'buyer')
     const db = await getDb()
-    await db.exec(`
-      create table if not exists agrilink.buyer_purchase_requests (
-        id uuid primary key default gen_random_uuid(),
-        buyer_id text not null,
-        crop text not null,
-        quantity_kg numeric not null,
-        purpose text,
-        review_required boolean default false,
-        review_status text default 'pending',
-        created_at timestamptz default now()
-      )
-    `)
-    const [row] = await db.query(
-      `insert into agrilink.buyer_purchase_requests (buyer_id, crop, quantity_kg, purpose, review_required, review_status)
-       values ($1, $2, $3, $4, $5, $6) returning *`,
-      [buyerId, crop, quantity, purpose, reviewRequired, reviewStatus]
+    const buyerId = await requireBuyerId(db, user)
+    const body = await readJson(request)
+    const crop = String(body.crop ?? '').trim().toUpperCase()
+    if (!isCropId(crop)) throw new DomainError('Choose a supported crop.', 400)
+    const [mandi, retail] = await Promise.all([getMandiPrice(db, crop), getRetailPrice(db, crop)])
+    const pricePerKg = suggestedPrice(mandi?.pricePerKg ?? null, retail?.pricePerKg ?? null)
+    if (pricePerKg == null) throw new DomainError('There is no reference price for this crop yet — order it from the marketplace with your own price.', 409)
+    const placed = await placeOrder(
+      db,
+      { buyerId, crop, qtyTargetKg: Number(body.quantity_kg), pricePerKg, deliveryDate: defaultDeliveryDate(isoDate(clock.now())), purpose: optionalString(body.purpose) },
+      { buyerId },
     )
-
-    // Also create order in agrilink.orders so it is visible in real-time on Admin and Farmer dashboards
-    try {
-      const pricePerKg = crop === 'TOMATO' ? 24 : crop === 'WHEAT' ? 26 : crop === 'ONION' ? 22 : crop === 'POTATO' ? 17 : 28
-      const deliveryDate = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0]
-      const orderId = `ord-req-${Date.now()}`
-      await db.query(
-        `insert into agrilink.orders (id, crop, qty_target_kg, qty_committed_kg, price_per_kg, delivery_date, status, created_at)
-         values ($1, $2, $3, 0, $4, $5::date, 'POSTED', now())
-         on conflict do nothing`,
-        [orderId, crop, quantity, pricePerKg, deliveryDate]
-      )
-    } catch {}
-
-    return NextResponse.json({ request: row, threshold_kg: LARGE_ORDER_KG })
+    return NextResponse.json({ request: requestShape(placed.order), order: placed.order, message: placed.message, threshold_kg: SMALL_ORDER_THRESHOLD_KG })
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to submit the request.' },
-      { status: 400 }
-    )
+    return errorResponse(error, 'Unable to submit the request.')
   }
 }
 
 export async function GET(request: Request) {
   try {
-    let userId: string
-    try {
-      const user = await requireUser(request)
-      userId = user.id
-    } catch {
-      userId = 'buyer-school-001'
-    }
-
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin
-          .from('buyer_purchase_requests')
-          .select()
-          .eq('buyer_id', userId)
-          .order('created_at', { ascending: false })
-        if (!error && data) return NextResponse.json({ requests: data, threshold_kg: LARGE_ORDER_KG })
-      } catch {}
-    }
-
+    const user = await requireRole(request, 'buyer')
     const db = await getDb()
-    await db.exec(`
-      create table if not exists agrilink.buyer_purchase_requests (
-        id uuid primary key default gen_random_uuid(),
-        buyer_id text not null,
-        crop text not null,
-        quantity_kg numeric not null,
-        purpose text,
-        review_required boolean default false,
-        review_status text default 'pending',
-        created_at timestamptz default now()
-      )
-    `)
-    const rows = await db.query(
-      `select * from agrilink.buyer_purchase_requests where buyer_id = $1 order by created_at desc`,
-      [userId]
-    )
-    return NextResponse.json({ requests: rows, threshold_kg: LARGE_ORDER_KG })
-  } catch {
-    return NextResponse.json({ requests: [], threshold_kg: LARGE_ORDER_KG })
+    const buyerId = await requireBuyerId(db, user)
+    const mine = (await boardOrders(db, { buyerId })).filter((o) => o.is_mine)
+    return NextResponse.json({ requests: mine.map(requestShape), threshold_kg: SMALL_ORDER_THRESHOLD_KG })
+  } catch (error) {
+    return errorResponse(error, 'Unable to load your requests.')
   }
 }

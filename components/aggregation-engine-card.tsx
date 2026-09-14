@@ -93,7 +93,7 @@ export function SmartAggregationCard({
               Smart Aggregation Engine: {crop} ({targetKg.toLocaleString()} kg)
             </h3>
             <p className="text-xs text-muted-foreground">
-              Aggregated for {buyerName} · Due {deliveryDate} · Guaranteed ₹{pricePerKg}/kg
+              Aggregated for {buyerName} · Due {deliveryDate} · Agreed ₹{pricePerKg}/kg
             </p>
           </div>
         </div>
@@ -203,7 +203,7 @@ export function SmartAggregationCard({
               {km != null && <span>Route: <strong>{km} km</strong> TSP Loop</span>}
               {fuelSavedPct != null && fuelSavedPct > 0 && (
                 <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                  🌱 {fuelSavedPct}% Fuel Saved
+                  Route efficiency: {fuelSavedPct}% fewer km vs. baseline
                 </span>
               )}
             </div>
@@ -338,7 +338,7 @@ export function SmartAggregationCard({
           <p className="font-semibold text-foreground">Why Aggregation Wins Over Marketplaces:</p>
           <p className="mt-0.5 leading-relaxed">
             Institutional buyers (kitchens, hospitals) cannot transact with individual 200 kg farmers.
-            AgriLink automatically aggregates multiple smallholders into a single bulk delivery contract with guaranteed price lock, reducing transaction friction and logistical carbon footprint by 42%.
+            AgriLink combines smallholder commitments into one traceable bulk delivery plan. The agreed order price is shown to every participant, while route distance and transport cost are calculated from the selected stops.
           </p>
         </div>
       </div>

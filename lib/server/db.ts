@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { SCHEMA_SQL, SCHEMA_VERSION } from './schema'
+import { MIGRATION_VERSION, MIGRATIONS_SQL, SCHEMA_SQL, SCHEMA_VERSION } from './schema'
 
 export type Row = Record<string, unknown>
 
@@ -23,18 +23,17 @@ const DATE = 1082
 async function openPglite(dataDir: string | undefined): Promise<Db> {
   try {
     const { PGlite } = await import('@electric-sql/pglite')
+    // Options go in one object: `new PGlite(undefined, options)` silently drops the options,
+    // which returns numerics as strings and dates as Date objects.
+    const parsers = { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v }
     let pg: any
     try {
-      if (dataDir) await fs.mkdir(dataDir, { recursive: true })
-      pg = new PGlite(dataDir, {
-        parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
-      })
+      if (dataDir && !dataDir.startsWith('memory://')) await fs.mkdir(dataDir, { recursive: true })
+      pg = new PGlite({ dataDir, parsers })
       await pg.waitReady
     } catch (err) {
       console.warn('[agrilink/db] PGlite directory initialization notice, falling back to in-memory instance:', err)
-      pg = new PGlite(undefined, {
-        parsers: { [NUMERIC]: (v: string) => Number(v), [INT8]: (v: string) => Number(v), [DATE]: (v: string) => v },
-      })
+      pg = new PGlite({ parsers })
       await pg.waitReady
     }
 
@@ -105,6 +104,13 @@ export async function dropSchema(db: Db) {
   await db.exec('drop schema if exists agrilink cascade')
 }
 
+export async function migrate(db: Db) {
+  const [row] = await db.query<{ value: string }>(`select value from agrilink.meta where key = 'migration_version'`)
+  if (row?.value === MIGRATION_VERSION) return
+  await db.exec(MIGRATIONS_SQL)
+  await db.query(`insert into agrilink.meta (key, value) values ('migration_version', $1) on conflict (key) do update set value = excluded.value`, [MIGRATION_VERSION])
+}
+
 /** Create the schema and seed data if needed. Local databases are rebuilt when the schema changes. */
 export async function prepare(db: Db) {
   const state = await schemaState(db)
@@ -116,11 +122,11 @@ export async function prepare(db: Db) {
     await dropSchema(db)
   }
   if (state !== 'current') await applySchema(db)
+  await migrate(db)
   const [{ n }] = await db.query<{ n: number }>('select count(*)::int as n from agrilink.fpos')
-  if (n === 0) {
-    const { seed } = await import('./seed')
-    await seed(db)
-  }
+  const { seed, ensureDemandHistory } = await import('./seed')
+  if (n === 0) await seed(db)
+  await ensureDemandHistory(db).catch((error) => console.warn('[agrilink] synthetic demand history was not seeded:', error))
 }
 
 const KEY = Symbol.for('agrilink.db')
@@ -136,7 +142,11 @@ export function getDb(): Promise<Db> {
   if (!holder[KEY]) {
     const url = process.env.DATABASE_URL
     if (!url && process.env.VERCEL) {
-      console.warn('[agrilink] DATABASE_URL is not set on Vercel. Falling back to temporary PGlite database in /tmp.')
+      // A writable local database is not durable on serverless infrastructure.
+      // Failing explicitly prevents requests from silently writing to an empty
+      // per-invocation store and losing marketplace/auth state.
+      holder[KEY] = Promise.reject(new Error('DATABASE_URL is required in Vercel. Configure the Supabase/Postgres connection string before using workflow APIs.'))
+      return holder[KEY]!
     }
     holder[KEY] = (url ? openPostgres(url) : openPglite(localDataDir()))
       .then(async (db) => {

@@ -1,18 +1,19 @@
-export type BuyerType = 'INSTITUTIONAL' | 'FAIR_PRICE_SHOP' | 'RESIDENTIAL_SOCIETY'
+export type BuyerType = 'INSTITUTIONAL' | 'FAIR_PRICE_SHOP' | 'RESIDENTIAL_SOCIETY' | 'CONSUMER'
 export type CropId = 'PADDY' | 'WHEAT' | 'TOMATO' | 'SPINACH' | 'ONION' | 'POTATO' | 'BAJRA' | 'TUR'
 export type ShelfClass = 'perishable' | 'semiPerishable' | 'shelfStable'
 
 /**
  * Crop-to-channel routing. This is the rule that keeps ration shops from
  * becoming a spoilage trap: perishables only go to kitchens that cook them
- * the same day; shelf-stable crops can go anywhere.
+ * the same day, or to a household's door, where they are eaten within days;
+ * shelf-stable crops can go anywhere.
  *
  * shelf life in days → permitted buyer channels
  */
 export const SHELF_LIFE_ROUTING = {
-  perishable: { maxDays: 5, channels: ['INSTITUTIONAL'] },
-  semiPerishable: { maxDays: 60, channels: ['INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY'] },
-  shelfStable: { maxDays: 999, channels: ['INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY'] },
+  perishable: { maxDays: 5, channels: ['INSTITUTIONAL', 'CONSUMER'] },
+  semiPerishable: { maxDays: 60, channels: ['INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY', 'CONSUMER'] },
+  shelfStable: { maxDays: 999, channels: ['INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY', 'CONSUMER'] },
 } as const satisfies Record<ShelfClass, { maxDays: number; channels: readonly BuyerType[] }>
 
 export type Crop = {
@@ -43,6 +44,7 @@ export const BUYER_TYPE_LABEL: Record<BuyerType, string> = {
   INSTITUTIONAL: 'Institutional kitchen',
   FAIR_PRICE_SHOP: 'Jan Poshan Kendra / Fair Price Shop',
   RESIDENTIAL_SOCIETY: 'Residential society',
+  CONSUMER: 'Household (doorstep delivery)',
 }
 
 export function isCropId(value: unknown): value is CropId {
@@ -88,7 +90,7 @@ export function channelCheck(crop: CropId | string, buyerType?: BuyerType | stri
   const label = BUYER_TYPE_LABEL[typeKey] || 'Institutional kitchen'
   const reason = allowed
     ? `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) — permitted for ${label.toLowerCase()}.`
-    : `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day. ${label} outlets have no cold storage.`
+    : `${cropObj.name} is ${SHELF_CLASS_LABEL[shelfClass]} (${days}-day shelf life) and routes to institutional kitchens only, which cook it the same day, or to households by doorstep delivery. ${label} outlets have no cold storage.`
   return { allowed, reason }
 }
 

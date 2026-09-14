@@ -318,3 +318,43 @@ alter table agrilink.academic_calendar enable row level security;
 alter table agrilink.channel_sales_log enable row level security;
 alter table agrilink.demo_reply_profiles enable row level security;
 `
+
+/**
+ * Additive changes applied once per database (tracked in agrilink.meta), so a
+ * deployed Postgres upgrades in place instead of needing a destructive reset.
+ */
+export const MIGRATION_VERSION = '6'
+
+export const MIGRATIONS_SQL = /* sql */ `
+-- v6 · marketplace: bulk-order review gate, direct small-order allocation, household consumers
+alter table agrilink.orders add column if not exists purpose text;
+alter table agrilink.orders add column if not exists review_status text;
+alter table agrilink.orders alter column review_status set default 'not_required';
+update agrilink.orders set review_status = 'not_required' where review_status is null;
+alter table agrilink.orders alter column review_status set not null;
+alter table agrilink.orders add column if not exists admin_note text;
+alter table agrilink.orders add column if not exists reviewed_at timestamptz;
+alter table agrilink.orders add column if not exists order_tier text not null default 'BULK';
+alter table agrilink.orders add column if not exists allocated_farmer_id uuid references agrilink.farmers(id);
+alter table agrilink.orders add column if not exists allocation_status text;
+alter table agrilink.orders add column if not exists declined_farmer_ids jsonb not null default '[]'::jsonb;
+alter table agrilink.orders add column if not exists delivery_location text;
+
+alter table agrilink.orders drop constraint if exists orders_review_status_check;
+alter table agrilink.orders add constraint orders_review_status_check check (review_status in ('not_required', 'pending', 'approved', 'rejected'));
+alter table agrilink.orders drop constraint if exists orders_order_tier_check;
+alter table agrilink.orders add constraint orders_order_tier_check check (order_tier in ('SMALL', 'BULK'));
+alter table agrilink.orders drop constraint if exists orders_allocation_status_check;
+alter table agrilink.orders add constraint orders_allocation_status_check check (allocation_status is null or allocation_status in ('PENDING', 'ACCEPTED', 'UNFULFILLED'));
+alter table agrilink.orders drop constraint if exists orders_status_check;
+alter table agrilink.orders add constraint orders_status_check check (status in ('POSTED', 'FUNDED', 'SOURCING', 'AGGREGATED', 'COLLECTING', 'DISPATCHED', 'SETTLED', 'REJECTED'));
+alter table agrilink.buyers drop constraint if exists buyers_type_check;
+alter table agrilink.buyers add constraint buyers_type_check check (type in ('INSTITUTIONAL', 'FAIR_PRICE_SHOP', 'RESIDENTIAL_SOCIETY', 'CONSUMER'));
+create index if not exists orders_allocated_farmer on agrilink.orders (allocated_farmer_id) where allocated_farmer_id is not null;
+
+-- Demo accounts sign in with these numbers; link them to the seeded farmer and school kitchen.
+update agrilink.farmers set phone = '+91 98251 44102'
+ where phone = '+91 90000 10101' and not exists (select 1 from agrilink.farmers where phone = '+91 98251 44102');
+update agrilink.buyers set contact_phone = '+91 98252 77103'
+ where contact_phone = '+91 90000 20201' and not exists (select 1 from agrilink.buyers where contact_phone = '+91 98252 77103');
+`

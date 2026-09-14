@@ -59,6 +59,9 @@ export async function POST(request: Request) {
     // 1. QUICK 1-CLICK DEMO ACCESS (Farmer, Buyer, Admin)
     // -----------------------------------------------------------------
     if (body.action === 'quick_demo') {
+      if (process.env.AGRILINK_DEMO_LOGIN === 'off') {
+        return NextResponse.json({ error: 'Demo sign-in is disabled on this deployment.' }, { status: 403 })
+      }
       const role = body.role || 'farmer'
       const demoPhones = {
         farmer: '9825144102',
@@ -148,11 +151,11 @@ export async function POST(request: Request) {
 
       let user = await findUserByPhone(phone)
       if (!user) {
-        // Seamlessly register new farmer/buyer if not already in registry
+        // Seamlessly register a new farmer or buyer. Coordinator accounts need the signup passcode.
         user = await registerUser({
           phone,
           fullName: body.fullName || `Farmer (${phone.slice(-4)})`,
-          role: body.role || 'farmer',
+          role: body.role === 'buyer' ? 'buyer' : 'farmer',
           pin: body.pin.trim(),
         })
       } else {
@@ -209,10 +212,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Please enter your full name.' }, { status: 400 })
       }
 
-      const role = body.role || 'farmer'
+      const role = body.role === 'buyer' || body.role === 'admin' ? body.role : 'farmer'
       if (role === 'admin') {
         const passcode = (body.adminPasscode || '').trim()
-        if (passcode !== 'AGRILINK-FPO-2025') {
+        const expected = process.env.ADMIN_SIGNUP_PASSCODE || (process.env.NODE_ENV === 'production' ? '' : 'AGRILINK-FPO-2025')
+        if (!expected || passcode !== expected) {
           return NextResponse.json({ error: 'Invalid FPO Coordinator authorization passcode.' }, { status: 403 })
         }
       }
@@ -297,6 +301,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Phone number and verification code are required.' }, { status: 400 })
       }
 
+      if (body.role === 'admin') {
+        const expected = process.env.ADMIN_SIGNUP_PASSCODE || (process.env.NODE_ENV === 'production' ? '' : 'AGRILINK-FPO-2025')
+        if (!expected || body.adminPasscode !== expected) return NextResponse.json({ error: 'Invalid FPO Coordinator authorization passcode.' }, { status: 403 })
+      }
+
       const verificationResult = await verifyOtp(phone, body.otp, body.sessionId)
       if (!verificationResult.ok) {
         return NextResponse.json({ error: verificationResult.error || 'Invalid verification code.' }, { status: 400 })
@@ -306,9 +315,9 @@ export async function POST(request: Request) {
       if (!user) {
         user = await registerUser({
           phone,
-          fullName: phone === '9825277103' ? 'Meera Patel' : phone === '9825000000' ? 'Anita Sharma' : 'Ramesh Kumar',
-          role: body.role || 'farmer',
-          pin: '1234',
+          fullName: (body.fullName || '').trim() || (phone === '9825277103' ? 'Meera Patel' : phone === '9825000000' ? 'Anita Sharma' : `AgriLink Member (${phone.slice(-4)})`),
+          role: body.role === 'buyer' ? 'buyer' : 'farmer',
+          pin: /^\d{4,6}$/.test(String(body.pin || '')) ? String(body.pin) : '1234',
         })
       }
 

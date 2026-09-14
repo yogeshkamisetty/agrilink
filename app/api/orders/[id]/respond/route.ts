@@ -1,29 +1,28 @@
+import type { Channel } from '@/lib/domain/cascade'
+import { actingFarmer } from '@/lib/server/actors'
 import { getDb } from '@/lib/server/db'
+import { DomainError } from '@/lib/server/errors'
+import { errorResponse, readJson } from '@/lib/server/http'
 import { respond } from '@/lib/server/sourcing'
 
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+const CHANNELS: Channel[] = ['SMS', 'WHATSAPP', 'IVR', 'COORDINATOR']
+
+/** A farmer replies to an offer; a coordinator may record a reply taken by phone. Simulated replies only ever come from the demo cascade. */
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-    const body = await request.json()
-    const { farmerId, response, channel, responseQtyKg, responseSource } = body
-    if (!farmerId || !response || !channel) {
-      return Response.json({ error: 'farmerId, response, and channel are required' }, { status: 400 })
-    }
     const db = await getDb()
-    if (!['ACCEPT', 'DECLINE', 'ACCEPTED', 'DECLINED'].includes(response) || !['SMS', 'WHATSAPP', 'IVR', 'COORDINATOR'].includes(channel)) {
-      return Response.json({ error: 'Unsupported response or channel.' }, { status: 400 })
-    }
+    const body = await readJson(request)
+    const { farmerId, onBehalf } = await actingFarmer(request, db, body.farmerId)
+    const response = String(body.response ?? '')
+    const channel = String(body.channel ?? '') as Channel
+    if (!['ACCEPT', 'DECLINE', 'ACCEPTED', 'DECLINED'].includes(response) || !CHANNELS.includes(channel)) throw new DomainError('Unsupported response or channel.', 400)
     const accept = response === 'ACCEPT' || response === 'ACCEPTED'
-    const source = ['FARMER', 'SIMULATED', 'COORDINATOR'].includes(responseSource) ? responseSource : 'FARMER'
-    const qtyKg = responseQtyKg == null ? 0 : Number(responseQtyKg)
-    if (!Number.isFinite(qtyKg) || (accept && qtyKg <= 0)) return Response.json({ error: 'A positive response quantity is required when accepting.' }, { status: 400 })
-    const result = await respond(db, id, farmerId, { channel, accept, qtyKg, source })
+    const qtyKg = body.responseQtyKg == null ? 0 : Number(body.responseQtyKg)
+    if (!Number.isFinite(qtyKg) || (accept && qtyKg <= 0)) throw new DomainError('A positive response quantity is required when accepting.', 400)
+    const result = await respond(db, id, farmerId, { channel, accept, qtyKg, source: onBehalf ? 'COORDINATOR' : 'FARMER' })
     return Response.json(result)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to record farmer response'
-    return Response.json({ error: message }, { status: 400 })
+    return errorResponse(error, 'Failed to record the farmer response.')
   }
 }

@@ -5,6 +5,8 @@ import { addDays, isoDate } from '@/lib/domain/dates'
 import { renderMessage, type MessageParams } from '@/lib/domain/i18n'
 import { matchRegistry, type RegistryCandidate } from '@/lib/domain/matching'
 import { buyerAdvance, DEFAULT_ADVANCE_PCT, round2 } from '@/lib/domain/money'
+import { SMALL_ORDER_THRESHOLD_KG } from '@/lib/domain/order-routing'
+import { checkOrderPrice } from '@/lib/domain/pricing'
 import type { Buyer, Commitment, Farmer, Fpo, Notification, Order } from '@/lib/types'
 import { clock } from './clock'
 import { uuidArray, type Db } from './db'
@@ -15,6 +17,8 @@ import { getBuyer, getCommitments, getFarmer, getFarmersByIds, getFpo, getLots, 
 import { sendTestWhatsApp } from './whatsapp'
 
 export const MIN_ORDER_KG = 10
+/** Households order kitchen quantities. */
+export const MIN_CONSUMER_ORDER_KG = 1
 export const MAX_ORDER_KG = 10_000
 export const MAX_LEAD_DAYS = 60
 
@@ -24,23 +28,25 @@ export function fpoShortName(fpo: Pick<Fpo, 'name'>): string {
 
 // ─── Order intake ────────────────────────────────────────────────────────────
 
-export type CreateOrderInput = { buyerId: string; crop: CropId; qtyTargetKg: number; pricePerKg: number; deliveryDate: string; advancePct?: number }
+export type CreateOrderInput = {
+  buyerId: string
+  crop: CropId
+  qtyTargetKg: number
+  pricePerKg: number
+  deliveryDate: string
+  advancePct?: number
+  purpose?: string | null
+  deliveryLocation?: string | null
+  /** Set when an FPO coordinator posts the order themselves: bulk orders then skip the review queue. */
+  approvedBy?: string | null
+}
 
 export async function createOrder(db: Db, input: CreateOrderInput): Promise<Order> {
-  let buyer: Buyer
-  try {
-    buyer = await getBuyer(db, input.buyerId)
-  } catch {
-    const buyers = await listBuyers(db)
-    if (buyers.length > 0) {
-      buyer = buyers[0]
-    } else {
-      throw new DomainError('No registered buyers found in the platform.', 404)
-    }
-  }
+  const buyer = await getBuyer(db, input.buyerId)
   const rule = channelCheck(input.crop, buyer.type)
   if (!rule.allowed) throw new DomainError(rule.reason, 400)
-  if (input.qtyTargetKg < MIN_ORDER_KG || input.qtyTargetKg > MAX_ORDER_KG) throw new DomainError(`Quantity must be between ${MIN_ORDER_KG} and ${MAX_ORDER_KG} kg.`, 400)
+  const minKg = buyer.type === 'CONSUMER' ? MIN_CONSUMER_ORDER_KG : MIN_ORDER_KG
+  if (!(input.qtyTargetKg >= minKg) || input.qtyTargetKg > MAX_ORDER_KG) throw new DomainError(`Quantity must be between ${minKg} and ${MAX_ORDER_KG} kg.`, 400)
   if (!(input.pricePerKg > 0)) throw new DomainError('Price must be positive.', 400)
   const today = isoDate(clock.now())
   if (input.deliveryDate <= today) throw new DomainError('Delivery must be after today — demand is committed before harvest.', 400)
@@ -50,12 +56,42 @@ export async function createOrder(db: Db, input: CreateOrderInput): Promise<Orde
   // Reference prices are captured on the order so the price proof later
   // traces to the figures that were on screen when the buyer committed.
   const [mandi, retail] = await Promise.all([getMandiPrice(db, input.crop), getRetailPrice(db, input.crop)])
+  const price = checkOrderPrice(input.pricePerKg, mandi?.pricePerKg ?? null, retail?.pricePerKg ?? null)
+  if (!price.ok) throw new DomainError(price.reason, 400)
+
+  const orderTier = input.qtyTargetKg <= SMALL_ORDER_THRESHOLD_KG ? 'SMALL' : 'BULK'
+  const approvedBy = input.approvedBy?.trim() || null
+  const reviewStatus = orderTier === 'SMALL' ? 'not_required' : approvedBy ? 'approved' : 'pending'
+  const now = clock.now()
   const [row] = await db.query(
-    `insert into agrilink.orders (buyer_id, fpo_id, crop, qty_target_kg, price_per_kg, delivery_date, advance_pct, status, mandi_ref, retail_ref, created_at)
-     values ($1, $2, $3, $4, $5, $6::date, $7, 'POSTED', $8::jsonb, $9::jsonb, $10) returning *`,
-    [buyer.id, fpo.id, input.crop, round2(input.qtyTargetKg), round2(input.pricePerKg), input.deliveryDate, input.advancePct ?? DEFAULT_ADVANCE_PCT, mandi ? JSON.stringify(mandi) : null, retail ? JSON.stringify(retail) : null, clock.now()],
+    `insert into agrilink.orders (buyer_id, fpo_id, crop, qty_target_kg, price_per_kg, delivery_date, advance_pct, status, mandi_ref, retail_ref, created_at,
+                                  order_tier, review_status, purpose, delivery_location, reviewed_at, admin_note)
+     values ($1, $2, $3, $4, $5, $6::date, $7, 'POSTED', $8::jsonb, $9::jsonb, $10, $11, $12, $13, $14, $15, $16) returning *`,
+    [
+      buyer.id,
+      fpo.id,
+      input.crop,
+      round2(input.qtyTargetKg),
+      round2(input.pricePerKg),
+      input.deliveryDate,
+      input.advancePct ?? DEFAULT_ADVANCE_PCT,
+      mandi ? JSON.stringify(mandi) : null,
+      retail ? JSON.stringify(retail) : null,
+      now,
+      orderTier,
+      reviewStatus,
+      input.purpose?.trim() || null,
+      input.deliveryLocation?.trim() || `${buyer.address}, ${buyer.city}`,
+      approvedBy ? now : null,
+      approvedBy ? `Posted by FPO coordinator ${approvedBy}` : null,
+    ],
   )
   return mapRow<Order>(row)
+}
+
+function assertReviewCleared(order: Order) {
+  if (order.status === 'REJECTED' || order.reviewStatus === 'rejected') throw new DomainError('This order was rejected at FPO review.', 409)
+  if (order.reviewStatus === 'pending') throw new DomainError('This bulk order is waiting for FPO review of its stated purpose; it can go ahead once approved.', 409)
 }
 
 /** Buyer commits the advance to the FPO's bank account (ledger entry only). Funds the order. */
@@ -63,6 +99,7 @@ export async function commitAdvance(db: Db, orderId: string, buyerId: string): P
   return db.tx(async (tx) => {
     const order = await lockOrder(tx, orderId)
     if (order.buyerId !== buyerId) throw new DomainError('Only the buyer who placed the order can commit its advance.', 403)
+    assertReviewCleared(order)
     if (order.status !== 'POSTED') throw new DomainError('The advance for this order is already committed.')
     const amount = buyerAdvance(order.qtyTargetKg, order.pricePerKg, order.advancePct)
     const [row] = await tx.query(`update agrilink.orders set status = 'FUNDED', advance_amount = $2, advance_committed_at = $3 where id = $1 returning *`, [order.id, amount, clock.now()])
@@ -111,6 +148,10 @@ function offerParams(order: Order, buyer: Buyer, fpo: Fpo, farmer: Pick<Farmer, 
 export async function notifyMatched(db: Db, orderId: string, opts: { simulateReplies: boolean }) {
   const result = await db.tx(async (tx) => {
     const order = await lockOrder(tx, orderId)
+    assertReviewCleared(order)
+    if (order.orderTier === 'SMALL' && order.allocationStatus && order.allocationStatus !== 'UNFULFILLED') {
+      throw new DomainError('This small order is routed directly to the nearest farmer; it is only broadcast if no nearby farmer can fill it.')
+    }
     if (order.status === 'POSTED') throw new DomainError('The buyer has not committed the advance yet. Farmers are only asked to harvest against funded demand.')
     if (order.status !== 'FUNDED') throw new DomainError('Farmers have already been notified for this order.')
     const [buyer, fpo] = await Promise.all([getBuyer(tx, order.buyerId), getFpo(tx, order.fpoId)])

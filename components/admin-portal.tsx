@@ -25,10 +25,15 @@ import {
   UserCheck,
   ChevronRight,
   TrendingUp,
+  Route,
+  BarChart3,
 } from 'lucide-react'
-import { getAuthClient } from '@/lib/auth-client'
+import { authHeaders, getAuthClient } from '@/lib/auth-client'
 import { RouteMap } from '@/components/route-map'
 import { BolnaCallModal } from '@/components/bolna-call-modal'
+import { DemandForecastPanel } from '@/components/demand-forecast-panel'
+import { LogisticsPlanPanel } from '@/components/logistics-plan-panel'
+import { LARGEST_VEHICLE, smallestFitting, tripCost } from '@/lib/domain/fleet'
 import {
   allocateFarmersOptimal,
   getVillageLatLng,
@@ -93,22 +98,38 @@ export type LiveOrder = {
   allocated_farmer_id?: string | null
   allocated_farmer_village?: string | null
   allocated_farmer_distance_km?: number | null
-  farmer_acceptance_status?: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  farmer_acceptance_status?: 'PENDING' | 'ACCEPTED' | 'REJECTED' | null
   declined_history?: string[]
   purpose?: string | null
-  review_status?: 'pending' | 'approved' | 'rejected' | null
+  review_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | null
   admin_note?: string | null
+  qty_committed_kg?: number
+  standby_kg?: number
+  is_fully_committed?: boolean
+  open_for_commitment?: boolean
+  mandi_price_per_kg?: number | null
+  retail_price_per_kg?: number | null
+  buyer_lat?: number
+  buyer_lng?: number
+  fpo_name?: string
+  fpo_lat?: number
+  fpo_lng?: number
 }
 
 type LiveFarmer = {
   id: string
+  /** One row per farmer and live registry entry; this keys the row. */
+  entry_id?: string
   name: string
   mobile_number?: string
   village: string
+  lat?: number
+  lng?: number
   crop_name?: string
   crop?: string
   quantity?: number
-  quality_grade?: string
+  registered_kg?: number
+  quality_grade?: string | null
   harvest_date?: string | null
   verified?: boolean
   reliability_score?: number
@@ -153,7 +174,7 @@ export function AdminPortal() {
   const [error, setError] = useState('')
 
   // 4-Tab Architecture for Clean SIH Operational Command Center
-  const [activeTab, setActiveTab] = useState<'orders' | 'aggregation' | 'batches' | 'farmers'>('orders')
+  const [activeTab, setActiveTab] = useState<'orders' | 'aggregation' | 'batches' | 'farmers' | 'forecast' | 'logistics'>('orders')
   const [orderFilter, setOrderFilter] = useState<'all' | 'small' | 'bulk' | 'aggregated'>('all')
 
   // Farmer Roster Filter Tabs
@@ -179,6 +200,10 @@ export function AdminPortal() {
   // Simulation Feedback Banner for Judges
   const [simulationToast, setSimulationToast] = useState<string | null>(null)
 
+  // Registered buyers, so test orders are filed for a real buyer record
+  const [buyers, setBuyers] = useState<Array<{ id: string; name: string; type: string }>>([])
+  const testBuyer = () => buyers.find((b) => b.type === 'INSTITUTIONAL') ?? buyers[0]
+
   // Compliance Desk State for >50 kg Bulk Orders
   const [validatingOrderId, setValidatingOrderId] = useState<string | null>(null)
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
@@ -201,7 +226,7 @@ export function AdminPortal() {
       try {
         const res = await fetch('/api/auth/otp', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({ action: 'quick_demo', role: 'admin' }),
         })
         const authData = await res.json()
@@ -226,8 +251,8 @@ export function AdminPortal() {
 
       const [reviewsRes, ordersRes, farmersRes, batchesRes] = await Promise.all([
         fetch('/api/admin/reviews', { headers }).catch(() => null),
-        fetch('/api/orders').catch(() => null),
-        fetch('/api/farmers').catch(() => null),
+        fetch('/api/orders', { headers }).catch(() => null),
+        fetch('/api/farmers', { headers }).catch(() => null),
         fetch('/api/aggregation', { headers }).catch(() => null),
       ])
 
@@ -236,15 +261,9 @@ export function AdminPortal() {
         setData(revData)
         setError('')
       } else if (!data) {
-        setData({
-          profiles: [
-            { id: 'u-1', full_name: 'Anita Desai', role: 'coordinator', mobile_number: '9825000000', verification_status: 'verified', last_login_at: new Date().toISOString(), last_logout_at: null },
-            { id: 'u-2', full_name: 'Rameshbhai Patel', role: 'farmer', mobile_number: '9825144102', verification_status: 'verified', last_login_at: new Date().toISOString(), last_logout_at: null },
-            { id: 'u-3', full_name: 'Dinesh Prajapati', role: 'buyer', mobile_number: '9000020202', verification_status: 'verified', last_login_at: new Date().toISOString(), last_logout_at: null },
-          ],
-          activities: [],
-          pending_reviews: [],
-        })
+        const reviewError: { error?: string } = reviewsRes ? await reviewsRes.json().catch(() => ({})) : {}
+        setData({ profiles: [], activities: [], pending_reviews: [] })
+        setError(reviewError.error || 'Sign in with an FPO coordinator account to load the command centre.')
       }
 
       if (ordersRes && ordersRes.ok) {
@@ -279,6 +298,16 @@ export function AdminPortal() {
       if (showSpinner) setRefreshing(false)
     }
   }
+
+  useEffect(() => {
+    ensureSession()
+      .then(() => fetch('/api/marketplace', { headers: authHeaders() }))
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (Array.isArray(json?.buyers)) setBuyers(json.buyers)
+      })
+      .catch(() => {})
+  }, [])
 
   // Polling & sync listeners
   useEffect(() => {
@@ -331,10 +360,10 @@ export function AdminPortal() {
       return orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) <= SMALL_ORDER_THRESHOLD_KG)
     }
     if (orderFilter === 'bulk') {
-      return orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG && o.status !== 'AGGREGATED')
+      return orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG && !o.is_fully_committed)
     }
     if (orderFilter === 'aggregated') {
-      return orders.filter((o) => o.status === 'AGGREGATED')
+      return orders.filter((o) => o.is_fully_committed)
     }
     return orders
   }, [orders, orderFilter])
@@ -348,18 +377,11 @@ export function AdminPortal() {
     )
   }, [orders])
 
-  // Farmers matching active crop
-  const matchedFarmers = useMemo(() => {
-    const matched = farmers.filter((f) => {
-      const fCrop = (f.crop_name || f.crop || '').toUpperCase()
-      return fCrop.includes(activeCrop) || activeCrop.includes(fCrop)
-    })
-    if (matched.length < 3) {
-      const remaining = farmers.filter((f) => !matched.some((m) => m.id === f.id))
-      return [...matched, ...remaining].slice(0, 6)
-    }
-    return matched
-  }, [farmers, activeCrop])
+  // Farmers who registered the order's crop and still have some of it uncommitted
+  const matchedFarmers = useMemo(
+    () => farmers.filter((f) => (f.crop_name || f.crop || '').toUpperCase() === activeCrop && Number(f.quantity) > 0),
+    [farmers, activeCrop],
+  )
 
   // Candidate farmers for optimal knapsack solver
   const candidateFarmers: CandidateFarmer[] = useMemo(() => {
@@ -368,10 +390,11 @@ export function AdminPortal() {
       name: f.name,
       village: f.village,
       crop: f.crop_name || f.crop || activeCrop,
-      availableKg: Number(f.quantity || 500),
-      reliability: Number(f.reliability_score || 94),
-      qualityGrade: (f.quality_grade === 'B' ? 'B' : 'A') as 'A' | 'B',
-      location: getVillageLatLng(f.village),
+      availableKg: Number(f.quantity) || 0,
+      reliability: Number(f.reliability_score) || 90,
+      // No grade on record yet counts as B, never as an assumed A.
+      qualityGrade: (f.quality_grade === 'A' ? 'A' : 'B') as 'A' | 'B',
+      location: f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : getVillageLatLng(f.village),
     }))
   }, [matchedFarmers, activeCrop])
 
@@ -383,8 +406,10 @@ export function AdminPortal() {
       crop: activeCrop,
       candidates: candidateFarmers,
       standbyPct: 0.15,
-      depotLabel: 'Kheda FPO Central Sourcing Hub',
-      dropLabel: activeOrder?.buyer_name || activeOrder?.delivery_location || 'Institutional Buyer Central Kitchen',
+      depotLocation: activeOrder?.fpo_lat != null && activeOrder?.fpo_lng != null ? { lat: activeOrder.fpo_lat, lng: activeOrder.fpo_lng } : undefined,
+      dropLocation: activeOrder?.buyer_lat != null && activeOrder?.buyer_lng != null ? { lat: activeOrder.buyer_lat, lng: activeOrder.buyer_lng } : undefined,
+      depotLabel: activeOrder?.fpo_name ? `${activeOrder.fpo_name} collection centre` : 'FPO collection centre',
+      dropLabel: activeOrder?.buyer_name || activeOrder?.delivery_location || 'Buyer',
     })
   }, [candidateFarmers, activeTargetKg, activeCrop, activeOrder])
 
@@ -446,14 +471,14 @@ export function AdminPortal() {
     const allocatedFarmersList = candidateFarmers.filter((f) => (farmerAllocations[f.id] || 0) > 0)
     if (allocatedFarmersList.length === 0) return null
 
-    const depotLoc = getVillageLatLng('Kheda')
+    const depotLoc = activeOrder?.fpo_lat != null && activeOrder?.fpo_lng != null ? { lat: activeOrder.fpo_lat, lng: activeOrder.fpo_lng } : getVillageLatLng('Boriavi')
     const depotStop: RouteStop = {
-      id: 'depot-kheda',
-      label: 'Kheda FPO Central Sourcing Hub',
+      id: 'depot',
+      label: activeOrder?.fpo_name ? `${activeOrder.fpo_name} collection centre` : 'FPO collection centre',
       kind: 'DEPOT',
       lat: depotLoc.lat,
       lng: depotLoc.lng,
-      detail: 'Corridor origin depot',
+      detail: 'Vehicle starts here',
       kg: 0,
     }
 
@@ -470,14 +495,14 @@ export function AdminPortal() {
       }
     })
 
-    const dropLoc = getVillageLatLng('Anand')
+    const dropLoc = activeOrder?.buyer_lat != null && activeOrder?.buyer_lng != null ? { lat: activeOrder.buyer_lat, lng: activeOrder.buyer_lng } : getVillageLatLng('Anand')
     const dropStop: RouteStop = {
       id: 'drop-buyer',
-      label: activeOrder?.buyer_name || 'PM POSHAN Central Kitchen, Anand',
+      label: activeOrder?.buyer_name || 'Buyer',
       kind: 'DROP',
       lat: dropLoc.lat,
       lng: dropLoc.lng,
-      detail: `Consignment Delivery Window: ${activeOrder?.delivery_date || 'Oct 2025'}`,
+      detail: `Delivery ${activeOrder?.delivery_date ?? ''}`.trim(),
       kg: totalAllocatedKg,
     }
 
@@ -486,41 +511,20 @@ export function AdminPortal() {
 
   // Logistics Freight Vehicle Selection & Emissions Calculator
   const vehicleStats = useMemo(() => {
-    const km = dynamicRoutePlan?.km || 42
-    const naiveKm = dynamicRoutePlan?.naiveKm || 68
-    const fuelSavedPct = Math.max(12, Math.round(((naiveKm - km) / naiveKm) * 100))
-    const co2SavingsKg = Math.round((naiveKm - km) * 0.28)
-
-    if (totalAllocatedKg <= 750) {
-      return {
-        name: 'Tata Ace CNG (Small Carrier)',
-        maxCapacityKg: 750,
-        loadFactorPct: Math.min(100, Math.round((totalAllocatedKg / 750) * 100)),
-        fuelType: 'CNG Green Fleet (Zero Tailpipe PM)',
-        km,
-        fuelSavedPct,
-        co2SavingsKg,
-      }
-    } else if (totalAllocatedKg <= 1500) {
-      return {
-        name: 'Mahindra Bolero Maxi Truck Plus',
-        maxCapacityKg: 1500,
-        loadFactorPct: Math.min(100, Math.round((totalAllocatedKg / 1500) * 100)),
-        fuelType: 'BS-VI Clean Diesel Fleet',
-        km,
-        fuelSavedPct,
-        co2SavingsKg,
-      }
-    } else {
-      return {
-        name: 'Ashok Leyland Ecomet Heavy Carrier',
-        maxCapacityKg: 3500,
-        loadFactorPct: Math.min(100, Math.round((totalAllocatedKg / 3500) * 100)),
-        fuelType: 'BS-VI Clean Logistics Transport',
-        km,
-        fuelSavedPct,
-        co2SavingsKg,
-      }
+    const km = dynamicRoutePlan?.km ?? 0
+    const naiveKm = dynamicRoutePlan?.naiveKm ?? 0
+    const vehicle = smallestFitting(totalAllocatedKg, km) ?? LARGEST_VEHICLE
+    const count = Math.max(1, Math.ceil(totalAllocatedKg / vehicle.capacityKg))
+    const costRs = totalAllocatedKg > 0 ? tripCost(vehicle, km) * count : 0
+    return {
+      name: count > 1 ? `${count} × ${vehicle.label}` : vehicle.label,
+      maxCapacityKg: vehicle.capacityKg * count,
+      loadFactorPct: totalAllocatedKg > 0 ? Math.min(100, Math.round((totalAllocatedKg / (vehicle.capacityKg * count)) * 100)) : 0,
+      fuelType: 'Indicative hire tariff — confirm at dispatch',
+      km,
+      kmSaved: Math.max(0, Math.round((naiveKm - km) * 10) / 10),
+      costRs,
+      costPerKg: totalAllocatedKg > 0 ? Math.round((costRs / totalAllocatedKg) * 100) / 100 : 0,
     }
   }, [dynamicRoutePlan, totalAllocatedKg])
 
@@ -557,15 +561,15 @@ export function AdminPortal() {
         }),
       })
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson.error || 'Failed to lock batch')
-      }
-
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Failed to lock batch')
+      const results: Array<{ status: string; farmerName: string; reason: string | null }> = json.results ?? []
+      const committed = results.filter((r) => r.status === 'COMMITTED')
+      const skipped = results.filter((r) => r.status === 'SKIPPED')
       setAggregationSuccess(
-        `Batch ${batchCode} consolidated from ${contributions.length} smallholders (${totalAllocatedKg} KG)! TSP collection runway dispatched via ${vehicleStats.name} (${vehicleStats.km} km, ${vehicleStats.fuelSavedPct}% fuel saved).`
+        `${json.batch?.batch_code ?? batchCode}: ${committed.length} farmer${committed.length === 1 ? '' : 's'} committed — ${json.totals?.primaryKg ?? 0} kg primary + ${json.totals?.standbyKg ?? 0} kg standby of ${json.totals?.targetKg ?? activeTargetKg} kg.` +
+          (skipped.length ? ` Not added: ${skipped.map((r) => `${r.farmerName} (${r.reason})`).join('; ')}.` : '')
       )
-      setRouteDispatched(true)
       await fetchLiveFeeds(false)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
@@ -590,20 +594,22 @@ export function AdminPortal() {
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           crop: 'TOMATO',
           qtyTargetKg: 35,
-          pricePerKg: 26,
+          pricePerKg: 21,
           deliveryDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-          buyerId: 'buyer-school-001',
+          buyerId: testBuyer()?.id,
         }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        setSimulationToast(`Test order not placed: ${data.error || 'unknown error'}`)
+        return
+      }
       if (data.order) {
-        setSimulationToast(
-          `⚡ Small Order Created (35 kg Tomato): System instantly allocated to nearest farmer Jignesh Chauhan (Bakrol, 1.8 km) without admin bottleneck!`
-        )
+        setSimulationToast(`Small order ${data.order.code} (35 kg tomato): ${data.message}`)
         fetchLiveFeeds(false)
         setActiveTab('orders')
         setOrderFilter('small')
@@ -627,23 +633,26 @@ export function AdminPortal() {
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           crop: 'PADDY',
           qtyTargetKg: 1200,
           pricePerKg: 28,
           deliveryDate: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-          buyerId: 'buyer-school-001',
+          buyerId: testBuyer()?.id,
+          submitForReview: true,
           buyerName: 'PM POSHAN Central Kitchen, Anand',
           deliveryLocation: 'Kitchen Block, Nana Bazaar, Vallabh Vidyanagar, Anand',
           purpose: 'PM POSHAN Central Kitchen weekly mid-day meal buffer quota for 14 government schools in Anand district (1,100 students).',
         }),
       })
       const data = await res.json()
+      if (!res.ok) {
+        setSimulationToast(`Test demand not placed: ${data.error || 'unknown error'}`)
+        return
+      }
       if (data.order) {
-        setSimulationToast(
-          `🛡️ Bulk Institutional Demand Created (1,200 kg Paddy): Purpose submitted and placed in Compliance Desk for validation.`
-        )
+        setSimulationToast(`Bulk demand ${data.order.code} (1,200 kg paddy) is waiting for purpose review: ${data.message}`)
         fetchLiveFeeds(false)
         setActiveTab('orders')
         setOrderFilter('bulk')
@@ -674,7 +683,7 @@ export function AdminPortal() {
 
       const res = await fetch(`/api/orders/${orderId}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'admin_validate_bulk',
           decision,
@@ -716,16 +725,20 @@ export function AdminPortal() {
       const isSmall = Number(order.qty_target_kg || order.quantity_required) <= SMALL_ORDER_THRESHOLD_KG
       const res = await fetch(`/api/orders/${order.id}/action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           action: 'farmer_reject',
-          farmerId: order.allocated_farmer_id || 'f-jignesh-104',
+          farmerId: order.allocated_farmer_id,
           crop: order.crop,
           qtyTargetKg: order.qty_target_kg,
           reason: 'Sprayer breakdown / tractor booked',
         }),
       })
       const json = await res.json()
+      if (!res.ok) {
+        setSimulationToast(`Decline not recorded: ${json.error || 'unknown error'}`)
+        return
+      }
       if (json.ok) {
         if (isSmall && json.nextFarmer) {
           // Update order locally
@@ -742,6 +755,8 @@ export function AdminPortal() {
             )
           )
           setSimulationToast(`🔄 Automated Fallback: ${json.message}`)
+        } else if (isSmall) {
+          setSimulationToast(json.message)
         } else if (!isSmall) {
           setSimulationToast(`🔄 Bulk Standby Promotion: ${json.message}`)
         }
@@ -777,8 +792,14 @@ export function AdminPortal() {
   }
 
   const totalBuyerKgNeeded = orders.reduce((sum, o) => sum + Number(o.qty_target_kg || o.quantity_required || 1000), 0)
-  const totalFarmerKgAvailable = farmers.reduce((sum, f) => sum + Number(f.quantity || 500), 0)
-  const verifiedMembersCount = data?.profiles.filter((p) => p.verification_status === 'verified').length || farmers.length + 3
+  const totalFarmerKgAvailable = farmers.reduce((sum, f) => sum + (Number(f.quantity) || 0), 0)
+  const verifiedMembersCount = data?.profiles.filter((p) => p.verification_status === 'verified').length ?? 0
+  const pendingSmallOrder = orders.find((o) => o.order_tier === 'SMALL' && o.farmer_acceptance_status === 'PENDING')
+  // Order prices against the mandi and retail references captured when each order was placed
+  const mandiPriced = orders.filter((o) => o.mandi_price_per_kg && o.price_per_kg)
+  const farmerUpliftPct = mandiPriced.length ? Math.round((mandiPriced.reduce((s, o) => s + (o.price_per_kg! - o.mandi_price_per_kg!) / o.mandi_price_per_kg!, 0) / mandiPriced.length) * 100) : null
+  const retailPriced = orders.filter((o) => o.retail_price_per_kg && o.price_per_kg)
+  const buyerSavingPct = retailPriced.length ? Math.round((retailPriced.reduce((s, o) => s + (o.retail_price_per_kg! - o.price_per_kg!) / o.retail_price_per_kg!, 0) / retailPriced.length) * 100) : null
   const smallOrdersCount = orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) <= SMALL_ORDER_THRESHOLD_KG).length
   const bulkOrdersCount = orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG).length
 
@@ -820,7 +841,7 @@ export function AdminPortal() {
               Live Command Center
             </span>
             <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-              SIH Problem 26033 (DoCA)
+              SIH 2026 · PS 26033
             </span>
           </div>
           <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
@@ -869,19 +890,22 @@ export function AdminPortal() {
             {farmers.length} <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">({totalFarmerKgAvailable.toLocaleString()} KG)</span>
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {liveFarmersCount} Live Logins · 100% Aadhaar KYC
+            {liveFarmersCount} with app accounts
           </p>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs sm:text-sm font-medium">Intermediary Margin Saved</span>
+            <span className="text-xs sm:text-sm font-medium">Order price vs mandi</span>
             <TrendingUp className="size-4 text-emerald-600" />
           </div>
-          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-            +24.2% <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">to Farmers</span>
+          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
+            {farmerUpliftPct != null ? `${farmerUpliftPct >= 0 ? '+' : ''}${farmerUpliftPct}%` : '—'}{' '}
+            <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">for farmers, before transport</span>
           </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">0% Middleman Cut · 18% Lower Buyer Price</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {buyerSavingPct != null ? `Buyers pay ${buyerSavingPct}% below retail` : 'No retail reference yet'} · references captured at order time
+          </p>
         </div>
 
         <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
@@ -893,7 +917,7 @@ export function AdminPortal() {
             {batches.length} <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">Batches</span>
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            TSP 2-Opt Optimized · {vehicleStats.fuelSavedPct}% Fuel Saved
+            TSP 2-Opt Optimized · {vehicleStats.kmSaved} km saved by sequencing
           </p>
         </div>
       </div>
@@ -934,9 +958,9 @@ export function AdminPortal() {
               <span>2. Test Bulk Demand (1,200 kg)</span>
             </button>
 
-            {orders.length > 0 && (
+            {pendingSmallOrder && (
               <button
-                onClick={() => handleSimulateRejection(orders[0])}
+                onClick={() => handleSimulateRejection(pendingSmallOrder)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 px-3 py-2 text-xs font-bold transition-all shadow-2xs cursor-pointer"
                 title="Simulate a farmer declining and watch the algorithm instantly re-route to next nearest farmer"
               >
@@ -1018,6 +1042,30 @@ export function AdminPortal() {
           <span className="rounded-full bg-background/20 px-2 py-0.2 text-[10px] font-mono">
             {farmers.length}
           </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('forecast')}
+          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
+            activeTab === 'forecast'
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
+          <BarChart3 className="size-4" />
+          <span>5. Demand Forecast</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('logistics')}
+          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
+            activeTab === 'logistics'
+              ? 'bg-primary text-primary-foreground shadow-xs'
+              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
+          }`}
+        >
+          <Route className="size-4" />
+          <span>6. Collection Runs</span>
         </button>
       </div>
 
@@ -1108,7 +1156,7 @@ export function AdminPortal() {
                               <span>Buyer Stated Purpose for Bulk Order (&gt;50 kg):</span>
                             </div>
                             <blockquote className="italic text-foreground font-medium pl-2 border-l-2 border-amber-500/50">
-                              &ldquo;{ord.purpose || 'Institutional hostel & kitchen weekly produce procurement quota'}&rdquo;
+                              &ldquo;{ord.purpose || 'No purpose given'}&rdquo;
                             </blockquote>
                             {ord.delivery_location && (
                               <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
@@ -1215,7 +1263,7 @@ export function AdminPortal() {
                     : 'border border-border bg-card hover:bg-secondary text-foreground'
                 }`}
               >
-                Aggregated & Finalized ({orders.filter((o) => o.status === 'AGGREGATED').length})
+                Fully committed ({orders.filter((o) => o.is_fully_committed).length})
               </button>
             </div>
 
@@ -1271,7 +1319,7 @@ export function AdminPortal() {
                         {targetKg.toLocaleString()} KG
                       </td>
                       <td className="p-3.5 sm:px-4 font-mono text-foreground font-semibold">
-                        ₹{ord.price_per_kg || 28}
+                        ₹{ord.price_per_kg}
                       </td>
                       <td className="p-3.5 sm:px-4">
                         {isSmall ? (
@@ -1280,7 +1328,7 @@ export function AdminPortal() {
                               <Zap className="size-3" /> Auto-Allocated (≤50 kg)
                             </span>
                             <span className="block text-[11px] text-muted-foreground truncate max-w-[200px]">
-                              {ord.allocated_farmer_name || 'Jignesh Chauhan (Bakrol · 1.8 km)'}
+                              {ord.allocated_farmer_name ?? (ord.farmer_acceptance_status === 'REJECTED' ? 'No single nearby farmer — pool it' : 'Awaiting allocation')}
                             </span>
                           </div>
                         ) : (
@@ -1302,7 +1350,7 @@ export function AdminPortal() {
                       <td className="p-3.5 sm:px-4">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                            ord.status === 'AGGREGATED'
+                            ord.is_fully_committed
                               ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                               : isPendingReview
                               ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/30'
@@ -1313,14 +1361,14 @@ export function AdminPortal() {
                               : 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
                           }`}
                         >
-                          {ord.status === 'AGGREGATED' ? (
-                            <>✓ Locked Batch</>
+                          {ord.is_fully_committed ? (
+                            <>✓ Fully committed</>
                           ) : isPendingReview ? (
                             <>⏳ Compliance Review Pending</>
                           ) : isRejected ? (
                             <>❌ Purpose Rejected</>
                           ) : isSmall ? (
-                            <>⚡ Auto-Assigned</>
+                            <>{ord.farmer_acceptance_status === 'ACCEPTED' ? '⚡ Farmer confirmed' : ord.farmer_acceptance_status === 'REJECTED' ? 'Needs pooling' : '⚡ Waiting for farmer'}</>
                           ) : (
                             <>✅ Purpose Approved</>
                           )}
@@ -1441,7 +1489,7 @@ export function AdminPortal() {
                 <div>
                   <span className="text-muted-foreground">Buyer: </span>
                   <span className="font-semibold text-foreground">
-                    {activeOrder.buyer_name || activeOrder.delivery_location || 'PM POSHAN Central Kitchen'}
+                    {activeOrder.buyer_name || activeOrder.delivery_location || '—'}
                   </span>
                 </div>
                 <div>
@@ -1575,7 +1623,7 @@ export function AdminPortal() {
                   Candidate Smallholders for {activeCrop} Sourcing:
                 </h4>
                 <span className="text-xs text-muted-foreground">
-                  {matchedFarmers.length} registered farmers available in Anand / Kheda cluster
+                  {matchedFarmers.length} farmers with uncommitted {activeCrop.toLowerCase()} registered
                 </span>
               </div>
 
@@ -1597,7 +1645,7 @@ export function AdminPortal() {
                     {matchedFarmers.map((f) => {
                       const allocated = farmerAllocations[f.id] || 0
                       const isSelected = allocated > 0
-                      const maxCap = Number(f.quantity || 500)
+                      const maxCap = Number(f.quantity) || 0
                       const allocInfo = optimalResult?.allocations.find((a) => a.farmer.id === f.id)
                       const isPrimary = allocInfo && allocInfo.primaryKg > 0
                       const isStandby = allocInfo && allocInfo.standbyKg > 0
@@ -1627,7 +1675,7 @@ export function AdminPortal() {
                               )}
                             </div>
                             <span className="block text-[11px] font-normal text-muted-foreground">
-                              {f.mobile_number || '+91 98251 44102'}
+                              {f.mobile_number}
                             </span>
                           </td>
                           <td className="p-3.5 sm:px-4 text-muted-foreground">
@@ -1638,10 +1686,10 @@ export function AdminPortal() {
                           <td className="p-3.5 sm:px-4">
                             <div className="flex items-center gap-1.5">
                               <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                                Grade {f.quality_grade || 'A'}
+                                {f.quality_grade ? `Grade ${f.quality_grade}` : 'Not graded yet'}
                               </span>
                               <span className="font-mono text-xs font-semibold text-foreground">
-                                {f.reliability_score || 95}%
+                                {f.reliability_score ?? '—'}%
                               </span>
                             </div>
                           </td>
@@ -1681,7 +1729,7 @@ export function AdminPortal() {
                               type="button"
                               onClick={() => {
                                 setSelectedCallFarmer(f)
-                                setSelectedCallAllocatedKg(allocated > 0 ? allocated : Number(f.quantity || 300))
+                                setSelectedCallAllocatedKg(allocated > 0 ? allocated : Number(f.quantity) || 0)
                                 setBolnaModalOpen(true)
                               }}
                               className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
@@ -1724,10 +1772,10 @@ export function AdminPortal() {
                     <span>{vehicleStats.km} KM Route</span>
                   </span>
                   <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    {vehicleStats.fuelSavedPct}% Fuel Saved
+                    {vehicleStats.kmSaved} km saved by sequencing
                   </span>
                   <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">
-                    {vehicleStats.co2SavingsKg} kg CO₂ Avoided
+                    ₹{vehicleStats.costRs.toLocaleString('en-IN')} est. hire · ₹{vehicleStats.costPerKg}/kg
                   </span>
                 </div>
               </div>
@@ -1907,11 +1955,11 @@ export function AdminPortal() {
                       </td>
                       <td className="py-3 font-mono font-bold text-foreground">{b.total_quantity_kg} KG</td>
                       <td className="py-3">
-                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                          ✓ Quality Verified (Grade A)
+                        <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
+                          {b.quality_verified ? `Graded · A ${b.grade_a_kg ?? 0} kg / B ${b.grade_b_kg ?? 0} kg` : 'Graded at collection'}
                         </span>
                       </td>
-                      <td className="py-3 text-muted-foreground">{b.created_by || 'Anita Desai'}</td>
+                      <td className="py-3 text-muted-foreground">{b.created_by || '—'}</td>
                       <td className="py-3 text-muted-foreground text-xs">
                         {b.created_at ? new Date(b.created_at).toLocaleDateString() : 'Today'}
                       </td>
@@ -2001,7 +2049,7 @@ export function AdminPortal() {
                 <tbody className="divide-y divide-border">
                   {displayedFarmers.map((f) => (
                     <tr
-                      key={f.id}
+                      key={f.entry_id ?? f.id}
                       className={`transition-colors ${
                         f.is_live_account
                           ? 'bg-emerald-500/5 hover:bg-emerald-500/10'
@@ -2029,26 +2077,26 @@ export function AdminPortal() {
                         )}
                       </td>
                       <td className="py-3 font-mono text-xs text-muted-foreground">
-                        {f.mobile_number || '+91 98251 44102'}
+                        {f.mobile_number}
                       </td>
                       <td className="py-3 text-muted-foreground">{f.village}</td>
                       <td className="py-3">
                         <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
-                          {f.crop_name || f.crop || 'PADDY'}
+                          {f.crop_name ?? 'No active harvest'}
                         </span>
                       </td>
-                      <td className="py-3 font-mono font-bold text-foreground">{f.quantity || 500} KG</td>
+                      <td className="py-3 font-mono font-bold text-foreground">{Number(f.quantity ?? 0).toLocaleString('en-IN')} KG</td>
                       <td className="py-3">
                         <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                          Grade {f.quality_grade || 'A'}
+                          {f.quality_grade ? `Grade ${f.quality_grade}` : 'Not graded yet'}
                         </span>
                       </td>
                       <td className="py-3 text-muted-foreground text-xs">
-                        <div>{f.harvest_date || 'Oct 2025'}</div>
+                        <div>{f.harvest_date ?? '—'}</div>
                       </td>
                       <td className="py-3">
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                          <ShieldCheck className="size-3" /> Aadhaar KYC
+                          <ShieldCheck className="size-3" /> {f.is_live_account ? 'App account' : 'FPO member'}
                         </span>
                       </td>
                       <td className="py-3 text-right">
@@ -2056,7 +2104,7 @@ export function AdminPortal() {
                           type="button"
                           onClick={() => {
                             setSelectedCallFarmer(f)
-                            setSelectedCallAllocatedKg(Number(f.quantity || 300))
+                            setSelectedCallAllocatedKg(Number(f.quantity) || 0)
                             setBolnaModalOpen(true)
                           }}
                           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
@@ -2082,6 +2130,9 @@ export function AdminPortal() {
           </div>
         </section>
       )}
+
+      {activeTab === 'forecast' && <DemandForecastPanel />}
+      {activeTab === 'logistics' && <LogisticsPlanPanel onDispatched={() => fetchLiveFeeds(false)} />}
 
       {/* Bolna AI Voice Calling Agent Confirmation Modal */}
       <BolnaCallModal
