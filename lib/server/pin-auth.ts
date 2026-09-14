@@ -336,7 +336,7 @@ async function ensureMarketplaceRecord(phone: string, name: string, role: 'farme
       const [existing] = await db.query(`select 1 from agrilink.farmers where ${lastTenDigits.replace('%col%', 'phone')} = $1 limit 1`, [phone])
       if (existing) return
       const location = village ? getVillageLatLng(village) : { lat: fpo.lat, lng: fpo.lng }
-      await db.query(`insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng) values ($1, $2, $3, 'gu', 1.0, $4, $5, $6)`, [
+      await db.query(`insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng) values ($1, $2, $3, 'hi', 1.0, $4, $5, $6)`, [
         fpo.id,
         name,
         `+91 ${phone}`,

@@ -50,7 +50,7 @@ create table if not exists agrilink.farmers (
   fpo_id uuid not null references agrilink.fpos(id),
   name text not null,
   phone text not null,
-  language text not null check (language in ('en', 'hi', 'te', 'gu')),
+  language text not null check (language in ('en', 'hi', 'te')),
   land_hectares numeric(5, 2) not null check (land_hectares > 0),
   village text not null,
   lat double precision not null,

@@ -106,7 +106,7 @@ for (const lang of LANGS) {
   assert(txt.length > 10);
   assert(!/undefined|NaN|\{|\}/.test(txt));
 }
-console.log('  ✓ English, Hindi, Telugu & Gujarati message rendering clean without missing keys');
+console.log('  ✓ English, Hindi & Telugu message rendering clean without missing keys');
 
 console.log('\n====================================================');
 console.log('  ALL 8 DOMAIN ENGINE SUITES PASSED SUCCESSFULLY!   ');

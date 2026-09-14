@@ -36,7 +36,6 @@ export async function POST(request: Request) {
 
     const languageNames: Record<string, string> = {
       hi: 'Hindi',
-      gu: 'Gujarati',
       te: 'Telugu',
       en: 'English',
     }

@@ -824,7 +824,7 @@ export default function HomePage() {
               },
               {
                 quote:
-                  'Many of our farmers use basic phones. Offers have to arrive by SMS and voice call in Gujarati or Hindi, with a coordinator calling anyone who does not reply.',
+                  'Many of our farmers use basic phones. Offers have to arrive by SMS and voice call in Hindi or Telugu, with a coordinator calling anyone who does not reply.',
                 author: 'FPO coordinator',
                 role: 'Persona · member operations',
                 org: 'Farmer producer company',

@@ -1,4 +1,4 @@
-export type Language = 'en' | 'hi' | 'te' | 'gu'
+export type Language = 'en' | 'hi' | 'te'
 
 export interface TranslationDictionary {
   appName: string
@@ -226,64 +226,8 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     smsPreviewTitle: 'రైతు SMS / వాట్సాప్ ప్రివ్యూ (తెలుగు)',
     smsSampleOrder: 'అగ్రిలింక్ అలర్ట్: {crop} కోసం కొనుగోలుదారు ఒప్పందం ఖరారైంది. ధర: ₹{price}/కిలో. {qty}కిలో ఇవ్వడానికి 1 అని రిప్లై ఇవ్వండి.',
-    smsSampleLot: 'అగ్రిలింక్ అప్‌డేట్: లాట్ #LOT-1001 గ్రేడ్ A ధృవీకరించబడింది. బరువు {qty}కిలో. అడ్వాన్స్ చెల్లింపు జరుగుతోంది.',
-    smsSamplePayment: 'అగ్రిలింక్: లాట్ #LOT-1001 కోసం ₹{amount} సెటిల్‌మెంట్ నమోదు చేయబడింది. బ్యాంక్/FPO స్టేట్‌మెంట్ చూడండి.',
-  },
-
-  gu: {
-    appName: 'એગ્રીલિંક',
-    tagline: 'ખેતરથી સીધા બજાર સુધી',
-    goodMorning: 'સુપ્રભાત',
-    roleCoordinator: 'સંયોજક (કોઓર્ડિનેટર)',
-    roleBuyer: 'સંસ્થાકીય ખરીદદાર',
-    roleFarmer: 'ખેડૂત મિત્ર',
-    viewAs: 'ભૂમિકા પસંદ કરો',
-    signOut: 'લૉગ આઉટ',
-    refresh: 'માહિતી તાજી કરો',
-    notifications: 'પ્રવૃત્તિ અને સૂચનાઓ',
-    newOrder: 'નવો ઓર્ડર',
-    resetSeed: 'ડેટા રીસેટ',
-    teamAccess: 'ટીમ અને અધિકારો',
-    language: 'ભાષા',
-
-    navOverview: 'ઝાંખી (Overview)',
-    navOrders: 'ઓર્ડર્સ (Orders)',
-    navFarmerNetwork: 'ખેડૂત નેટવર્ક',
-    navCollectionGrade: 'સંગ્રહ અને ગ્રેડિંગ',
-    navRoutes: 'વાહન રૂટ (Routes)',
-    navSettlements: 'નાણાકીય ચૂકવણી',
-
-    titleOverview: 'લણણી પહેલાં ખરીદદારની ખાતરી.',
-    titleOrders: 'કાપણી પૂર્વે ઓર્ડર કરાર.',
-    titleFarmerNetwork: 'નોંધાયેલ ખેડૂતોનું સક્રિય નેટવર્ક.',
-    titleCollectionGrade: 'સંગ્રહ કેન્દ્ર પર ચોક્કસ ગુણવત્તા તપાસ.',
-    titleRoutes: 'દરેક જથ્થા માટે ઓપ્ટિમાઇઝ્ડ રૂટ.',
-    titleSettlements: 'પારદર્શક અને તાત્કાલિક બેંક ચુકવણી.',
-
-    statActiveOrderValue: 'સક્રિય ઓર્ડર મૂલ્ય',
-    statCommittedVolume: 'ખાતરી કરેલ જથ્થો',
-    statFarmerRealised: 'ખેડૂતને મળેલ ભાવ',
-    statPilotVolume: 'પાયલોટ વોલ્યુમ',
-    statBuffer: '15% સુરક્ષા બફર સ્ટોક',
-    statIntermediaryMargin: 'સીધી કિંમત સરખામણી',
-
-    actionNotifyFarmers: 'ખેડૂતોને મેસેજ મોકલો',
-    actionFarmersNotified: 'મેસેજ મોકલાઈ ગયા',
-    actionPostOrder: 'નવો ઓર્ડર દાખલ કરો',
-    actionExportManifest: 'રૂટ લિસ્ટ ડાઉનલોડ (CSV)',
-    actionExportLedger: 'ખાતાવહી ડાઉનલોડ (CSV)',
-    actionExportRoster: 'ખેડૂત યાદી ડાઉનલોડ (CSV)',
-    actionExportOrder: 'ઓર્ડર કોન્ટ્રાક્ટ ડાઉનલોડ (CSV)',
-    actionPrintInvoice: 'APMC બિલ પ્રિન્ટ (PDF)',
-    actionPrintWaybill: 'વાહન બિલ્ટી પ્રિન્ટ (PDF)',
-    actionDispatch: 'વાહન રવાના કરો (₹1,200)',
-    actionConfirmDelivery: 'ડિલિવરી સ્વીકાર અને ચૂકવણી',
-    actionAcceptLot: 'જથ્થો સ્વીકારો અને 30% એડવાન્સ જમા કરો',
-
-    smsPreviewTitle: 'ખેડૂત એસએમએસ / વ્હોટ્સએપ પ્રિવ્યૂ (ગુજરાતી)',
-    smsSampleOrder: 'એગ્રીલિંક એલર્ટ: {crop} માટે ખરીદદાર ઓર્ડર મંજૂર. ભાવ: ₹{price}/કિલો. {qty}કિલો માટે 1 લખી મોકલો.',
-    smsSampleLot: 'એગ્રીલિંક અપડેટ: લોટ #LOT-1001 ગ્રેડ A માન્ય. વજન {qty}કિલો. એડવાન્સ ચૂકવણી પ્રોસેસમાં છે.',
-    smsSamplePayment: 'એગ્રીલિંક: લોટ #LOT-1001 માટે ₹{amount} સેટલમેન્ટ નોંધાયું. બેંક/FPO સ્ટેટમેન્ટ જુઓ.',
+    smsSampleLot: 'అగ్రిలింక్ అప్‌డేట్: లాట్ #LOT-1001 గ్రేడ్ A నిర్ధారించబడింది. బరువు {qty}కిలోలు. అడ్వాన్స్ ప్రాసెస్‌లో ఉంది.',
+    smsSamplePayment: 'అగ్రిలింక్: లాట్ #LOT-1001 కోసం ₹{amount} సెటిల్‌మెంట్ ఖాతాకు పంపబడింది. బ్యాంక్ స్టేట్‌మెంట్ చూడండి.',
   },
 }
 

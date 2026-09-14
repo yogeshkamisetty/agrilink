@@ -51,7 +51,7 @@ export function BolnaCallModal({
   onCallSuccess,
 }: BolnaCallModalProps) {
   const [phone, setPhone] = useState('')
-  const [language, setLanguage] = useState<'hi' | 'gu' | 'te' | 'en'>('hi')
+  const [language, setLanguage] = useState<'hi' | 'te' | 'en'>('hi')
   const [isCalling, setIsCalling] = useState(false)
   const [callResult, setCallResult] = useState<{
     ok: boolean
@@ -263,10 +263,9 @@ export function BolnaCallModal({
             <Volume2 className="size-3.5 text-primary" />
             <span>Agent Spoken Language:</span>
           </label>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {[
               { id: 'hi', label: 'Hindi (हिंदी)' },
-              { id: 'gu', label: 'Gujarati (ગુજરાતી)' },
               { id: 'te', label: 'Telugu (తెలుగు)' },
               { id: 'en', label: 'English' },
             ].map((lang) => (

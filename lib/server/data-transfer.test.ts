@@ -84,7 +84,7 @@ describe('End-to-End Realtime Cross-Role Data Transfer Lifecycle', () => {
 
     const inserted = await db.query<any>(
       `insert into agrilink.farmers (fpo_id, name, phone, language, land_hectares, village, lat, lng)
-       values ($1, $2, $3, 'gu', 1.0, 'Kheda Cluster', 22.56, 72.92) returning *`,
+       values ($1, $2, $3, 'hi', 1.0, 'Kheda Cluster', 22.56, 72.92) returning *`,
       [fpoId, testFarmerName, testPhone]
     )
     expect(inserted.length).toBeGreaterThan(0)
