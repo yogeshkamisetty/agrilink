@@ -56,7 +56,6 @@ import {
   step7DeliverAndSettle,
   type WorkflowState,
 } from '@/lib/workflow-engine'
-import { WorkflowDemoStepper } from './workflow-demo-stepper'
 
 export type BuyerNavKey =
   | 'home'
@@ -317,13 +316,14 @@ const TIER_CAPACITY_GUIDANCE: Record<BuyerType, { range: string; desc: string; m
   },
 }
 
-interface BuyerDashboardViewProps {
+export interface BuyerDashboardViewProps {
   currentUserName?: string | null
   buyerId?: string
   buyerName?: string
   deliveryLocation?: string
   initialNav?: BuyerNavKey
-  onNavigate?: (tab: string) => void
+  activeNav?: BuyerNavKey
+  onNavigate?: (tab: BuyerNavKey) => void
 }
 
 export function BuyerDashboardView({
@@ -332,9 +332,20 @@ export function BuyerDashboardView({
   buyerName = 'PM POSHAN Central Kitchen',
   deliveryLocation = 'Nana Bazaar, Vallabh Vidyanagar, Anand, Gujarat',
   initialNav = 'home',
+  activeNav,
+  onNavigate,
 }: BuyerDashboardViewProps) {
   // Navigation State
-  const [activeTab, setActiveTab] = useState<BuyerNavKey>(initialNav)
+  const [internalTab, setInternalTab] = useState<BuyerNavKey>(initialNav)
+  const activeTab = activeNav ?? internalTab
+
+  const setActiveTab = useCallback(
+    (tab: BuyerNavKey) => {
+      setInternalTab(tab)
+      onNavigate?.(tab)
+    },
+    [onNavigate]
+  )
 
   // Live Workflow State Sync
   const [wfState, setWfState] = useState<WorkflowState>(() => getWorkflowState())
@@ -724,104 +735,12 @@ export function BuyerDashboardView({
   const isBulkEligible = profile.type !== 'Household'
 
   return (
-    <div className="min-h-screen bg-slate-50/70 text-slate-900 pb-20">
-      {/* Interactive Workflow Demo Stepper */}
-      <div className="bg-white border-b border-slate-200">
-        <WorkflowDemoStepper currentRole="Buyer" onStageChange={() => setWfState(getWorkflowState())} />
-      </div>
-
-      {/* Modern Marketplace Top Header */}
-      <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5">
-          <div className="flex items-center justify-between gap-4">
-            {/* Logo & Platform Brand */}
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="size-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-                <Sprout className="size-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-black tracking-tight text-slate-900">AgriLink</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold uppercase tracking-wider">
-                    Buyer Portal
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 font-medium">Direct Cooperative Agri-Marketplace</p>
-              </div>
-            </div>
-
-            {/* Global Search Bar */}
-            <div className="hidden md:flex flex-1 max-w-xl relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search fresh produce by crop, FPO, village or grade..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-100/80 hover:bg-slate-100 focus:bg-white text-sm rounded-xl border border-transparent focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-400"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Header Actions: Cart, Saved, Orders, Profile */}
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              {/* Wishlist Button */}
-              <button
-                onClick={() => setActiveTab('saved')}
-                className={`p-2.5 rounded-xl border transition-colors relative ${
-                  activeTab === 'saved' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Saved Items"
-              >
-                <Heart className="size-4" />
-                {savedItemIds.length > 0 && (
-                  <span className="absolute -top-1 -right-1 size-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
-                    {savedItemIds.length}
-                  </span>
-                )}
-              </button>
-
-              {/* Cart Button with Dynamic Badge */}
-              <button
-                onClick={() => setActiveTab('cart')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-xl border font-bold text-xs transition-colors relative ${
-                  activeTab === 'cart'
-                    ? 'border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                <ShoppingCart className="size-4" />
-                <span className="hidden sm:inline">Cart</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[11px] ${activeTab === 'cart' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                  {cart.reduce((s, i) => s + i.quantityKg, 0)} kg
-                </span>
-              </button>
-
-              {/* Profile Shortcut */}
-              <button
-                onClick={() => setActiveTab('profile')}
-                className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-left transition-colors"
-              >
-                <div className="size-7 rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center">
-                  {profile.name.charAt(0)}
-                </div>
-                <div className="hidden lg:block">
-                  <div className="text-xs font-bold text-slate-900 leading-tight truncate max-w-[120px]">{profile.name}</div>
-                  <div className="text-[10px] text-emerald-600 font-semibold">{profile.type} · {profile.verificationStatus}</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* Sticky 13-Tab Navigation Bar */}
-          <nav className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none text-xs font-semibold">
+    <div className="w-full space-y-5 text-slate-900 pb-20 font-sans">
+      {/* Marketplace Top Navigation & Quick Controls */}
+      <div className="bg-white rounded-2xl shadow-xs border border-slate-200 p-2 sm:p-2.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          {/* 13-Tab Navigation Bar */}
+          <nav aria-label="Buyer Navigation" className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none text-xs font-semibold">
             {[
               { key: 'home', label: 'Home', icon: Home },
               { key: 'browse', label: 'Browse Produce', icon: ShoppingBag },
@@ -832,7 +751,7 @@ export function BuyerDashboardView({
               { key: 'my_demands', label: 'My Demands', icon: Layers, count: demands.length > 0 ? `${demands.length}` : undefined },
               { key: 'demand_matches', label: 'Demand Matches', icon: Sparkles, count: demandMatches.length > 0 ? `${demandMatches.length}` : undefined },
               { key: 'payments', label: 'Payments/Invoices', icon: Receipt },
-              { key: 'saved', label: 'Saved Items', icon: Heart },
+              { key: 'saved', label: 'Saved Items', icon: Heart, count: savedItemIds.length > 0 ? `${savedItemIds.length}` : undefined },
               { key: 'messages', label: 'Messages', icon: MessageSquare },
               { key: 'profile', label: 'Profile', icon: User },
               { key: 'support', label: 'Support', icon: HelpCircle },
@@ -842,17 +761,22 @@ export function BuyerDashboardView({
               return (
                 <button
                   key={tab.key}
+                  type="button"
                   onClick={() => setActiveTab(tab.key as BuyerNavKey)}
-                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                  className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all ${
                     isActive
-                      ? 'bg-slate-900 text-white shadow-xs font-bold'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      ? 'bg-emerald-700 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-medium'
                   }`}
                 >
                   <Icon className="size-3.5" />
                   <span>{tab.label}</span>
                   {tab.count && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${isActive ? 'bg-white/25 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                        isActive ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
                       {tab.count}
                     </span>
                   )}
@@ -860,8 +784,50 @@ export function BuyerDashboardView({
               )
             })}
           </nav>
+
+          {/* Quick Search & Quick Cart */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value)
+                  if (activeTab !== 'search' && activeTab !== 'browse' && e.target.value.trim().length > 0) {
+                    setActiveTab('search')
+                  }
+                }}
+                placeholder="Quick search produce..."
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs rounded-xl border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all placeholder:text-slate-400"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="size-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => setActiveTab('cart')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border font-bold text-xs transition-colors shrink-0 ${
+                activeTab === 'cart'
+                  ? 'border-emerald-600 bg-emerald-600 text-white shadow-xs'
+                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <ShoppingCart className="size-3.5" />
+              <span className="hidden sm:inline">Cart</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${activeTab === 'cart' ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                {cart.reduce((s, i) => s + i.quantityKg, 0)} kg
+              </span>
+            </button>
+          </div>
         </div>
-      </header>
+      </div>
 
       {/* Global Toast Alert */}
       {toast && (
@@ -878,7 +844,7 @@ export function BuyerDashboardView({
       )}
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+      <div className="w-full">
         {/* ========================================================================= */}
         {/* TAB 1: HOME SCREEN */}
         {/* ========================================================================= */}
@@ -2201,7 +2167,7 @@ export function BuyerDashboardView({
             </div>
           </div>
         )}
-      </main>
+      </div>
 
       {/* ========================================================================= */}
       {/* PRODUCT DETAILS MODAL */}

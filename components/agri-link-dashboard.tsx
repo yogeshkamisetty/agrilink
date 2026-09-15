@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { useAgriLink } from '@/lib/hooks/use-agrilink'
 import {
   AlertTriangle, ArrowUpRight, BadgeCheck, Banknote, Bell, Boxes, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight,
-  CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, LayoutDashboard, Leaf, Layers, LogOut, MapPin, Menu, MessageSquare, Mic, PackageCheck,
-  Pencil, Phone, PhoneCall, Plus, Printer, Receipt, Recycle, RefreshCw, Route, Send, ShieldCheck, ShoppingBag, ArrowRight, Smartphone, Sparkles, Sprout, Star, Truck, Users, UtensilsCrossed, Volume2, Wallet, Wheat, X
+  CircleDollarSign, ClipboardList, Clock, Cloud, Download, Droplets, Globe, Heart, HelpCircle, Home, LayoutDashboard, Leaf, Layers, LogOut, MapPin, Menu, MessageSquare, Mic, Package, PackageCheck,
+  Pencil, Phone, PhoneCall, Plus, Printer, Receipt, Recycle, RefreshCw, Route, Search, Send, ShieldCheck, ShoppingBag, ShoppingCart, ArrowRight, Smartphone, Sparkles, Sprout, Star, Truck, User, Users, UtensilsCrossed, Volume2, Wallet, Wheat, X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { GradeCamCamera } from './gradecam-camera'
@@ -21,7 +21,7 @@ import { ExcessRedistributionModal } from './excess-redistribution-modal'
 import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
 import { FarmerDashboardView } from './farmer-dashboard-view'
-import { BuyerDashboardView } from './buyer-dashboard-view'
+import { BuyerDashboardView, BuyerNavKey } from './buyer-dashboard-view'
 import { BolnaCallModal } from './bolna-call-modal'
 import { BuyerMarketplace } from './buyer-marketplace'
 import { BuyerOrderTracker } from './buyer-order-tracker'
@@ -38,6 +38,23 @@ const navItems: Array<{ label: Screen; key: keyof TranslationDictionary; icon: a
   { label: 'Routes', key: 'navRoutes', icon: Route },
   { label: 'Settlements', key: 'navSettlements', icon: CircleDollarSign },
 ]
+
+const buyerSidebarItems: Array<{ key: BuyerNavKey; label: string; icon: any }> = [
+  { key: 'home', label: 'Home', icon: Home },
+  { key: 'browse', label: 'Browse Produce', icon: ShoppingBag },
+  { key: 'search', label: 'Search', icon: Search },
+  { key: 'cart', label: 'Cart', icon: ShoppingCart },
+  { key: 'orders', label: 'My Orders', icon: Package },
+  { key: 'create_demand', label: 'Create Demand', icon: Plus },
+  { key: 'my_demands', label: 'My Demands', icon: Layers },
+  { key: 'demand_matches', label: 'Demand Matches', icon: Sparkles },
+  { key: 'payments', label: 'Payments / Invoices', icon: Receipt },
+  { key: 'saved', label: 'Saved Items', icon: Heart },
+  { key: 'messages', label: 'Messages', icon: MessageSquare },
+  { key: 'profile', label: 'Profile', icon: User },
+  { key: 'support', label: 'Support', icon: HelpCircle },
+]
+
 const channels = ['SMS', 'WhatsApp', 'IVR voice', 'Coordinator list']
 
 const cropImages: Record<string, string> = {
@@ -413,6 +430,7 @@ export function AgriLinkDashboard({
   }
 
   const [activeNav, setActiveNav] = useState<Screen>('Overview')
+  const [buyerTab, setBuyerTab] = useState<BuyerNavKey>('home')
   const [menuOpen, setMenuOpen] = useState(false)
   const [showOrderForm, setShowOrderForm] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
@@ -1095,7 +1113,7 @@ export function AgriLinkDashboard({
     <div className="min-h-screen bg-background text-foreground">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
         <Brand t={t} />
-        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} />
+        <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} buyerTab={buyerTab} onSelectBuyerTab={setBuyerTab} />
       </aside>
       <main className="lg:pl-64">
         <header className="sticky top-0 z-20 flex min-h-20 items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur-md sm:px-8 lg:px-10">
@@ -1309,7 +1327,7 @@ export function AgriLinkDashboard({
                   <X className="size-5" />
                 </button>
               </div>
-              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} />
+              <Sidebar activeNav={activeNav} role={role} go={go} roleNav={roleNav} volumePct={data?.metrics.pilotVolumePct || 77} mobile onSignOut={onSignOut} t={t} userName={currentUserName} verified={verified} lang={lang} buyerTab={buyerTab} onSelectBuyerTab={(tab) => { setBuyerTab(tab); setMenuOpen(false); }} />
             </div>
           </div>
         )}
@@ -1392,6 +1410,8 @@ export function AgriLinkDashboard({
               buyerId={activeBuyer?.id || 'buyer-school-001'}
               buyerName={activeBuyer?.name || currentUserName || 'PM POSHAN Central Kitchen'}
               deliveryLocation="Nana Bazaar, Vallabh Vidyanagar, Anand, Gujarat"
+              activeNav={buyerTab}
+              onNavigate={(tab) => setBuyerTab(tab)}
             />
           ) : (
             <>
@@ -1620,6 +1640,8 @@ function Sidebar({
   userName,
   verified = true,
   lang = 'en',
+  buyerTab = 'home',
+  onSelectBuyerTab,
 }: {
   activeNav: Screen
   role: Role
@@ -1632,9 +1654,9 @@ function Sidebar({
   userName?: string | null
   verified?: boolean
   lang?: Language
+  buyerTab?: BuyerNavKey
+  onSelectBuyerTab?: (tab: BuyerNavKey) => void
 }) {
-  const [ordersExpanded, setOrdersExpanded] = useState(false)
-
   const farmerNavLabels: Partial<Record<Screen, { en: string; hi: string; te: string }>> = {
     Overview: { en: 'My Harvest & Pickup', hi: 'मेरी फसल और उठाव', te: 'నా పంట & పికప్' },
     Orders: { en: 'Buyer Demands', hi: 'खरीदार मांग', te: 'కొనుగోలుదారు డిమాండ్లు' },
@@ -1648,59 +1670,63 @@ function Sidebar({
     <div className={`flex ${mobile ? 'flex-col' : 'flex-1 flex-col justify-between'} px-3 py-6`}>
       <nav className="space-y-1">
         <div className="mb-4 px-3 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          {role === 'Farmer' ? '🌾 Kisan Portal' : `${role} Dashboard`}
+          {role === 'Farmer' ? '🌾 Kisan Portal' : role === 'Buyer' ? '🏢 Buyer Portal' : `${role} Dashboard`}
         </div>
-        {navItems
-          .filter((item) => roleNav[role].includes(item.label as Screen))
-          .map(({ label, key, icon: Icon, count }) => {
-            const isBuyerOrders = role === 'Buyer' && label === 'Orders'
-            let displayLabel = (t && t[key]) ? t[key] : label
-            if (role === 'Farmer' && farmerNavLabels[label as Screen]) {
-              const fL = farmerNavLabels[label as Screen]!
-              displayLabel = lang === 'hi' ? fL.hi : lang === 'te' ? fL.te : fL.en
-            }
+        {role === 'Buyer' ? (
+          buyerSidebarItems.map((item) => {
+            const Icon = item.icon
+            const isActive = buyerTab === item.key
             return (
-              <div key={label}>
-                <button
-                  onClick={() => {
-                    go(label as Screen)
-                    if (isBuyerOrders) setOrdersExpanded((expanded) => !expanded)
-                  }}
-                  aria-expanded={isBuyerOrders ? ordersExpanded : undefined}
-                  className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
-                    activeNav === label
-                        ? 'bg-primary text-primary-foreground shadow-sm'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                  }`}
-                >
-                  <span className="flex items-center gap-3">
-                    <Icon className="size-4" />
-                    {displayLabel}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    {count && <span className="font-mono text-[10px]">{count}</span>}
-                    {isBuyerOrders && (ordersExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />)}
-                  </span>
-                </button>
-                {isBuyerOrders && ordersExpanded && (
-                  <div className="ml-3 mt-1 space-y-1 border-l border-border pl-3" aria-label="Order Categories">
-                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><Users className="size-3.5 text-primary" /> Low Order</div>
-                      <div className="mt-1 pl-5 text-[10px] leading-4">Individual · 1–50 cages</div>
-                    </div>
-                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><PackageCheck className="size-3.5 text-accent-foreground" /> Medium Order</div>
-                      <div className="mt-1 pl-5 text-[10px] leading-4">Institutional · 51–300 cages</div>
-                    </div>
-                    <div className="rounded-lg px-3 py-2.5 text-muted-foreground">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-foreground"><Truck className="size-3.5 text-blue-600" /> Bulk Order</div>
-                      <div className="mt-1 pl-5 text-[10px] leading-4">Industrial · measured in tons</div>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onSelectBuyerTab?.(item.key)}
+                className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2.5 text-left text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-emerald-700 text-white font-bold shadow-sm'
+                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                }`}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon className="size-4" />
+                  {item.label}
+                </span>
+              </button>
             )
-          })}
+          })
+        ) : (
+          navItems
+            .filter((item) => roleNav[role].includes(item.label as Screen))
+            .map(({ label, key, icon: Icon, count }) => {
+              let displayLabel = (t && t[key]) ? t[key] : label
+              if (role === 'Farmer' && farmerNavLabels[label as Screen]) {
+                const fL = farmerNavLabels[label as Screen]!
+                displayLabel = lang === 'hi' ? fL.hi : lang === 'te' ? fL.te : fL.en
+              }
+              return (
+                <div key={label}>
+                  <button
+                    onClick={() => {
+                      go(label as Screen)
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-3.5 py-3 text-left text-sm font-medium transition-colors ${
+                      activeNav === label
+                          ? 'bg-primary text-primary-foreground shadow-sm'
+                          : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <Icon className="size-4" />
+                      {displayLabel}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      {count && <span className="font-mono text-[10px]">{count}</span>}
+                    </span>
+                  </button>
+                </div>
+              )
+            })
+        )}
       </nav>
 
       <div className="mt-auto space-y-4 pt-6">
@@ -1720,6 +1746,19 @@ function Sidebar({
                 <Phone className="size-3.5 text-emerald-600" />
                 <span>Call +91 98250 12345</span>
               </a>
+            </div>
+          ) : role === 'Buyer' ? (
+            <div className="rounded-2xl border border-emerald-600/20 bg-emerald-500/5 p-4 shadow-xs">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-700 font-bold">Buyer Trust Desk</span>
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+              </div>
+              <p className="text-xs font-bold text-foreground">AgriLink Direct Procurement</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Direct farm-gate supply & transparent escrow</p>
+              <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700">
+                <ShieldCheck className="size-3.5 text-emerald-600" />
+                <span>APMC & FSSAI Compliant</span>
+              </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-border bg-secondary/60 p-4">
