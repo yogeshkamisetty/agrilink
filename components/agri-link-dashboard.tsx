@@ -21,10 +21,10 @@ import { ExcessRedistributionModal } from './excess-redistribution-modal'
 import { CommunityDemandModal } from './community-demand-modal'
 import { VoiceAssistantModal } from './voice-assistant-modal'
 import { FarmerDashboardView } from './farmer-dashboard-view'
+import { BuyerDashboardView } from './buyer-dashboard-view'
 import { BolnaCallModal } from './bolna-call-modal'
 import { BuyerMarketplace } from './buyer-marketplace'
 import { BuyerOrderTracker } from './buyer-order-tracker'
-import { WorkflowDemoStepper } from './workflow-demo-stepper'
 import { authHeaders, getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -1315,8 +1315,6 @@ export function AgriLinkDashboard({
         )}
 
         <div className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 lg:px-10">
-          <WorkflowDemoStepper currentRole={role} onStageChange={() => refresh()} />
-
           <DeclareHarvestModal
             isOpen={showHarvestModal}
             onClose={() => setShowHarvestModal(false)}
@@ -1388,17 +1386,20 @@ export function AgriLinkDashboard({
               farmerTab={farmerCollectionTab}
               setFarmerTab={setFarmerCollectionTab}
             />
+          ) : role === 'Buyer' ? (
+            <BuyerDashboardView
+              currentUserName={currentUserName}
+              buyerId={activeBuyer?.id || 'buyer-school-001'}
+              buyerName={activeBuyer?.name || currentUserName || 'PM POSHAN Central Kitchen'}
+              deliveryLocation="Nana Bazaar, Vallabh Vidyanagar, Anand, Gujarat"
+            />
           ) : (
             <>
               <ScreenHeader
                 role={role}
                 activeNav={activeNav}
                 onNew={() => {
-                  if (role === 'Buyer') {
-                    go('Orders')
-                  } else {
-                    setShowOrderForm(true)
-                  }
+                  setShowOrderForm(true)
                 }}
                 onDeclareHarvest={() => setShowHarvestModal(true)}
                 onOnboardFarmer={() => setShowOnboardFarmerModal(true)}
@@ -1418,63 +1419,18 @@ export function AgriLinkDashboard({
                     notified={activeOrder?.status !== 'POSTED'}
                     onNotify={handleNotify}
                     onOrder={() => {
-                      if (role === 'Buyer') {
-                        go('Orders')
-                      } else {
-                        setShowOrderForm(true)
-                      }
+                      setShowOrderForm(true)
                     }}
                     onDeclareHarvest={() => setShowHarvestModal(true)}
                     onRoute={() => go('Routes')}
                     busy={actionBusy}
                     t={t}
                   />
-
-                  {role === 'Buyer' && (
-                    <div className="mt-8 rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-card to-background p-6 shadow-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-primary/20 px-2.5 py-0.5 text-xs font-bold text-primary">
-                              Direct Farm-to-Buyer Marketplace
-                            </span>
-                            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
-                              Instant Direct Sourcing
-                            </span>
-                          </div>
-                          <h3 className="mt-2 font-serif text-2xl font-bold">
-                            Source Fresh Farmgate Produce Direct from Smallholders
-                          </h3>
-                          <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-2xl">
-                            Verified quality, mandi-beating prices, and zero middleman commissions. Orders ≤50 kg auto-assign to nearest farms in seconds; orders &gt;50 kg enter rapid compliance verification.
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => go('Orders')}
-                          className="shrink-0 inline-flex items-center gap-2 rounded-2xl bg-primary text-primary-foreground px-5 py-3 text-sm font-bold shadow-md hover:bg-primary/90 transition-transform active:scale-95 cursor-pointer"
-                        >
-                          <ShoppingBag className="size-4" />
-                          <span>Browse Produce Store</span>
-                          <ArrowRight className="size-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 
               {activeNav === 'Orders' && (
-                role === 'Buyer' ? (
-                  <div className="space-y-6">
-                    <BuyerMarketplace
-                      currentUserName={currentUserName}
-                      buyerId={activeBuyer?.id || 'buyer-school-001'}
-                      buyerName={activeBuyer?.name || currentUserName || 'PM POSHAN Central Kitchen'}
-                      deliveryLocation="Nana Bazaar, Vallabh Vidyanagar, Anand, Gujarat"
-                    />
-                  </div>
-                ) : (
-                  <Orders
+                <Orders
                     role={role}
                     order={activeOrder}
                     buyer={activeBuyer}
@@ -1497,7 +1453,6 @@ export function AgriLinkDashboard({
                     km={optimalAllocation?.routePlan?.km}
                     fuelSavedPct={optimalAllocation?.routePlan?.naiveKm ? Math.max(0, Math.round(((optimalAllocation.routePlan.naiveKm - optimalAllocation.routePlan.km) / optimalAllocation.routePlan.naiveKm) * 100)) : 0}
                   />
-                )
               )}
 
               {activeNav === 'Farmer network' && (
@@ -1554,8 +1509,7 @@ export function AgriLinkDashboard({
                 />
               )}
 
-              {activeNav === 'Routes' && role === 'Buyer' && <BuyerOrderTracker focus="delivery" />}
-              {activeNav === 'Routes' && role !== 'Buyer' && (
+              {activeNav === 'Routes' && (
                 <RoutesScreen
                   role={role}
                   order={activeOrder}
@@ -1570,8 +1524,7 @@ export function AgriLinkDashboard({
                 />
               )}
 
-              {activeNav === 'Settlements' && role === 'Buyer' && <BuyerOrderTracker focus="payments" />}
-              {activeNav === 'Settlements' && role !== 'Buyer' && (
+              {activeNav === 'Settlements' && (
                 <Settlements
                   role={role}
                   order={activeOrder}

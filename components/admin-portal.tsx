@@ -58,7 +58,6 @@ import {
   type CandidateFarmer,
 } from '@/lib/domain/allocation'
 import { SMALL_ORDER_THRESHOLD_KG } from '@/lib/domain/order-routing'
-import { WorkflowDemoStepper } from '@/components/workflow-demo-stepper'
 import {
   getWorkflowState,
   step2FpoScheduleCollection,
@@ -1291,8 +1290,6 @@ export function AdminPortal() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
-        <WorkflowDemoStepper currentRole="Coordinator" onStageChange={() => fetchLiveFeeds(false)} />
-
         {/* =================================================================== */}
         {/* TAB 1: HOME (7 KPIs, Pending Actions, Recent Activity, Alerts)     */}
         {/* =================================================================== */}

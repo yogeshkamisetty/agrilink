@@ -5,6 +5,7 @@ import { AlertTriangle, Check, CheckCircle2, Clock, Info, Loader2, MapPin, Refre
 import { authHeaders } from '@/lib/auth-client'
 import type { BoardOrder, MarketCatalog } from '@/lib/server/marketplace'
 import { step5BuyerOrderAndReserve } from '@/lib/workflow-engine'
+import { BuyerDashboardView } from './buyer-dashboard-view'
 
 type CatalogItem = MarketCatalog['items'][number]
 
@@ -81,7 +82,8 @@ function orderProgress(o: BoardOrder): { text: string; tone: 'waiting' | 'active
   }
 }
 
-export function BuyerMarketplace({ deliveryLocation }: BuyerMarketplaceProps) {
+export function BuyerMarketplace({ currentUserName, buyerId, buyerName, deliveryLocation }: BuyerMarketplaceProps) {
+  const [viewMode, setViewMode] = useState<'modern' | 'classic'>('modern')
   const [catalog, setCatalog] = useState<MarketCatalog | null>(null)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [orders, setOrders] = useState<BoardOrder[]>([])
@@ -235,8 +237,39 @@ export function BuyerMarketplace({ deliveryLocation }: BuyerMarketplaceProps) {
 
   const maxDelivery = checkout ? (checkout.item.shelfClass === 'perishable' ? checkout.item.harvestTo : isoInDays(60)) : undefined
 
+  if (viewMode === 'modern') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between bg-white border border-slate-200 px-4 py-2 rounded-xl text-xs">
+          <span className="font-semibold text-slate-600">Showing Transformed AgriLink Buyer Experience</span>
+          <button
+            onClick={() => setViewMode('classic')}
+            className="text-emerald-700 font-bold hover:underline cursor-pointer"
+          >
+            Switch to Compact Store View →
+          </button>
+        </div>
+        <BuyerDashboardView
+          currentUserName={currentUserName}
+          buyerId={buyerId}
+          buyerName={buyerName}
+          deliveryLocation={deliveryLocation}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 px-4 py-2.5 rounded-xl text-xs">
+        <span className="font-bold text-emerald-900">Showing Compact View</span>
+        <button
+          onClick={() => setViewMode('modern')}
+          className="px-3 py-1 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-500 transition-colors cursor-pointer"
+        >
+          Switch to Full Marketplace &rarr;
+        </button>
+      </div>
       {feedback && !checkout && (
         <div className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${feedback.tone === 'ok' ? 'border-emerald-500/30 bg-emerald-500/10 text-foreground' : 'border-destructive/30 bg-destructive/10 text-destructive'}`}>
           {feedback.tone === 'ok' ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0" />}

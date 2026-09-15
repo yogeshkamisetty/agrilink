@@ -462,12 +462,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             <div className="flex items-center justify-between">
               <span className="font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
                 <Sparkles className="size-3.5 text-emerald-600" />
-                1-Click Evaluator Sign-In
+                Quick Role Access
               </span>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono">Zero Setup</span>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono">Test Account</span>
             </div>
             <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
-              Instantly authenticate as one of the pre-seeded pilot personas:
+              Select a persona to sign in directly:
             </p>
             <div className="mt-2.5 grid grid-cols-3 gap-1.5">
               <button

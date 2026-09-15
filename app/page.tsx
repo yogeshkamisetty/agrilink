@@ -168,24 +168,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-background selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Top Notification Announcement Bar */}
-      <div className="bg-[#173b2b] px-4 py-2.5 text-center text-xs font-medium text-emerald-100 sm:px-6">
-        <span className="inline-flex items-center gap-2">
-          <span className="flex size-2 rounded-full bg-emerald-400 animate-pulse" />
-          <strong className="font-semibold text-white">AgriLink 2.0 Live:</strong>
-          AI-assisted grading, demand forecasting and consolidated collection runs for FPOs.
-          <Link href="/register/farmer" className="ml-2 font-bold text-teal-300 underline hover:text-white transition-colors">
-            🌾 Farmer Verification Flow &rarr;
-          </Link>
-          <Link href="/mobile" className="ml-2 font-bold text-amber-300 underline hover:text-white transition-colors">
-            📱 Mobile App Preview &rarr;
-          </Link>
-          <Link href="/signup" className="ml-2 font-bold text-emerald-300 underline hover:text-white transition-colors">
-            Start free pilot &rarr;
-          </Link>
-        </span>
-      </div>
-
       {/* Main SaaS Navigation */}
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-8 sm:py-4">
@@ -194,35 +176,23 @@ export default function HomePage() {
               <Sprout className="size-5 sm:size-6" />
             </span>
             <span className="text-foreground">AgriLink</span>
-            <span className="hidden rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-mono font-bold tracking-wide uppercase text-emerald-800 sm:inline-block">
-              Direct Market
-            </span>
           </Link>
 
           <nav className="hidden items-center gap-7 text-sm font-medium text-muted-foreground lg:flex">
-            <Link href="/register/farmer" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 px-3 py-1 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300/40 hover:bg-emerald-200 transition-colors">
-              🌾 Farmer Verification
+            <Link href="#verified-supply" className="hover:text-foreground transition-colors">
+              Marketplace
             </Link>
-            <Link href="/verifier" className="hover:text-foreground transition-colors">
-              Field Verifier
+            <Link href="/register/farmer" className="hover:text-foreground transition-colors">
+              For Farmers
             </Link>
-            <Link href="/mobile" className="hover:text-foreground transition-colors">
-              Mobile App
+            <Link href="/register/buyer" className="hover:text-foreground transition-colors">
+              For Buyers
+            </Link>
+            <Link href="/admin" className="hover:text-foreground transition-colors">
+              FPO Operations
             </Link>
             <Link href="#features" className="hover:text-foreground transition-colors">
-              Platform
-            </Link>
-            <Link href="#verified-supply" className="hover:text-foreground transition-colors">
-              Live Supply
-            </Link>
-            <Link href="#roi-calculator" className="hover:text-foreground transition-colors">
-              ROI Calculator
-            </Link>
-            <Link href="#how-it-works" className="hover:text-foreground transition-colors">
               How It Works
-            </Link>
-            <Link href="#testimonials" className="hover:text-foreground transition-colors">
-              Case Studies
             </Link>
           </nav>
 
@@ -320,11 +290,11 @@ export default function HomePage() {
 
                 <nav className="mt-6 flex flex-col gap-1 text-sm font-medium">
                   {[
-                    { href: '#features', label: 'Platform Capabilities' },
-                    { href: '#verified-supply', label: 'Live Supply Registry' },
-                    { href: '#roi-calculator', label: 'ROI & Spoilage Calculator' },
-                    { href: '#how-it-works', label: 'How AgriLink Works' },
-                    { href: '#testimonials', label: 'Field Case Studies' },
+                    { href: '#verified-supply', label: 'Marketplace' },
+                    { href: '/register/farmer', label: 'For Farmers' },
+                    { href: '/register/buyer', label: 'For Buyers' },
+                    { href: '/admin', label: 'FPO Operations' },
+                    { href: '#features', label: 'How AgriLink Works' },
                   ].map((item) => (
                     <Link
                       key={item.href}

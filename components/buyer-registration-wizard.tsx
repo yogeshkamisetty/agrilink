@@ -561,7 +561,7 @@ export function BuyerRegistrationWizard() {
                 {/* 1-Click Demo Pre-fills */}
                 <div className="hidden sm:block text-right">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                    Quick Evaluator Fill
+                    Sample Profiles
                   </span>
                   <div className="flex gap-1.5">
                     <button
@@ -711,7 +711,7 @@ export function BuyerRegistrationWizard() {
                       onClick={handleFillDemoOtp}
                       className="text-[11px] font-bold text-emerald-700 hover:underline"
                     >
-                      Fill Demo (123456)
+                      Auto-fill Code (123456)
                     </button>
                   </div>
 
@@ -1657,81 +1657,6 @@ export function BuyerRegistrationWizard() {
                 </Link>
               </div>
 
-              {/* 5-State Evaluator Testing Tool */}
-              <div className="mt-8 p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50 dark:bg-muted/30 max-w-xl mx-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Sparkles className="size-3.5 text-emerald-600" />
-                    SIH Evaluator Simulation Tool
-                  </span>
-                  <span className="text-[10px] text-slate-400">Test all 5 verification states</span>
-                </div>
-                <p className="text-[11px] text-slate-500 mb-3">
-                  Click below to simulate how the portal reflects each state from the FPO administrative desk:
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-                  <button
-                    type="button"
-                    disabled={isSimulatingReview}
-                    onClick={() => handleSimulateStatusChange('pending')}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                      verificationStatus === 'pending'
-                        ? 'bg-slate-800 text-white border-slate-800'
-                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Pending
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSimulatingReview}
-                    onClick={() => handleSimulateStatusChange('under_review')}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                      verificationStatus === 'under_review'
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Under Review
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSimulatingReview}
-                    onClick={() => handleSimulateStatusChange('verified')}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                      verificationStatus === 'verified'
-                        ? 'bg-emerald-700 text-white border-emerald-700'
-                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Verified
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSimulatingReview}
-                    onClick={() => handleSimulateStatusChange('needs_correction')}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                      verificationStatus === 'needs_correction'
-                        ? 'bg-amber-600 text-white border-amber-600'
-                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Correction
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isSimulatingReview}
-                    onClick={() => handleSimulateStatusChange('rejected')}
-                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
-                      verificationStatus === 'rejected'
-                        ? 'bg-red-600 text-white border-red-600'
-                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
-                    }`}
-                  >
-                    Rejected
-                  </button>
-                </div>
-              </div>
             </div>
           )}
         </div>
