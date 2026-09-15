@@ -43,6 +43,11 @@ import { formatINR, formatKg } from '@/lib/domain/money'
 import type { BoardOrder } from '@/lib/server/marketplace'
 import type { FarmerOverview } from '@/lib/server/views'
 import { GradeCamCamera } from './gradecam-camera'
+import {
+  getWorkflowState,
+  step1FarmerRequestCollection,
+  type WorkflowState,
+} from '@/lib/workflow-engine'
 
 interface FarmerDashboardViewProps {
   order: any
@@ -150,6 +155,7 @@ export function FarmerDashboardView({
   const [orders, setOrders] = useState<BoardOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const [wfState, setWfState] = useState<WorkflowState>(() => getWorkflowState())
 
   // Local interactive states
   const [showGradeCam, setShowGradeCam] = useState(false)
@@ -213,17 +219,32 @@ export function FarmerDashboardView({
 
   useEffect(() => {
     load()
+    setWfState(getWorkflowState())
     const timer = setInterval(load, 15000)
 
-    const handleSync = () => load()
+    const handleSync = () => {
+      load()
+      setWfState(getWorkflowState())
+    }
+    const handleWfSync = () => {
+      setWfState(getWorkflowState())
+    }
     window.addEventListener('agrilink:harvest-updated', handleSync)
     window.addEventListener('agrilink:order-created', handleSync)
+    window.addEventListener('agrilink:workflow-updated', handleWfSync)
 
     let bc: BroadcastChannel | null = null
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel('agrilink_sync')
-        bc.onmessage = () => load()
+        bc.onmessage = (e) => {
+          load()
+          if (e.data?.type === 'WORKFLOW_STATE_UPDATED' && e.data?.state) {
+            setWfState(e.data.state)
+          } else {
+            setWfState(getWorkflowState())
+          }
+        }
       }
     } catch {}
 
@@ -231,6 +252,7 @@ export function FarmerDashboardView({
       clearInterval(timer)
       window.removeEventListener('agrilink:harvest-updated', handleSync)
       window.removeEventListener('agrilink:order-created', handleSync)
+      window.removeEventListener('agrilink:workflow-updated', handleWfSync)
       try {
         bc?.close()
       } catch {}
@@ -354,6 +376,76 @@ export function FarmerDashboardView({
     },
   ])
 
+  // Dynamically reflect live workflow state in My Produce
+  const liveMyProduce: MyProduceBatch[] = useMemo(() => {
+    const stage = wfState.stage
+    const primaryCol = wfState.collections[0]
+    const primaryLot = wfState.lots[0]
+    const prod1: MyProduceBatch = {
+      id: 'prod-1',
+      crop: primaryCol?.crop || 'TOMATO',
+      declaredQtyKg: primaryCol?.declaredKg || 400,
+      harvestDate: '2026-09-24',
+      collectionStatus:
+        stage === 1
+          ? 'Collection Requested'
+          : stage === 2
+          ? 'Scheduled'
+          : 'Collected',
+      verificationStatus:
+        stage >= 4
+          ? `Grade A (GradeCam) · ${primaryLot?.acceptedKg || 370} kg`
+          : stage === 3
+          ? `Weighed on Scale (${primaryLot?.scaleKg || 392} kg)`
+          : stage === 2
+          ? 'Pending Weighbridge'
+          : 'Pending Weighbridge',
+      notes:
+        stage >= 7
+          ? 'Delivered & full payment settled: ₹10,860 net credited to SBI A/c ...4920'
+          : stage >= 6
+          ? 'Consignment dispatched to institutional buyer (300 kg out of 370 kg lot)'
+          : stage >= 5
+          ? 'Buyer matched: 300 kg reserved by PM POSHAN kitchen (70 kg in hub)'
+          : stage >= 4
+          ? 'GradeCam AI passed with 94% confidence: 22 kg blemish deduction → 370 kg accepted Grade A'
+          : stage >= 3
+          ? 'Produce weighed at central weighbridge: 392 kg gross (8 kg shrinkage)'
+          : stage >= 2
+          ? 'Pickup scheduled for 24 Sep (8–10 AM) via Tata Ace (AP XX XX 1234)'
+          : '400 kg declared at farm gate. Ready for FPO collection.',
+    }
+    return [prod1, ...myProduce.filter((p) => p.id !== 'prod-1')]
+  }, [wfState, myProduce])
+
+  // Dynamically reflect live workflow state in Collection / Handover Records
+  const liveCollectionHandovers: CollectionHandoverRecord[] = useMemo(() => {
+    const stage = wfState.stage
+    const primaryCol = wfState.collections[0]
+    const primaryLot = wfState.lots[0]
+    const col1: CollectionHandoverRecord = {
+      id: 'col-1',
+      requestId: primaryCol?.requestId || 'REQ-COL-1042',
+      fpoName: fpoName,
+      collectionCentre: primaryCol?.preferredHub || collectionCentre,
+      dateTimeSlot: primaryCol?.scheduledSlot || '24 Sep 2026 • 8:00 AM – 10:00 AM',
+      crop: primaryCol?.crop || 'TOMATO',
+      quantityKg: primaryCol?.declaredKg || 400,
+      status:
+        stage === 1
+          ? 'Requested'
+          : stage === 2
+          ? 'Scheduled'
+          : stage === 3
+          ? 'Handed Over'
+          : 'Weighed & Verified',
+      verifiedGrossKg: primaryLot?.scaleKg || (stage >= 3 ? 392 : undefined),
+      acceptedKg: primaryLot?.acceptedKg || (stage >= 4 ? 370 : (stage >= 3 ? 392 : undefined)),
+      grade: primaryLot?.grade ? `Grade ${primaryLot.grade}` : (stage >= 4 ? 'Grade A' : undefined),
+    }
+    return [col1, ...collectionHandovers.filter((c) => c.id !== 'col-1')]
+  }, [wfState, fpoName, collectionCentre, collectionHandovers])
+
   // 5. Notifications List
   const [notifications, setNotifications] = useState<FarmerNotification[]>([
     {
@@ -445,15 +537,23 @@ export function FarmerDashboardView({
     e.preventDefault()
     setIsProcessingAction(true)
 
-    const newReqId = `REQ-COL-${Math.floor(1000 + Math.random() * 9000)}`
+    const qty = Number(collectionFormQty) || 400
+    const crop = collectionFormCrop || 'TOMATO'
+    
+    // Unify state change with primary demo workflow engine
+    const nextWf = step1FarmerRequestCollection(qty, crop)
+    setWfState(nextWf)
+
+    const primaryCol = nextWf.collections[0]
+    const newReqId = primaryCol?.requestId || `REQ-COL-${Math.floor(1000 + Math.random() * 9000)}`
     const newRecord: CollectionHandoverRecord = {
       id: `col-${Date.now()}`,
       requestId: newReqId,
       fpoName: fpoName,
-      collectionCentre: collectionCentre,
+      collectionCentre: primaryCol?.preferredHub || collectionCentre,
       dateTimeSlot: `${collectionFormDate} • ${collectionFormSlot}`,
-      crop: collectionFormCrop,
-      quantityKg: Number(collectionFormQty) || 400,
+      crop: crop,
+      quantityKg: qty,
       status: 'Requested',
     }
 
@@ -1247,7 +1347,7 @@ export function FarmerDashboardView({
 
           {/* Harvest Batches List */}
           <div className="space-y-3">
-            {myProduce.map((batch) => (
+            {liveMyProduce.map((batch) => (
               <div
                 key={batch.id}
                 className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-emerald-300 transition-colors"
@@ -1354,7 +1454,7 @@ export function FarmerDashboardView({
 
           {/* Collection Requests & Handovers */}
           <div className="space-y-4">
-            {collectionHandovers.map((col) => {
+            {liveCollectionHandovers.map((col) => {
               const stepIndex =
                 col.status === 'Requested'
                   ? 1

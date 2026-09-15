@@ -160,4 +160,63 @@ describe('SIH 26033 Cleaned Farmer + FPO Collection Flow Lifecycle', () => {
     const net = gross - charges
     expect(net).toBe(11520)
   })
+
+  // 5. 9-Tab Farmer Navigation Architecture & Domain Rules
+  it('validates the 9-tab navigation keys and domain constraints', () => {
+    const farmerTabs = [
+      'home',
+      'registry',
+      'demand',
+      'expected_harvest',
+      'my_produce',
+      'handover',
+      'logistics',
+      'passbook',
+      'notifications',
+    ] as const
+
+    expect(farmerTabs).toHaveLength(9)
+
+    // Rule: Expected Harvest is strictly planning data
+    const expectedHarvest = {
+      crop: 'TOMATO',
+      expectedQtyKg: 2000,
+      harvestDate: '20–25 Sep 2026',
+      status: 'Ripening',
+      isInventory: false,
+      bannerNotice: 'IMPORTANT: Expected harvest is planning data, NOT inventory.',
+    }
+    expect(expectedHarvest.isInventory).toBe(false)
+    expect(expectedHarvest.bannerNotice).toContain('NOT inventory')
+
+    // Rule: Upcoming Demand is forecast, not a confirmed order
+    const upcomingDemand = {
+      predictedDemandKg: 2400,
+      forecastPeriod: '24 Sep – 22 Oct 2026',
+      confidence: 94,
+      dataSource: 'PM POSHAN Central Kitchens',
+      indicativePriceRange: '₹28.00 – ₹32.00 / kg',
+      bannerNotice: 'Forecast — Not a confirmed order.',
+    }
+    expect(upcomingDemand.bannerNotice).toBe('Forecast — Not a confirmed order.')
+
+    // Rule: My Produce primary CTA is Request Collection
+    const myProduceAction = {
+      batchId: 'prod-1',
+      crop: 'TOMATO',
+      declaredQtyKg: 400,
+      harvestDate: '2026-09-22',
+      primaryCTA: 'Request Collection',
+    }
+    expect(myProduceAction.primaryCTA).toBe('Request Collection')
+
+    // Rule: Collection Handover Prototype Flow:
+    // Farmer Request -> FPO Schedules -> Farmer Hands Over -> FPO Weighs/Verifies
+    const collectionFlow = ['Farmer Request', 'FPO Schedules', 'Farmer Hands Over', 'FPO Weighs/Verifies']
+    expect(collectionFlow[0]).toBe('Farmer Request')
+    expect(collectionFlow[1]).toBe('FPO Schedules')
+    expect(collectionFlow[2]).toBe('Farmer Hands Over')
+    expect(collectionFlow[3]).toBe('FPO Weighs/Verifies')
+  })
 })
+

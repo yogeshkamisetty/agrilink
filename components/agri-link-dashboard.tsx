@@ -24,6 +24,7 @@ import { FarmerDashboardView } from './farmer-dashboard-view'
 import { BolnaCallModal } from './bolna-call-modal'
 import { BuyerMarketplace } from './buyer-marketplace'
 import { BuyerOrderTracker } from './buyer-order-tracker'
+import { WorkflowDemoStepper } from './workflow-demo-stepper'
 import { authHeaders, getAuthClient } from '@/lib/auth-client'
 
 type Role = 'Coordinator' | 'Buyer' | 'Farmer'
@@ -523,8 +524,13 @@ export function AgriLinkDashboard({
       fetchFarmers()
       refresh()
     }
+    const onWorkflowSync = () => {
+      fetchFarmers()
+      refresh()
+    }
     window.addEventListener('agrilink:harvest-updated', onHarvest)
     window.addEventListener('agrilink:order-created', onOrderCreated)
+    window.addEventListener('agrilink:workflow-updated', onWorkflowSync)
 
     let bc: BroadcastChannel | null = null
     try {
@@ -542,6 +548,7 @@ export function AgriLinkDashboard({
       if (timer) clearInterval(timer)
       window.removeEventListener('agrilink:harvest-updated', onHarvest)
       window.removeEventListener('agrilink:order-created', onOrderCreated)
+      window.removeEventListener('agrilink:workflow-updated', onWorkflowSync)
       try {
         bc?.close()
       } catch {}
@@ -1308,6 +1315,8 @@ export function AgriLinkDashboard({
         )}
 
         <div className="mx-auto max-w-[1500px] px-5 py-8 sm:px-8 lg:px-10">
+          <WorkflowDemoStepper currentRole={role} onStageChange={() => refresh()} />
+
           <DeclareHarvestModal
             isOpen={showHarvestModal}
             onClose={() => setShowHarvestModal(false)}

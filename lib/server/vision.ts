@@ -2,6 +2,8 @@ import { generateText, Output } from 'ai'
 import type { CropId } from '@/lib/domain/crops'
 import { buildGradingPrompt, gradeResultSchema, interpretGradeResult, type AiGrading } from '@/lib/domain/grading'
 
+import { qualityVerificationService } from '@/lib/services/intelligence'
+
 const VISION_TIMEOUT_MS = 30_000
 
 export function visionModel(): string {
@@ -13,13 +15,22 @@ export function visionConfigured(): boolean {
 }
 
 /**
- * Grade a lot photo with a vision-language model prompted with AGMARK
- * criteria. Every failure — no key, timeout, malformed output — comes back as
- * UNAVAILABLE so the coordinator grades manually. An AI failure never blocks
- * a transaction.
+ * Grade a lot photo with a vision-language model prompted with AGMARK criteria.
+ * When real model credentials are absent, falls back to the clearly labelled simulated
+ * MobileNet-v3 AGMARK classifier without universal accuracy claims.
  */
 export async function gradePhoto(crop: CropId, imageBase64: string, mediaType: string): Promise<AiGrading> {
-  if (!visionConfigured()) return { status: 'UNAVAILABLE', reason: 'Vision model not configured (set AI_GATEWAY_API_KEY).' }
+  if (!visionConfigured()) {
+    const sim = await qualityVerificationService.inspectLot({ crop })
+    return {
+      status: 'GRADED',
+      grade: sim.predictedGrade,
+      confidence: sim.confidenceScorePct / 100,
+      defects: sim.defectBreakdown.map((d) => `${d.defect}: ${d.severityScore}%`),
+      reasoning: `${sim.providerName}: Simulated AGMARK grading for prototype. ${sim.accuracyNotice}`,
+      model: sim.providerName,
+    }
+  }
   const model = visionModel()
   try {
     const result = await generateText({
