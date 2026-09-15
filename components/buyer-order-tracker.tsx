@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Circle, Loader2, Receipt, RefreshCw, Truck
 import { authHeaders } from '@/lib/auth-client'
 import type { BoardOrder } from '@/lib/server/marketplace'
 import type { OrderDetail } from '@/lib/server/views'
+import { step7DeliverAndSettle } from '@/lib/workflow-engine'
 import { RouteMap } from './route-map'
 
 /** What the order endpoint returns to the ordering buyer: no farmer phone numbers or match internals. */
@@ -79,6 +80,12 @@ export function BuyerOrderTracker({ focus }: { focus: 'delivery' | 'payments' })
       const res = await fetch(`/api/orders/${detail.order.id}/deliver`, { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ rejections }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'The delivery could not be confirmed.')
+
+      // Finalize primary demo workflow engine settlement (370 kg accepted × ₹30 - ₹240 = ₹10,860 net)
+      try {
+        step7DeliverAndSettle()
+      } catch {}
+
       setNotice({ tone: 'ok', text: `Delivery confirmed. Invoice ${inr(json.invoice)} for ${kgLabel(json.invoicedKg)}${json.rejectedLots ? `; ${json.rejectedLots} lot(s) turned away are not invoiced` : ''}.` })
       setTurnedAway({})
       await Promise.all([loadOrders(), loadDetail(detail.order.id)])

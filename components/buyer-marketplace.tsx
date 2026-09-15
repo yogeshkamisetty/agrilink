@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, CheckCircle2, Clock, Info, Loader2, MapPin, RefreshCw, Search, ShieldCheck, ShoppingBag, Sprout, Truck, X } from 'lucide-react'
 import { authHeaders } from '@/lib/auth-client'
 import type { BoardOrder, MarketCatalog } from '@/lib/server/marketplace'
+import { step5BuyerOrderAndReserve } from '@/lib/workflow-engine'
 
 type CatalogItem = MarketCatalog['items'][number]
 
@@ -199,6 +200,12 @@ export function BuyerMarketplace({ deliveryLocation }: BuyerMarketplaceProps) {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'The order could not be placed.')
+      
+      // Synchronize with primary demo workflow engine: reserve quantity against verified stock
+      try {
+        step5BuyerOrderAndReserve(checkout.qty)
+      } catch {}
+
       setCheckout(null)
       setFeedback({ tone: 'ok', text: `${json.order.code} placed. ${json.message}` })
       broadcast('ORDER_CREATED', { orderId: json.order.id })

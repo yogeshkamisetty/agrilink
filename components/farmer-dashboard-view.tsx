@@ -105,7 +105,7 @@ export interface MyProduceBatch {
   declaredQtyKg: number
   harvestDate: string
   collectionStatus: 'Ready for Collection' | 'Collection Requested' | 'Scheduled' | 'Collected'
-  verificationStatus: 'Pending Weighbridge' | 'Grade A (GradeCam)' | 'Grade B' | 'Verified'
+  verificationStatus: 'Pending Weighbridge' | 'Grade A (GradeCam)' | 'Grade B' | 'Verified' | string
   notes?: string
 }
 
@@ -1692,81 +1692,121 @@ export function FarmerDashboardView({
           </div>
 
           {/* Latest Verified Settlement Ledger Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Settlement Slip #LOT-TOM-0924
-                </span>
-                <h3 className="text-lg font-black text-slate-900 mt-0.5">
-                  Tomato Lot (400 kg declared • 392 kg accepted)
-                </h3>
-              </div>
-              <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
-                Disbursed to Bank Account
-              </span>
-            </div>
+          {(() => {
+            const activeSettlement = wfState.settlements[0] || {
+              acceptedKg: 370,
+              agreedPricePerKg: 30.0,
+              grossAmount: 11100.0,
+              weighbridgeFee: 120.0,
+              transportShare: 120.0,
+              totalDeductions: 240.0,
+              netPayable: 10860.0,
+              status: (wfState.stage >= 7 ? 'DISBURSED' : wfState.stage >= 4 ? 'ESCROW_FUNDED' : 'CALCULATED') as 'DISBURSED' | 'ESCROW_FUNDED' | 'CALCULATED',
+              bankAccount: 'State Bank of India (A/c ...4920)',
+              utrCode: 'AGR-2026-98124',
+              settlementCode: 'LOT-TOM-0924',
+            }
 
-            {/* Formula Itemization */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-3">
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>1. Accepted Quantity (Post-GradeCam & Weighbridge QC):</span>
-                <span className="font-extrabold text-slate-900 text-sm">392 kg (Grade A)</span>
-              </div>
+            const isDisbursed = wfState.stage >= 7
+            const isEscrowFunded = wfState.stage >= 4 && wfState.stage < 7
+            const acceptedKg = activeSettlement.acceptedKg || 370
+            const agreedPrice = activeSettlement.agreedPricePerKg || 30.0
+            const gross = activeSettlement.grossAmount || (acceptedKg * agreedPrice)
+            const deductions = activeSettlement.totalDeductions || 240.0
+            const net = activeSettlement.netPayable || (gross - deductions)
 
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>2. Agreed Contract Rate:</span>
-                <span className="font-extrabold text-slate-900">₹30.00 / kg</span>
-              </div>
-
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>3. Gross Value (392 kg × ₹30.00):</span>
-                <span className="font-extrabold text-slate-900 text-sm">₹11,760.00</span>
-              </div>
-
-              {/* Itemized Disclosed Charges */}
-              <div className="py-2 border-b border-slate-200/60 space-y-1.5 text-[11px] text-slate-500">
-                <span className="font-bold text-slate-700 block">Disclosed Legitimate Deductions:</span>
-                <div className="flex justify-between pl-3">
-                  <span>• FPO Weighbridge & QC Handling:</span>
-                  <span className="text-slate-800 font-semibold">- ₹120.00</span>
+            return (
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div>
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                      Settlement Slip #{activeSettlement.settlementCode || 'LOT-TOM-0924'}
+                    </span>
+                    <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                      Tomato Lot (400 kg declared • 392 kg scale • {acceptedKg} kg accepted)
+                    </h3>
+                  </div>
+                  {isDisbursed ? (
+                    <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                      Disbursed to Bank Account (₹{net.toLocaleString('en-IN')})
+                    </span>
+                  ) : isEscrowFunded ? (
+                    <span className="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-blue-700" />
+                      Escrow Advance Funded • Final Release on Delivery
+                    </span>
+                  ) : (
+                    <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-amber-700" />
+                      Pending Weighbridge & Quality QC
+                    </span>
+                  )}
                 </div>
-                <div className="flex justify-between pl-3">
-                  <span>• Cluster Shared Transport:</span>
-                  <span className="text-slate-800 font-semibold">- ₹120.00</span>
-                </div>
-                <div className="flex justify-between pl-3 font-bold text-slate-700 pt-0.5">
-                  <span>Total Charges:</span>
-                  <span>- ₹240.00</span>
-                </div>
-              </div>
 
-              {/* Net Payable */}
-              <div className="flex justify-between pt-2 text-sm sm:text-base font-extrabold text-emerald-950">
-                <span>Net Credited to Bank Account:</span>
-                <span className="text-lg sm:text-xl font-black text-emerald-800">
-                  {formatINR(totalSettledNet)}
-                </span>
-              </div>
-            </div>
+                {/* Formula Itemization */}
+                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-3">
+                  <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                    <span>1. Accepted Quantity (Post-GradeCam & Weighbridge QC):</span>
+                    <span className="font-extrabold text-slate-900 text-sm">{acceptedKg} kg (Grade A)</span>
+                  </div>
 
-            {/* Disbursement Proof & Banking Trail */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Disbursement Status</span>
-                <span className="font-bold text-emerald-900 mt-0.5 block">Direct Bank Transfer Complete</span>
+                  <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                    <span>2. Agreed Contract Rate:</span>
+                    <span className="font-extrabold text-slate-900">₹{agreedPrice.toFixed(2)} / kg</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                    <span>3. Gross Value ({acceptedKg} kg × ₹{agreedPrice.toFixed(2)}):</span>
+                    <span className="font-extrabold text-slate-900 text-sm">₹{gross.toLocaleString('en-IN')}.00</span>
+                  </div>
+
+                  {/* Itemized Disclosed Charges */}
+                  <div className="py-2 border-b border-slate-200/60 space-y-1.5 text-[11px] text-slate-500">
+                    <span className="font-bold text-slate-700 block">Disclosed Legitimate Deductions:</span>
+                    <div className="flex justify-between pl-3">
+                      <span>• FPO Weighbridge & QC Handling:</span>
+                      <span className="text-slate-800 font-semibold">- ₹{activeSettlement.weighbridgeFee || 120}.00</span>
+                    </div>
+                    <div className="flex justify-between pl-3">
+                      <span>• Cluster Shared Transport:</span>
+                      <span className="text-slate-800 font-semibold">- ₹{activeSettlement.transportShare || 120}.00</span>
+                    </div>
+                    <div className="flex justify-between pl-3 font-bold text-slate-700 pt-0.5">
+                      <span>Total Charges:</span>
+                      <span>- ₹{deductions}.00</span>
+                    </div>
+                  </div>
+
+                  {/* Net Payable */}
+                  <div className="flex justify-between pt-2 text-sm sm:text-base font-extrabold text-emerald-950">
+                    <span>Net Credited to Bank Account:</span>
+                    <span className="text-lg sm:text-xl font-black text-emerald-800">
+                      ₹{net.toLocaleString('en-IN')}.00
+                    </span>
+                  </div>
+                </div>
+
+                {/* Disbursement Proof & Banking Trail */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Disbursement Status</span>
+                    <span className="font-bold text-emerald-900 mt-0.5 block">
+                      {isDisbursed ? 'Direct Bank Transfer Complete' : 'Escrow Secured in Reserve'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank Account Reference</span>
+                    <span className="font-bold text-slate-800 mt-0.5 block">{activeSettlement.bankAccount}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-bold">Transaction / UTR Code</span>
+                    <span className="font-mono font-bold text-slate-800 mt-0.5 block">{activeSettlement.utrCode}</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank Account Reference</span>
-                <span className="font-bold text-slate-800 mt-0.5 block">State Bank of India (A/c ...4920)</span>
-              </div>
-              <div>
-                <span className="text-slate-500 block text-[10px] uppercase font-bold">Transaction / UTR Code</span>
-                <span className="font-mono font-bold text-slate-800 mt-0.5 block">AGR-2026-98124</span>
-              </div>
-            </div>
-          </div>
+            )
+          })()}
         </div>
       )}
 

@@ -58,6 +58,17 @@ import {
   type CandidateFarmer,
 } from '@/lib/domain/allocation'
 import { SMALL_ORDER_THRESHOLD_KG } from '@/lib/domain/order-routing'
+import { WorkflowDemoStepper } from '@/components/workflow-demo-stepper'
+import {
+  getWorkflowState,
+  step2FpoScheduleCollection,
+  step3ReceiveAndWeigh,
+  step4QualityVerifyAndCreateInventory,
+  step5BuyerOrderAndReserve,
+  step6DispatchConsignment,
+  step7DeliverAndSettle,
+  type WorkflowState,
+} from '@/lib/workflow-engine'
 import {
   demandForecastingService,
   priceEstimationService,
@@ -289,6 +300,7 @@ export function AdminPortal() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const [wfState, setWfState] = useState<WorkflowState>(() => getWorkflowState())
 
   // Toast feedback
   const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
@@ -867,9 +879,116 @@ export function AdminPortal() {
 
   useEffect(() => {
     fetchLiveFeeds()
-    const timer = setInterval(() => fetchLiveFeeds(false), 8000)
-    return () => clearInterval(timer)
+    setWfState(getWorkflowState())
+    const timer = setInterval(() => {
+      fetchLiveFeeds(false)
+      setWfState(getWorkflowState())
+    }, 8000)
+
+    const handleWfSync = () => setWfState(getWorkflowState())
+    window.addEventListener('agrilink:workflow-updated', handleWfSync)
+
+    let bc: BroadcastChannel | null = null
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('agrilink_sync')
+        bc.onmessage = (e) => {
+          fetchLiveFeeds(false)
+          if (e.data?.type === 'WORKFLOW_STATE_UPDATED' && e.data?.state) {
+            setWfState(e.data.state)
+          } else {
+            setWfState(getWorkflowState())
+          }
+        }
+      }
+    } catch {}
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('agrilink:workflow-updated', handleWfSync)
+      try {
+        bc?.close()
+      } catch {}
+    }
   }, [fetchLiveFeeds])
+
+  // ==========================================================================
+  // Dynamic Live Workflow Mappings for Primary Demo
+  // ==========================================================================
+  const liveVerifiedInventory: VerifiedStockItem[] = useMemo(() => {
+    const stage = wfState.stage
+    const invItem = wfState.inventory[0]
+    if (stage >= 4 && invItem) {
+      const demoItem: VerifiedStockItem = {
+        id: invItem.id,
+        lotId: invItem.lotCode,
+        crop: invItem.crop,
+        grade: invItem.grade === 'B' ? 'Grade B' : 'Grade A',
+        totalVerifiedKg: invItem.totalVerifiedKg,
+        availableKg: invItem.availableKg, // 370 kg at stage 4, 70 kg at stage 5+
+        reservedKg: invItem.reservedKg,   // 0 kg at stage 4, 300 kg at stage 5+
+        location: invItem.storageLocation,
+        freshness: 'Harvested today • Fresh produce',
+        pricePerKg: 30.0,
+        farmerName: 'Ravi Kumar',
+        harvestDate: new Date().toISOString().slice(0, 10),
+      }
+      return [demoItem, ...verifiedInventory.filter((i) => i.lotId !== invItem.lotCode)]
+    }
+    return verifiedInventory
+  }, [wfState, verifiedInventory])
+
+  const liveDispatches: DispatchConsignment[] = useMemo(() => {
+    const stage = wfState.stage
+    const dsp = wfState.dispatches[0]
+    if (stage >= 5) {
+      const demoDisp: DispatchConsignment = {
+        id: dsp?.id || 'DISP-802',
+        orderId: 'ord-102',
+        orderCode: dsp?.orderCode || 'AG-1002',
+        buyerName: 'PM POSHAN Central Kitchen, Anand',
+        fpo: 'Mahi Valley FPO Hub #1',
+        crop: 'TOMATO',
+        quantityKg: dsp?.qtyKg || 300,
+        destination: 'PM POSHAN Central Kitchen, Station Road',
+        distanceKm: 9.8,
+        vehicle: dsp?.vehicleNo || 'Tata Ace 1.5t (AP XX XX 1234)',
+        driver: dsp?.driverName || 'Rameshwar Logistics',
+        driverPhone: dsp?.driverPhone || '+91 98765 43210',
+        status: stage >= 7 ? 'Delivered' : stage >= 6 ? 'Dispatched' : 'Loading',
+        dispatchedAt: dsp?.dispatchedAt || (stage >= 6 ? new Date().toISOString() : undefined),
+        waybillNo: dsp?.dispatchCode ? `WB-${dsp.dispatchCode}` : 'WB-MV-2026-1042',
+      }
+      return [demoDisp, ...dispatches.filter((d) => d.orderCode !== 'AG-1002')]
+    }
+    return dispatches
+  }, [wfState, dispatches])
+
+  const liveSettlements: FarmerSettlementRecord[] = useMemo(() => {
+    const stage = wfState.stage
+    const set = wfState.settlements[0]
+    if (stage >= 4) {
+      const demoSet: FarmerSettlementRecord = {
+        id: set?.id || 'SET-903',
+        farmerId: 'f-ravi',
+        farmerName: set?.farmerName || 'Ravi Kumar',
+        lotId: set?.lotCode || 'LOT-TOM-0924-392',
+        crop: 'TOMATO',
+        weighedKg: set?.weighedKg || 392,
+        agreedPricePerKg: set?.agreedPricePerKg || 30.0,
+        grossAmount: set?.grossAmount || 11100,
+        weighbridgeFee: set?.weighbridgeFee || 120,
+        transportShare: set?.transportShare || 120,
+        netPayable: set?.netPayable || 10860, // Exactly ₹10,860 net!
+        status: stage >= 7 ? 'Credited' : 'Processing',
+        bankAccountMasked: set?.bankAccount || 'State Bank of India •••• 4920',
+        utrRef: stage >= 7 ? (set?.utrCode || 'AGR-2026-98124') : 'Pending Final Delivery Sign-off',
+        paidAt: set?.settledAt || new Date().toISOString(),
+      }
+      return [demoSet, ...settlements.filter((s) => s.farmerName !== 'Ravi Kumar' && s.lotId !== 'LOT-TOM-0924-392')]
+    }
+    return settlements
+  }, [wfState, settlements])
 
   // ==========================================================================
   // Derived KPIs for Home
@@ -907,7 +1026,11 @@ export function AdminPortal() {
     const newLotId = `LOT-${selectedCollectionForWeigh.crop.slice(0, 3)}-${new Date().toISOString().slice(5, 10).replace('-', '')}-${scale}`
 
     setTimeout(() => {
-      // 1. Update collection record
+      // 1. Advance unified workflow state
+      const nextWf = step3ReceiveAndWeigh(scale, selectedCollectionForWeigh.id)
+      setWfState(nextWf)
+
+      // 2. Update collection record
       setCollections((prev) =>
         prev.map((c) =>
           c.id === selectedCollectionForWeigh.id
@@ -926,7 +1049,7 @@ export function AdminPortal() {
         )
       )
 
-      // 2. Create new Verification Lot entry
+      // 3. Create new Verification Lot entry
       const newLot: VerificationLot = {
         id: newLotId,
         requestId: selectedCollectionForWeigh.id,
@@ -963,8 +1086,8 @@ export function AdminPortal() {
   function handleOpenStaffReview(lot: VerificationLot) {
     setActiveReviewLot(lot)
     setReviewGradeChoice(lot.grade === 'Grade B' ? 'Grade B' : 'Grade A')
-    setReviewAcceptedKg(lot.scaleKg)
-    setReviewRejectedKg(0)
+    setReviewAcceptedKg(lot.crop === 'TOMATO' ? 370 : lot.scaleKg)
+    setReviewRejectedKg(lot.crop === 'TOMATO' ? 22 : 0)
     setReviewReasonNote(lot.reason || 'Meets visual quality standards for institutional buyers.')
   }
 
@@ -973,6 +1096,13 @@ export function AdminPortal() {
 
     if (decision === 'ACCEPT') {
       const acceptedKg = reviewAcceptedKg
+      const rejectedKg = reviewRejectedKg || Math.max(0, activeReviewLot.scaleKg - acceptedKg)
+      const grade = reviewGradeChoice === 'Grade B' ? 'B' : 'A'
+
+      // Advance unified workflow engine to Stage 4 (370 kg accepted -> 370 kg verified inventory)
+      const nextWf = step4QualityVerifyAndCreateInventory(acceptedKg, rejectedKg, grade)
+      setWfState(nextWf)
+
       const newStock: VerifiedStockItem = {
         id: `INV-${Date.now().toString().slice(-4)}`,
         lotId: activeReviewLot.id,
@@ -1008,10 +1138,10 @@ export function AdminPortal() {
         )
       )
 
-      // Add to settlements ledger
+      // Add to settlements ledger (Exact ₹10,860 net for 370 kg Tomato: 370 * 30 - 240)
       const agreedRate = activeReviewLot.crop === 'TOMATO' ? 30 : activeReviewLot.crop === 'PADDY' ? 28 : 31
       const gross = acceptedKg * agreedRate
-      const net = gross - 400 // Disclosed standard deductions
+      const net = gross - 240 // Disclosed standard deductions: ₹120 weighbridge + ₹120 transport share
       const newSettlement: FarmerSettlementRecord = {
         id: `SET-${Date.now().toString().slice(-3)}`,
         farmerId: activeReviewLot.farmerId,
@@ -1022,11 +1152,11 @@ export function AdminPortal() {
         agreedPricePerKg: agreedRate,
         grossAmount: gross,
         weighbridgeFee: 120,
-        transportShare: 280,
+        transportShare: 120,
         netPayable: net,
         status: 'Processing',
-        bankAccountMasked: 'Bank Account •••• 4102',
-        utrRef: 'Pending Settlement Batch',
+        bankAccountMasked: 'State Bank of India •••• 4920',
+        utrRef: 'Pending Final Delivery Sign-off',
         paidAt: new Date().toISOString(),
       }
       setSettlements((prev) => [newSettlement, ...prev])
@@ -1161,6 +1291,8 @@ export function AdminPortal() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <WorkflowDemoStepper currentRole="Coordinator" onStageChange={() => fetchLiveFeeds(false)} />
+
         {/* =================================================================== */}
         {/* TAB 1: HOME (7 KPIs, Pending Actions, Recent Activity, Alerts)     */}
         {/* =================================================================== */}
@@ -2111,7 +2243,7 @@ export function AdminPortal() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {verifiedInventory.map((item) => (
+                    {liveVerifiedInventory.map((item) => (
                       <tr key={item.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 font-mono font-bold text-foreground">{item.lotId}</td>
                         <td className="px-4 py-3 font-semibold text-foreground">
@@ -2262,7 +2394,7 @@ export function AdminPortal() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {dispatches.map((disp) => (
+                    {liveDispatches.map((disp) => (
                       <tr key={disp.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 font-semibold text-foreground">
                           #{disp.orderCode}
@@ -2289,6 +2421,8 @@ export function AdminPortal() {
                                 ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
                                 : disp.status === 'Loading'
                                 ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                : disp.status === 'Delivered'
+                                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
                                 : 'bg-secondary text-secondary-foreground'
                             }`}
                           >
@@ -2296,13 +2430,28 @@ export function AdminPortal() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedWaybill(disp)}
-                            className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-secondary text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <FileText className="size-3 text-primary" /> Waybill
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {disp.status !== 'Dispatched' && disp.status !== 'Delivered' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = step6DispatchConsignment(disp.vehicle)
+                                  setWfState(next)
+                                  flash('ok', `Consignment #${disp.id} dispatched via ${disp.vehicle}! 300 kg moved to in-transit.`)
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-bold shadow-2xs hover:bg-primary/90 transition-colors cursor-pointer"
+                              >
+                                Dispatch →
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedWaybill(disp)}
+                              className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-secondary text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <FileText className="size-3 text-primary" /> Waybill
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2528,7 +2677,7 @@ export function AdminPortal() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {settlements.map((set) => (
+                    {liveSettlements.map((set) => (
                       <tr key={set.id} className="hover:bg-secondary/30 transition-colors">
                         <td className="px-4 py-3 font-bold text-foreground">{set.farmerName}</td>
                         <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{set.lotId}</td>
