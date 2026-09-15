@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Eye, EyeOff, Loader2, Lock, ShieldCheck, ShoppingCart, Sprout, User, Users } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, Lock, ShieldCheck, ShoppingCart, Sparkles, Sprout, User, Users } from 'lucide-react'
 import { getAuthClient } from '@/lib/auth-client'
 
 export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
@@ -202,6 +202,25 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setPhone(p)
     setPin('1234')
     handlePhoneChange(p)
+  }
+
+  async function quickDemoLogin(role: 'farmer' | 'buyer' | 'admin') {
+    setBusy(true)
+    setError('')
+    try {
+      const res = await fetch('/api/auth/otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'quick_demo', role }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Quick demo login failed')
+      const phoneUsed = role === 'farmer' ? '9825144102' : role === 'buyer' ? '9825277103' : '9825000000'
+      await handleAuthSuccess(data, role, phoneUsed)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Demo login failed')
+      setBusy(false)
+    }
   }
 
   return (
@@ -437,31 +456,43 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
           </p>
         )}
 
-        {/* Sample Accounts / Reference */}
+        {/* Quick 1-Click Demo Evaluation Switcher */}
         {!newUser && (
-          <div className="mt-4 rounded-xl border border-border/70 bg-secondary/30 p-2.5 text-[11px] text-muted-foreground">
-            <span className="font-semibold text-foreground">Sample Accounts (PIN: 1234):</span>
-            <div className="mt-1 flex flex-wrap gap-1.5">
+          <div className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-emerald-600" />
+                1-Click Evaluator Sign-In
+              </span>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-mono">Zero Setup</span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-600 dark:text-slate-400">
+              Instantly authenticate as one of the pre-seeded pilot personas:
+            </p>
+            <div className="mt-2.5 grid grid-cols-3 gap-1.5">
               <button
                 type="button"
-                onClick={() => fillDemoCredentials('9825144102', 'Farmer')}
-                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+                onClick={() => quickDemoLogin('farmer')}
+                className="rounded-xl border border-emerald-300 bg-white dark:bg-card p-2 text-center hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition shadow-2xs group"
               >
-                Farmer: 9825144102
+                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-700">🌾 Ramesh</span>
+                <span className="block text-[9px] text-slate-500">Farmer</span>
               </button>
               <button
                 type="button"
-                onClick={() => fillDemoCredentials('9825277103', 'Buyer')}
-                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+                onClick={() => quickDemoLogin('buyer')}
+                className="rounded-xl border border-emerald-300 bg-white dark:bg-card p-2 text-center hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition shadow-2xs group"
               >
-                Buyer: 9825277103
+                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-700">🛒 Ananya</span>
+                <span className="block text-[9px] text-slate-500">Buyer</span>
               </button>
               <button
                 type="button"
-                onClick={() => fillDemoCredentials('9825000000', 'Coordinator')}
-                className="rounded-md border border-border bg-background px-2 py-0.5 text-[10px] font-medium hover:text-foreground"
+                onClick={() => quickDemoLogin('admin')}
+                className="rounded-xl border border-emerald-300 bg-white dark:bg-card p-2 text-center hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition shadow-2xs group"
               >
-                Admin: 9825000000
+                <span className="block text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-700">🏢 Priya</span>
+                <span className="block text-[9px] text-slate-500">Coordinator</span>
               </button>
             </div>
           </div>

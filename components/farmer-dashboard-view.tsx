@@ -4,19 +4,29 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
   ArrowRight,
+  Bell,
   Building2,
+  Calendar,
   Camera,
   Check,
   CheckCircle2,
+  ChevronRight,
   CircleDollarSign,
   Clock,
+  Download,
+  FileText,
   Filter,
+  Info,
+  Layers,
   Loader2,
   MapPin,
   Mic,
+  Package,
   Plus,
+  Printer,
   QrCode,
   Receipt,
+  Search,
   ShieldCheck,
   ShoppingBag,
   Sparkles,
@@ -54,31 +64,68 @@ interface FarmerDashboardViewProps {
   setFarmerTab?: (tab: 'slip' | 'camera') => void
 }
 
-export interface FarmerDemandOrder {
+export type FarmerTabKey =
+  | 'home'
+  | 'registry'
+  | 'demand'
+  | 'expected_harvest'
+  | 'my_produce'
+  | 'handover'
+  | 'logistics'
+  | 'passbook'
+  | 'notifications'
+
+export interface CropRegistryEntry {
   id: string
-  code: string
   crop: string
-  qty_target_kg: number
-  qty_committed_kg: number
-  accepted_kg?: number
-  price_per_kg: number
-  delivery_date: string
-  delivery_location?: string | null
-  status?: string
-  order_tier?: string
-  review_status?: string | null
-  admin_note?: string | null
-  buyer_name?: string | null
-  farmer_acceptance_status?: string | null
-  allocated_farmer_name?: string | null
-  is_mine?: boolean
-  purpose?: string | null
-  created_at?: string
-  matchesMyCrop?: boolean
+  area: string
+  expectedQtyKg: number
+  harvestPeriod: string
+  location: string
+  status: string
 }
 
-type FarmerTabKey = 'home' | 'demands' | 'crops' | 'supply' | 'payments'
-type SupplySubTabKey = 'requests' | 'handover' | 'deliveries'
+export interface ExpectedHarvestEntry {
+  id: string
+  crop: string
+  expectedQtyKg: number
+  harvestDate: string
+  status: 'Growing' | 'Vegetative' | 'Flowering' | 'Ripening' | 'Ready for Harvest'
+  plotLocation: string
+}
+
+export interface MyProduceBatch {
+  id: string
+  crop: string
+  declaredQtyKg: number
+  harvestDate: string
+  collectionStatus: 'Ready for Collection' | 'Collection Requested' | 'Scheduled' | 'Collected'
+  verificationStatus: 'Pending Weighbridge' | 'Grade A (GradeCam)' | 'Grade B' | 'Verified'
+  notes?: string
+}
+
+export interface CollectionHandoverRecord {
+  id: string
+  requestId: string
+  fpoName: string
+  collectionCentre: string
+  dateTimeSlot: string
+  crop: string
+  quantityKg: number
+  status: 'Requested' | 'Scheduled' | 'Handed Over' | 'Weighed & Verified'
+  verifiedGrossKg?: number
+  acceptedKg?: number
+  grade?: string
+}
+
+export interface FarmerNotification {
+  id: string
+  title: string
+  detail: string
+  category: 'collection' | 'payment' | 'quality' | 'demand'
+  time: string
+  unread: boolean
+}
 
 export function FarmerDashboardView({
   order: activeOrderProp,
@@ -87,7 +134,6 @@ export function FarmerDashboardView({
   lang,
   activeNav,
   onNavigate,
-  onAcceptCommitment,
   onDeclareHarvest,
   onOpenVoice,
   onOpenReceipt,
@@ -95,9 +141,9 @@ export function FarmerDashboardView({
   aiResult,
   busy,
 }: FarmerDashboardViewProps) {
-  // Primary 5-Tab Navigation (Home · Buyer Demands · My Crops · Handover & Passes · Payments)
+  // Primary 9-Tab Navigation:
+  // Home · Crop Registry · Upcoming Demand · Expected Harvest · My Produce · Collection/Handover · Logistics Status · Payments/Passbook · Notifications
   const [activeTab, setActiveTab] = useState<FarmerTabKey>('home')
-  const [supplySubTab, setSupplySubTab] = useState<SupplySubTabKey>('requests')
 
   // Real data state from server
   const [me, setMe] = useState<FarmerOverview | null>(null)
@@ -106,27 +152,42 @@ export function FarmerDashboardView({
   const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
 
   // Local interactive states
-  const [supplyRequestAccepted, setSupplyRequestAccepted] = useState(false)
   const [showGradeCam, setShowGradeCam] = useState(false)
   const [isProcessingAction, setIsProcessingAction] = useState(false)
-
-  // Buyer demands interactive states
-  const [selectedOrderForCommit, setSelectedOrderForCommit] = useState<string | null>(null)
-  const [committedQuantities, setCommittedQuantities] = useState<Record<string, number>>({})
-  const [demandFilter, setDemandFilter] = useState<'all' | 'matching'>('all')
   const [demandCropFilter, setDemandCropFilter] = useState<string>('ALL')
 
-  // Synchronize sidebar navigation with internal farmer tabs
+  // Modals
+  const [isRequestCollectionModalOpen, setIsRequestCollectionModalOpen] = useState(false)
+  const [isAddPlotModalOpen, setIsAddPlotModalOpen] = useState(false)
+  const [selectedBatchForCollection, setSelectedBatchForCollection] = useState<string>('')
+
+  // New Collection Request Form State
+  const [collectionFormCrop, setCollectionFormCrop] = useState('TOMATO')
+  const [collectionFormQty, setCollectionFormQty] = useState('400')
+  const [collectionFormDate, setCollectionFormDate] = useState('2026-09-24')
+  const [collectionFormSlot, setCollectionFormSlot] = useState('Morning (8:00 AM – 10:00 AM)')
+  const [collectionFormNotes, setCollectionFormNotes] = useState('')
+
+  // New Plot Registration Form State
+  const [newPlotCrop, setNewPlotCrop] = useState('TOMATO')
+  const [newPlotArea, setNewPlotArea] = useState('1.5 Acres')
+  const [newPlotQty, setNewPlotQty] = useState('2000')
+  const [newPlotPeriod, setNewPlotPeriod] = useState('20–25 Sep 2026')
+  const [newPlotLocation, setNewPlotLocation] = useState('Plot 01 — North Canal')
+
+  // Notification Filter State
+  const [notificationFilter, setNotificationFilter] = useState<'all' | 'collection' | 'payment' | 'quality'>('all')
+
+  // Synchronize sidebar navigation with 9 internal farmer tabs
   useEffect(() => {
     if (activeNav === 'Orders') {
-      setActiveTab('demands')
+      setActiveTab('demand')
     } else if (activeNav === 'Overview') {
       setActiveTab('home')
     } else if (activeNav === 'Collection & grade') {
-      setActiveTab('crops')
-      setShowGradeCam(true)
+      setActiveTab('my_produce')
     } else if (activeNav === 'Settlements') {
-      setActiveTab('payments')
+      setActiveTab('passbook')
     }
   }, [activeNav])
 
@@ -152,7 +213,7 @@ export function FarmerDashboardView({
 
   useEffect(() => {
     load()
-    const timer = setInterval(load, 12000)
+    const timer = setInterval(load, 15000)
 
     const handleSync = () => load()
     window.addEventListener('agrilink:harvest-updated', handleSync)
@@ -187,223 +248,286 @@ export function FarmerDashboardView({
   const village = me?.farmer?.village || 'Anand Rural'
   const collectionCentre = `${fpoName} - Collection Hub #1`
 
-  // Sourcing & Offer derivations
-  const latestOffer = me?.offers && me.offers.length > 0 ? me.offers[0] : null
-  const activeCommitment = me?.commitments && me.commitments.length > 0 ? me.commitments[0] : null
-  const latestSale = me?.sales && me.sales.length > 0 ? me.sales[0] : null
-
   // Financial summary numbers
   const totalSettledNet = me?.summary?.settledNet && me.summary.settledNet > 0 ? me.summary.settledNet : 11520
-  const totalCommittedKg = me?.summary?.committedKg && me.summary.committedKg > 0 ? me.summary.committedKg : 400
   const mandiGain = me?.summary?.mandiComparison?.gain ?? 2160
 
-  // Real API Actions
-  async function handleAcceptSupplyRequest(orderId?: string) {
-    setIsProcessingAction(true)
-    try {
-      const targetId = orderId || activeOrderProp?.id || latestOffer?.orderId
-      if (targetId) {
-        const res = await fetch(`/api/orders/${targetId}/action`, {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ action: 'farmer_accept' }),
-        }).catch(() => null)
-        if (res && res.ok) {
-          const data = await res.json().catch(() => null)
-          flash('ok', data?.message || 'Supply Request Accepted! Handover pass confirmed.')
-        } else {
-          flash('ok', 'Supply Request Accepted! Handover pass confirmed.')
-        }
-      } else {
-        flash('ok', 'Supply Request Accepted! Handover pass confirmed.')
-      }
-      setSupplyRequestAccepted(true)
-      onAcceptCommitment?.()
-      setSupplySubTab('handover')
-      await load()
-    } catch {
-      setSupplyRequestAccepted(true)
-      flash('ok', 'Supply Request Accepted! Handover pass confirmed.')
-      setSupplySubTab('handover')
-    } finally {
-      setIsProcessingAction(false)
-    }
-  }
+  // 1. Crop Registry Initial / Live Data
+  const [cropRegistry, setCropRegistry] = useState<CropRegistryEntry[]>([
+    {
+      id: 'reg-1',
+      crop: 'TOMATO',
+      area: '1.5 Acres',
+      expectedQtyKg: 2000,
+      harvestPeriod: '20–25 Sep 2026',
+      location: 'Plot 01 — North Canal, Anand Rural',
+      status: 'Active Cultivation',
+    },
+    {
+      id: 'reg-2',
+      crop: 'PADDY',
+      area: '2.0 Acres',
+      expectedQtyKg: 3500,
+      harvestPeriod: '15–25 Oct 2026',
+      location: 'Plot 02 — East Field, Anand Rural',
+      status: 'Growing / Vegetative',
+    },
+  ])
 
-  async function handleDeclineSupplyRequest(orderId?: string) {
-    setIsProcessingAction(true)
-    try {
-      const targetId = orderId || activeOrderProp?.id || latestOffer?.orderId
-      if (targetId) {
-        const res = await fetch(`/api/orders/${targetId}/action`, {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ action: 'farmer_reject' }),
-        }).catch(() => null)
-        const data = res ? await res.json().catch(() => null) : null
-        flash('ok', data?.message || 'Request declined. Automatically routed to next nearest FPO member.')
-      } else {
-        flash('ok', 'Request declined. Automatically routed to next nearest FPO member.')
-      }
-      await load()
-    } catch {
-      flash('ok', 'Request declined. Automatically routed to next nearest FPO member.')
-    } finally {
-      setIsProcessingAction(false)
-    }
-  }
+  // 2. Expected Harvest (Planning Data, NOT inventory)
+  const [expectedHarvests, setExpectedHarvests] = useState<ExpectedHarvestEntry[]>([
+    {
+      id: 'exp-1',
+      crop: 'TOMATO',
+      expectedQtyKg: 2000,
+      harvestDate: '20–25 Sep 2026',
+      status: 'Ripening',
+      plotLocation: 'Plot 01 — North Canal',
+    },
+    {
+      id: 'exp-2',
+      crop: 'PADDY',
+      expectedQtyKg: 3500,
+      harvestDate: '15–25 Oct 2026',
+      status: 'Vegetative',
+      plotLocation: 'Plot 02 — East Field',
+    },
+    {
+      id: 'exp-3',
+      crop: 'WHEAT',
+      expectedQtyKg: 1800,
+      harvestDate: '10–20 Nov 2026',
+      status: 'Growing',
+      plotLocation: 'Plot 03 — Tube Well Side',
+    },
+  ])
 
-  // Action to commit supply to any buyer order
-  async function handleCommitProduce(order: FarmerDemandOrder, qtyKg: number) {
-    setIsProcessingAction(true)
-    try {
-      const res = await fetch(`/api/orders/${order.id}/action`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          action: 'farmer_commit',
-          committedKg: qtyKg,
-          farmerId: me?.farmer?.id,
-        }),
-      }).catch(() => null)
+  // 3. My Produce (Actual Harvested / Offered Produce)
+  const [myProduce, setMyProduce] = useState<MyProduceBatch[]>([
+    {
+      id: 'prod-1',
+      crop: 'TOMATO',
+      declaredQtyKg: 400,
+      harvestDate: '2026-09-22',
+      collectionStatus: 'Scheduled',
+      verificationStatus: 'Grade A (GradeCam)',
+      notes: 'Picked and graded in 25kg standard crates. Ready at farm gate.',
+    },
+    {
+      id: 'prod-2',
+      crop: 'TOMATO',
+      declaredQtyKg: 350,
+      harvestDate: '2026-09-23',
+      collectionStatus: 'Ready for Collection',
+      verificationStatus: 'Pending Weighbridge',
+      notes: 'Second picking. Clean sorting complete.',
+    },
+  ])
 
-      if (res && res.ok) {
-        const data = await res.json().catch(() => null)
-        flash('ok', data?.message || `Committed ${qtyKg} kg for Order #${order.code}! Handover pass generated.`)
-      } else {
-        const fallbackRes = await fetch(`/api/orders/${order.id}/action`, {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ action: 'farmer_accept', farmerId: me?.farmer?.id }),
-        }).catch(() => null)
-        if (fallbackRes && fallbackRes.ok) {
-          flash('ok', `Committed ${qtyKg} kg for Order #${order.code}! Handover pass generated.`)
-        } else {
-          flash('ok', `Committed ${qtyKg} kg for Order #${order.code}! Handover pass generated.`)
-        }
-      }
+  // 4. Collection / Handover Records
+  const [collectionHandovers, setCollectionHandovers] = useState<CollectionHandoverRecord[]>([
+    {
+      id: 'col-1',
+      requestId: 'REQ-COL-1042',
+      fpoName: fpoName,
+      collectionCentre: collectionCentre,
+      dateTimeSlot: '24 Sep 2026 • 8:00 AM – 10:00 AM',
+      crop: 'TOMATO',
+      quantityKg: 400,
+      status: 'Scheduled',
+      verifiedGrossKg: 392,
+      acceptedKg: 392,
+      grade: 'Grade A',
+    },
+    {
+      id: 'col-2',
+      requestId: 'REQ-COL-0918',
+      fpoName: fpoName,
+      collectionCentre: collectionCentre,
+      dateTimeSlot: '15 Sep 2026 • 9:00 AM – 11:00 AM',
+      crop: 'POTATO',
+      quantityKg: 500,
+      status: 'Weighed & Verified',
+      verifiedGrossKg: 494,
+      acceptedKg: 494,
+      grade: 'Grade A',
+    },
+  ])
 
-      setSupplyRequestAccepted(true)
-      onAcceptCommitment?.()
-      setSelectedOrderForCommit(null)
-      setActiveTab('supply')
-      setSupplySubTab('handover')
-      await load()
-    } catch {
-      flash('ok', `Committed ${qtyKg} kg for Order #${order.code}! Handover pass generated.`)
-      setSupplyRequestAccepted(true)
-      setActiveTab('supply')
-      setSupplySubTab('handover')
-    } finally {
-      setIsProcessingAction(false)
-    }
-  }
+  // 5. Notifications List
+  const [notifications, setNotifications] = useState<FarmerNotification[]>([
+    {
+      id: 'notif-1',
+      title: 'Handover Slot Confirmed for 24 Sep',
+      detail: `Your collection slot for 400 kg Tomato is booked at ${collectionCentre} between 8:00 AM – 10:00 AM.`,
+      category: 'collection',
+      time: '2 hours ago',
+      unread: true,
+    },
+    {
+      id: 'notif-2',
+      title: 'GradeCam Quality Check: Grade A',
+      detail: 'Lot LOT-TOM-0924 certified as Grade A (94% visual confidence). Premium farmgate rate applies.',
+      category: 'quality',
+      time: 'Yesterday',
+      unread: true,
+    },
+    {
+      id: 'notif-3',
+      title: 'Net Settlement Credited: ₹11,520',
+      detail: 'Disbursement for accepted 392 kg Tomato lot credited to State Bank of India A/c (...4920). Ref: AGR-2026-98124.',
+      category: 'payment',
+      time: '2 days ago',
+      unread: false,
+    },
+    {
+      id: 'notif-4',
+      title: 'Kharif Demand Forecast Updated',
+      detail: 'Institutional mid-day meal programs in Anand district increased Paddy demand forecast by 15%.',
+      category: 'demand',
+      time: '3 days ago',
+      unread: false,
+    },
+  ])
 
-  // Pre-processed list of buyer demands with matching crop flags & fallback
-  const displayOrders = useMemo(() => {
-    const registeredCrops = new Set(
-      (me?.registry || []).map((r) => r.crop.toUpperCase())
-    )
-
-    const baseOrders: FarmerDemandOrder[] = (orders.length > 0 ? orders : [
+  // Upcoming Demand Forecast Data
+  const upcomingDemandData = useMemo(() => {
+    return [
       {
-        id: 'ord-fallback-1',
-        code: 'AG-1001',
-        crop: 'PADDY',
-        qty_target_kg: 1000,
-        qty_committed_kg: 500,
-        accepted_kg: 0,
-        price_per_kg: 28,
-        delivery_date: '2025-10-24',
-        delivery_location: 'PM POSHAN Central Kitchen, Anand',
-        status: 'SOURCING',
-        order_tier: 'BULK',
-        review_status: 'approved',
-        admin_note: null,
-        buyer_name: 'PM POSHAN Central Kitchen',
-        farmer_acceptance_status: null,
-        allocated_farmer_name: null,
-        is_mine: false,
-        purpose: 'Institutional mid-day meal nutrition program',
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'ord-fallback-2',
-        code: 'AG-1002',
+        id: 'dem-1',
         crop: 'TOMATO',
-        qty_target_kg: 400,
-        qty_committed_kg: 0,
-        accepted_kg: 0,
-        price_per_kg: 30,
-        delivery_date: '2025-09-25',
-        delivery_location: 'District Civil Hospital Mess',
-        status: 'POSTED',
-        order_tier: 'SMALL',
-        review_status: null,
-        admin_note: null,
-        buyer_name: 'District Hospital Dietary Section',
-        farmer_acceptance_status: 'PENDING',
-        allocated_farmer_name: farmerName,
-        is_mine: false,
-        purpose: 'Fresh daily kitchen inpatient supply',
-        created_at: new Date().toISOString(),
+        predictedDemandKg: 2400,
+        forecastPeriod: '24 Sep – 22 Oct 2026 (Next 4 Weeks)',
+        confidence: 94,
+        confidenceLevel: 'High Confidence',
+        dataSource: 'PM POSHAN Central Kitchens & District Civil Hospital',
+        indicativePriceRange: '₹28.00 – ₹32.00 / kg',
+        mandiBenchmark: '₹24.50 / kg',
       },
       {
-        id: 'ord-fallback-3',
-        code: 'AG-1003',
+        id: 'dem-2',
+        crop: 'PADDY',
+        predictedDemandKg: 6500,
+        forecastPeriod: '01 Oct – 31 Oct 2026 (Next 4 Weeks)',
+        confidence: 91,
+        confidenceLevel: 'High Confidence',
+        dataSource: 'State Fair Price Shops & Anganwadi Nutrition Hubs',
+        indicativePriceRange: '₹26.00 – ₹29.50 / kg',
+        mandiBenchmark: '₹23.00 / kg',
+      },
+      {
+        id: 'dem-3',
         crop: 'WHEAT',
-        qty_target_kg: 2000,
-        qty_committed_kg: 1200,
-        accepted_kg: 0,
-        price_per_kg: 32.5,
-        delivery_date: '2025-11-10',
-        delivery_location: 'Hostel Mess Group Purchase',
-        status: 'SOURCING',
-        order_tier: 'BULK',
-        review_status: 'approved',
-        admin_note: null,
-        buyer_name: 'Vallabh Vidyanagar Student Mess Cooperative',
-        farmer_acceptance_status: null,
-        allocated_farmer_name: null,
-        is_mine: false,
-        purpose: 'Weekly whole wheat grain supply',
-        created_at: new Date().toISOString(),
+        predictedDemandKg: 4800,
+        forecastPeriod: '15 Oct – 15 Nov 2026 (Next 4 Weeks)',
+        confidence: 88,
+        confidenceLevel: 'Medium-High',
+        dataSource: 'Student Mess Cooperatives & Regional Ration Depot',
+        indicativePriceRange: '₹31.00 – ₹34.00 / kg',
+        mandiBenchmark: '₹28.00 / kg',
       },
       {
-        id: 'ord-fallback-4',
-        code: 'AG-1004',
+        id: 'dem-4',
         crop: 'POTATO',
-        qty_target_kg: 600,
-        qty_committed_kg: 200,
-        accepted_kg: 0,
-        price_per_kg: 22,
-        delivery_date: '2025-10-05',
-        delivery_location: 'Community Food Bank',
-        status: 'SOURCING',
-        order_tier: 'BULK',
-        review_status: 'approved',
-        admin_note: null,
-        buyer_name: 'State Welfare Mess & Community Kitchen',
-        farmer_acceptance_status: null,
-        allocated_farmer_name: null,
-        is_mine: false,
-        purpose: 'Weekly community ration',
-        created_at: new Date().toISOString(),
+        predictedDemandKg: 3200,
+        forecastPeriod: '28 Sep – 26 Oct 2026 (Next 4 Weeks)',
+        confidence: 90,
+        confidenceLevel: 'High Confidence',
+        dataSource: 'Community Food Kitchens & Civil Mess Supply',
+        indicativePriceRange: '₹20.00 – ₹23.50 / kg',
+        mandiBenchmark: '₹17.50 / kg',
       },
-    ]) as FarmerDemandOrder[]
+    ]
+  }, [])
 
-    return baseOrders
-      .map((o) => ({
-        ...o,
-        matchesMyCrop: registeredCrops.has(o.crop.toUpperCase()) || o.crop.toUpperCase() === 'TOMATO' || o.crop.toUpperCase() === 'PADDY',
-      }))
-      .filter((o) => {
-        if (demandFilter === 'matching' && !o.matchesMyCrop) return false
-        if (demandCropFilter !== 'ALL' && o.crop.toUpperCase() !== demandCropFilter) return false
-        return true
-      })
-      .sort((a, b) => (b.matchesMyCrop ? 1 : 0) - (a.matchesMyCrop ? 1 : 0))
-  }, [orders, me?.registry, demandFilter, demandCropFilter, farmerName])
+  // Handle Collection Request Submission (Primary CTA)
+  const handleSubmitCollectionRequest = (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsProcessingAction(true)
+
+    const newReqId = `REQ-COL-${Math.floor(1000 + Math.random() * 9000)}`
+    const newRecord: CollectionHandoverRecord = {
+      id: `col-${Date.now()}`,
+      requestId: newReqId,
+      fpoName: fpoName,
+      collectionCentre: collectionCentre,
+      dateTimeSlot: `${collectionFormDate} • ${collectionFormSlot}`,
+      crop: collectionFormCrop,
+      quantityKg: Number(collectionFormQty) || 400,
+      status: 'Requested',
+    }
+
+    setCollectionHandovers((prev) => [newRecord, ...prev])
+
+    // Update batch status if linked
+    if (selectedBatchForCollection) {
+      setMyProduce((prev) =>
+        prev.map((b) =>
+          b.id === selectedBatchForCollection
+            ? { ...b, collectionStatus: 'Collection Requested' }
+            : b
+        )
+      )
+    }
+
+    // Add notification
+    const newNotif: FarmerNotification = {
+      id: `notif-${Date.now()}`,
+      title: `Collection Requested (#${newReqId})`,
+      detail: `Your request to collect ${collectionFormQty} kg of ${cropName(collectionFormCrop, lang)} has been sent to ${fpoName}. The FPO will schedule your handover slot shortly.`,
+      category: 'collection',
+      time: 'Just now',
+      unread: true,
+    }
+    setNotifications((prev) => [newNotif, ...prev])
+
+    setIsProcessingAction(false)
+    setIsRequestCollectionModalOpen(false)
+    flash('ok', `Collection requested successfully! Request ID: ${newReqId}`)
+  }
+
+  // Handle Adding New Plot to Crop Registry
+  const handleAddPlot = (e: React.FormEvent) => {
+    e.preventDefault()
+    const newEntry: CropRegistryEntry = {
+      id: `reg-${Date.now()}`,
+      crop: newPlotCrop,
+      area: newPlotArea,
+      expectedQtyKg: Number(newPlotQty) || 1000,
+      harvestPeriod: newPlotPeriod,
+      location: `${newPlotLocation}, ${village}`,
+      status: 'Active Cultivation',
+    }
+    setCropRegistry((prev) => [...prev, newEntry])
+
+    // Also add to Expected Harvest planning
+    const newExp: ExpectedHarvestEntry = {
+      id: `exp-${Date.now()}`,
+      crop: newPlotCrop,
+      expectedQtyKg: Number(newPlotQty) || 1000,
+      harvestDate: newPlotPeriod,
+      status: 'Growing',
+      plotLocation: newPlotLocation,
+    }
+    setExpectedHarvests((prev) => [...prev, newExp])
+
+    setIsAddPlotModalOpen(false)
+    flash('ok', `Crop plot registered successfully for ${cropName(newPlotCrop, lang)}!`)
+  }
+
+  // Filtered demands
+  const filteredDemands = useMemo(() => {
+    if (demandCropFilter === 'ALL') return upcomingDemandData
+    return upcomingDemandData.filter((d) => d.crop === demandCropFilter)
+  }, [upcomingDemandData, demandCropFilter])
+
+  // Filtered notifications
+  const filteredNotifications = useMemo(() => {
+    if (notificationFilter === 'all') return notifications
+    return notifications.filter((n) => n.category === notificationFilter)
+  }, [notifications, notificationFilter])
+
+  const unreadCount = notifications.filter((n) => n.unread).length
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-5 font-sans text-slate-900 pb-16">
@@ -420,15 +544,21 @@ export function FarmerDashboardView({
       )}
 
       {/* ========================================================================= */}
-      {/* 5-TAB PRIMARY NAVIGATION (Home · Demands · Crops · Handover · Payments)     */}
+      {/* 9-TAB PRIMARY NAVIGATION                                                  */}
+      {/* Home · Crop Registry · Upcoming Demand · Expected Harvest · My Produce ·   */}
+      {/* Collection/Handover · Logistics Status · Payments/Passbook · Notifications */}
       {/* ========================================================================= */}
-      <nav aria-label="Farmer Navigation" className="bg-white rounded-2xl shadow-xs border border-slate-200 p-1.5 flex items-center justify-between gap-1 overflow-x-auto">
+      <nav aria-label="Farmer Navigation" className="bg-white rounded-2xl shadow-xs border border-slate-200 p-1.5 flex items-center gap-1 overflow-x-auto">
         {[
-          { key: 'home', label: 'Home', icon: Wheat, desc: 'Overview & Next Actions' },
-          { key: 'demands', label: 'Buyer Demands', icon: ShoppingBag, desc: 'Open Orders & Rates', badge: displayOrders.length },
-          { key: 'crops', label: 'My Crops', icon: Sprout, desc: 'Registered Plots & AI Check' },
-          { key: 'supply', label: 'Handover & Passes', icon: QrCode, desc: 'Collection Hub QR Slips' },
-          { key: 'payments', label: 'Passbook', icon: CircleDollarSign, desc: 'Net Settlement' },
+          { key: 'home', label: 'Home', icon: Wheat },
+          { key: 'registry', label: 'Crop Registry', icon: Sprout },
+          { key: 'demand', label: 'Upcoming Demand', icon: TrendingUp },
+          { key: 'expected_harvest', label: 'Expected Harvest', icon: Calendar },
+          { key: 'my_produce', label: 'My Produce', icon: Package },
+          { key: 'handover', label: 'Collection/Handover', icon: QrCode },
+          { key: 'logistics', label: 'Logistics Status', icon: Truck },
+          { key: 'passbook', label: 'Payments/Passbook', icon: Receipt },
+          { key: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
         ].map((tab) => {
           const IconComp = tab.icon
           const isCurrent = activeTab === tab.key
@@ -440,12 +570,11 @@ export function FarmerDashboardView({
               onClick={() => {
                 setActiveTab(tab.key as FarmerTabKey)
                 if (tab.key === 'home') onNavigate('Overview')
-                else if (tab.key === 'demands') onNavigate('Orders')
-                else if (tab.key === 'crops') onNavigate('Collection & grade')
-                else if (tab.key === 'supply') onNavigate('Overview')
-                else if (tab.key === 'payments') onNavigate('Settlements')
+                else if (tab.key === 'demand') onNavigate('Orders')
+                else if (tab.key === 'my_produce') onNavigate('Collection & grade')
+                else if (tab.key === 'passbook') onNavigate('Settlements')
               }}
-              className={`flex-1 py-3 px-2 sm:px-3 rounded-xl transition-all flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 ${
+              className={`flex-1 min-w-[90px] py-2.5 px-2 rounded-xl transition-all flex flex-col items-center justify-center gap-1 ${
                 isCurrent
                   ? 'bg-emerald-700 text-white shadow-xs font-bold'
                   : 'text-slate-600 hover:bg-slate-100 font-medium'
@@ -455,42 +584,36 @@ export function FarmerDashboardView({
                 <IconComp className="w-4 h-4 shrink-0" />
                 {tab.badge ? (
                   <span
-                    className={`absolute -top-1.5 -right-2 text-[9px] font-black px-1.5 py-0.2 rounded-full ${
-                      isCurrent ? 'bg-white text-emerald-800' : 'bg-emerald-700 text-white'
+                    className={`absolute -top-1.5 -right-2.5 text-[9px] font-black px-1.5 py-0.2 rounded-full ${
+                      isCurrent ? 'bg-white text-emerald-800' : 'bg-red-600 text-white'
                     }`}
                   >
                     {tab.badge}
                   </span>
                 ) : null}
               </div>
-              <div className="text-center sm:text-left">
-                <span className="text-xs sm:text-sm block leading-none whitespace-nowrap">{tab.label}</span>
-                <span
-                  className={`text-[10px] hidden md:block mt-0.5 ${
-                    isCurrent ? 'text-emerald-100' : 'text-slate-400'
-                  }`}
-                >
-                  {tab.desc}
-                </span>
-              </div>
+              <span className="text-[11px] sm:text-xs block leading-tight text-center whitespace-nowrap">
+                {tab.label}
+              </span>
             </button>
           )
         })}
       </nav>
 
       {/* ========================================================================= */}
-      {/* TAB 1: FARMER HOME                                                        */}
-      {/* Three essential questions: What to do? Where to take? Latest status?      */}
+      {/* 1. HOME                                                                   */}
+      {/* Name, verification, produce summary, demand summary, collection status,    */}
+      {/* payment summary, relevant notifications. Keep simple; no unnecessary graphs*/}
       {/* ========================================================================= */}
       {activeTab === 'home' && (
-        <div className="space-y-5">
-          {/* Welcome Header */}
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Welcome & Verification Banner */}
           <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs">
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-700" />
-                  Verified FPO Farmer
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+                  Aadhaar & FPO Verified Farmer
                 </span>
                 <span className="text-xs text-slate-500 font-medium">
                   {village} • {fpoName}
@@ -500,7 +623,7 @@ export function FarmerDashboardView({
                 Namaste, {farmerName} 👋
               </h1>
               <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                Direct farm-gate aggregation. Buyer orders are pooled transparently; you confirm simple handovers at your local collection centre.
+                Direct farmgate aggregation portal. Monitor your registered plots, harvest ready produce, collection handover slots, and transparent bank passbook.
               </p>
             </div>
 
@@ -517,7 +640,7 @@ export function FarmerDashboardView({
               <button
                 type="button"
                 onClick={() => {
-                  setActiveTab('crops')
+                  setActiveTab('my_produce')
                   setShowGradeCam(true)
                 }}
                 className="px-3.5 py-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
@@ -527,284 +650,331 @@ export function FarmerDashboardView({
               </button>
               <button
                 type="button"
-                onClick={onDeclareHarvest}
-                className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Declare Harvest
-              </button>
-            </div>
-          </div>
-
-          {/* Three Immediate Farmer Questions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 1. What do I need to do? */}
-            <div className="bg-amber-50/90 border border-amber-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded">
-                    Action Needed
-                  </span>
-                  <Clock className="w-4 h-4 text-amber-700" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900">
-                  {latestOffer ? `${cropName(latestOffer.crop, lang)} — ${latestOffer.availableKg || 400} kg Request` : 'Tomato — 400 kg Request'}
-                </h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  {latestOffer
-                    ? `A buyer order is reserved against your ready harvest at guaranteed ₹${latestOffer.pricePerKg}/kg.`
-                    : 'A verified buyer order is waiting for confirmation against your ready harvest.'}
-                </p>
-              </div>
-              <button
-                type="button"
                 onClick={() => {
-                  setActiveTab('demands')
-                  onNavigate('Orders')
+                  setActiveTab('my_produce')
+                  setIsRequestCollectionModalOpen(true)
                 }}
-                className="mt-4 text-xs font-bold text-amber-900 hover:text-amber-950 flex items-center gap-1.5"
+                className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black shadow-xs flex items-center gap-1.5 transition-colors"
               >
-                Review Buyer Demands <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* 2. Where do I take it? */}
-            <div className="bg-blue-50/90 border border-blue-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-blue-800 bg-blue-200/80 px-2 py-0.5 rounded">
-                    Handover Location
-                  </span>
-                  <MapPin className="w-4 h-4 text-blue-700" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900">24 Sep • 8–10 AM</h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  {collectionCentre}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('supply')
-                  setSupplySubTab('handover')
-                }}
-                className="mt-4 text-xs font-bold text-blue-900 hover:text-blue-950 flex items-center gap-1.5"
-              >
-                View Handover Slip & QR <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* 3. What happened to my produce? */}
-            <div className="bg-emerald-50/90 border border-emerald-200 p-5 rounded-2xl shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded">
-                    Latest Produce Status
-                  </span>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                </div>
-                <h3 className="text-base font-extrabold text-slate-900">392 kg Accepted (Grade A)</h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  Weighed & verified by FPO. Payment of {formatINR(totalSettledNet)} credited to your verified bank account.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('payments')}
-                className="mt-4 text-xs font-bold text-emerald-900 hover:text-emerald-950 flex items-center gap-1.5"
-              >
-                View Passbook & Net Settlement <ArrowRight className="w-3.5 h-3.5" />
+                <Truck className="w-4 h-4" />
+                Request Collection
               </button>
             </div>
           </div>
 
-          {/* Financial & Performance Snapshot */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Net Payments Credited</span>
-              <p className="mt-1 text-2xl font-black text-emerald-800">{formatINR(totalSettledNet)}</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Disbursed directly via bank passbook</p>
+          {/* Simple Structured Operational Overview (No unnecessary graphs) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Produce Summary */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Produce Summary</span>
+                  <Package className="w-4 h-4 text-emerald-700" />
+                </div>
+                <div className="text-xl font-black text-slate-900">
+                  {myProduce.reduce((s, p) => s + p.declaredQtyKg, 0)} kg Ready
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {cropRegistry.length} active plots registered ({expectedHarvests.reduce((s, e) => s + e.expectedQtyKg, 0)} kg estimated)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('my_produce')}
+                className="mt-4 text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+              >
+                View My Produce <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Committed Supply</span>
-              <p className="mt-1 text-2xl font-black text-slate-900">{formatKg(totalCommittedKg)}</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Locked to confirmed buyer contracts</p>
+            {/* 2. Demand Summary */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Demand Forecast</span>
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="text-xl font-black text-blue-900">
+                  16,900 kg District Demand
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  PM POSHAN & Fair Price Shops. Indicative +₹3–₹5/kg over mandi.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('demand')}
+                className="mt-4 text-xs font-bold text-blue-700 hover:text-blue-800 flex items-center gap-1"
+              >
+                Upcoming Demand <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Mandi Price Advantage</span>
-              <p className="mt-1 text-2xl font-black text-emerald-700">+{formatINR(mandiGain)}</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">Agreed rate ₹30/kg vs Mandi ₹24.50/kg</p>
+            {/* 3. Collection Status */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Collection Status</span>
+                  <Clock className="w-4 h-4 text-amber-600" />
+                </div>
+                <div className="text-xl font-black text-slate-900">
+                  24 Sep • 8–10 AM
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Slot scheduled at {collectionCentre}. 400 kg lot.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('handover')}
+                className="mt-4 text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1"
+              >
+                View Handover Pass <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* 4. Payment Summary */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Settled Net Credited</span>
+                  <CircleDollarSign className="w-4 h-4 text-emerald-700" />
+                </div>
+                <div className="text-xl font-black text-emerald-800">
+                  {formatINR(totalSettledNet)}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Direct bank credit to SBI A/c (...4920). Mandi gain +{formatINR(mandiGain)}.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('passbook')}
+                className="mt-4 text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+              >
+                Open Passbook Ledger <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
-          {/* Quick Shortcuts */}
+          {/* Quick Navigation Cards */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Quick Navigation</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+              Farmer Action Center
+            </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 type="button"
-                onClick={() => setActiveTab('crops')}
-                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-colors"
-              >
-                <Sprout className="w-5 h-5 text-emerald-700 mb-2" />
-                <h4 className="text-xs font-bold text-slate-900">My Crops</h4>
-                <p className="text-[11px] text-slate-500">View registered farm plots</p>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => {
-                  setActiveTab('demands')
-                  onNavigate('Orders')
+                  setActiveTab('my_produce')
+                  setIsRequestCollectionModalOpen(true)
                 }}
-                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-colors"
+                className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/60 text-left transition-colors"
               >
-                <ShoppingBag className="w-5 h-5 text-emerald-700 mb-2" />
-                <h4 className="text-xs font-bold text-slate-900">Buyer Demands</h4>
-                <p className="text-[11px] text-slate-500">Live institutional orders</p>
+                <Truck className="w-5 h-5 text-emerald-700 mb-1.5" />
+                <h4 className="text-xs font-bold text-slate-900">Request Collection</h4>
+                <p className="text-[11px] text-slate-500">Submit ready harvest for pickup</p>
               </button>
 
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('supply')
-                  setSupplySubTab('handover')
-                }}
-                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-colors"
+                onClick={() => setActiveTab('registry')}
+                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30 text-left transition-colors"
               >
-                <QrCode className="w-5 h-5 text-emerald-700 mb-2" />
-                <h4 className="text-xs font-bold text-slate-900">Handover Pass</h4>
-                <p className="text-[11px] text-slate-500">Collection center QR slip</p>
+                <Sprout className="w-5 h-5 text-emerald-700 mb-1.5" />
+                <h4 className="text-xs font-bold text-slate-900">Crop Registry</h4>
+                <p className="text-[11px] text-slate-500">View & add farm plots</p>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('payments')}
-                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/50 text-left transition-colors"
+                onClick={() => setActiveTab('demand')}
+                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30 text-left transition-colors"
               >
-                <Receipt className="w-5 h-5 text-emerald-700 mb-2" />
-                <h4 className="text-xs font-bold text-slate-900">Payments & Passbook</h4>
-                <p className="text-[11px] text-slate-500">Settlements & deductions</p>
+                <TrendingUp className="w-5 h-5 text-blue-600 mb-1.5" />
+                <h4 className="text-xs font-bold text-slate-900">Upcoming Demand</h4>
+                <p className="text-[11px] text-slate-500">Institutional forecast signals</p>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('handover')}
+                className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/30 text-left transition-colors"
+              >
+                <QrCode className="w-5 h-5 text-purple-600 mb-1.5" />
+                <h4 className="text-xs font-bold text-slate-900">Handover Slip & QR</h4>
+                <p className="text-[11px] text-slate-500">Entry pass for FPO hub</p>
+              </button>
+            </div>
+          </div>
+
+          {/* Recent Relevant Notifications */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-emerald-700" />
+                <h3 className="text-sm font-extrabold text-slate-900">Recent Alerts & Notifications</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('notifications')}
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800"
+              >
+                View All ({notifications.length}) →
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {notifications.slice(0, 3).map((n) => (
+                <div
+                  key={n.id}
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-start justify-between gap-3 text-xs"
+                >
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-slate-900">{n.title}</p>
+                    <p className="text-slate-600 text-[11px] leading-relaxed">{n.detail}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 shrink-0">{n.time}</span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: BUYER DEMANDS (Simplified & Friendly for Farmers)                  */}
-      {/* Direct institutional procurement with guaranteed farmgate prices          */}
+      {/* 2. CROP REGISTRY                                                          */}
+      {/* Crop, area, expected quantity, harvest period/location.                    */}
       {/* ========================================================================= */}
-      {activeTab === 'demands' && (
-        <div className="space-y-5">
-          {/* Header Banner */}
+      {activeTab === 'registry' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
           <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                  Guaranteed Purchase Prices
-                </span>
-                <span className="text-xs text-slate-500 font-medium">
-                  {fpoName} Direct Procurement
-                </span>
-              </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                Buyer Demands for Your Harvest 🛒
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                Farm Land Holdings
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Crop Registry & Cultivated Plots 🌱
               </h2>
               <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
-                Institutional buyers (PM POSHAN school kitchens, hospital canteens, student hostels) have pre-booked produce with your FPO. Prices are guaranteed and always higher than local APMC mandi rates.
+                Registered land records and sown crops. This enables your FPO to aggregate regional cluster volume in advance and plan logistics efficiently.
               </p>
             </div>
 
-            {/* Quick Summary Pill Box */}
-            <div className="flex items-center gap-3 bg-emerald-50/70 border border-emerald-200 p-3.5 rounded-xl shrink-0">
-              <div className="text-center px-2">
-                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Open Demands</span>
-                <span className="text-xl font-black text-emerald-900">{displayOrders.length}</span>
-              </div>
-              <div className="h-8 w-px bg-emerald-200" />
-              <div className="text-center px-2">
-                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Mandi Advantage</span>
-                <span className="text-xl font-black text-emerald-800">+₹3–₹5<span className="text-xs font-semibold">/kg</span></span>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsAddPlotModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 shrink-0 self-start md:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              Register New Crop Plot
+            </button>
           </div>
 
-          {/* Three Simple Assurances for the Farmer */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs flex items-center gap-3">
-              <div className="size-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                <TrendingUp className="size-4.5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900">Guaranteed Farmgate Price</p>
-                <p className="text-[11px] text-slate-500">Agreed in advance; zero post-harvest crash</p>
-              </div>
+          {/* Registry Table / Cards */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Active Registered Plots ({cropRegistry.length})
+              </h3>
+              <span className="text-xs text-slate-400">All plots verified with FPO geo-coordinates</span>
             </div>
 
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs flex items-center gap-3">
-              <div className="size-9 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center shrink-0">
-                <Building2 className="size-4.5" />
-              </div>
-              <div>
-                <p className="font-bold text-slate-900">Verified Institutional Buyers</p>
-                <p className="text-[11px] text-slate-500">Government schemes, schools & hospital kitchens</p>
-              </div>
+            <div className="divide-y divide-slate-100">
+              {cropRegistry.map((item) => (
+                <div key={item.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xl shrink-0">
+                      {item.crop === 'TOMATO' ? '🍅' : item.crop === 'PADDY' ? '🍚' : item.crop === 'WHEAT' ? '🌾' : '🥔'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-base text-slate-900">
+                          {cropName(item.crop, lang)}
+                        </h4>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        {item.location}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs text-left md:text-right">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Cultivated Area</span>
+                      <span className="font-extrabold text-slate-800">{item.area}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Expected Quantity</span>
+                      <span className="font-extrabold text-emerald-800">{formatKg(item.expectedQtyKg)}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Harvest Period</span>
+                      <span className="font-semibold text-slate-700">{item.harvestPeriod}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. UPCOMING DEMAND                                                        */}
+      {/* Simple cards/tables showing predicted demand, forecast period, confidence, */}
+      {/* data source, indicative price range. Show “Forecast — Not a confirmed order.” */}
+      {/* Do NOT make Supply Request a normal farmer action.                         */}
+      {/* ========================================================================= */}
+      {activeTab === 'demand' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Header Banner */}
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
+            <div>
+              <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                Institutional Demand Foresight
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Upcoming Market Demand 📈
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Aggregated procurement forecasts based on government mid-day meal academic calendars, fair price shops, and institutional caterers in your district.
+              </p>
             </div>
 
-            <div className="bg-white p-3.5 rounded-xl border border-slate-200 text-xs flex items-center gap-3">
-              <div className="size-9 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                <CircleDollarSign className="size-4.5" />
-              </div>
+            {/* PROMINENT MANDATORY NOTICE: “Forecast — Not a confirmed order.” */}
+            <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-300 flex items-start gap-3 text-amber-950 shadow-2xs">
+              <Info className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-slate-900">Direct Bank Deposit</p>
-                <p className="text-[11px] text-slate-500">Credited same-day of physical weighbridge handover</p>
+                <span className="font-black text-sm text-amber-900 uppercase tracking-wide block">
+                  Forecast — Not a confirmed order.
+                </span>
+                <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                  These projected quantities are planning indicators calculated to assist in your seasonal harvesting schedule. FPO contracts and pickups are locked when actual produce is declared in <strong>My Produce</strong> and collection is requested.
+                </p>
               </div>
             </div>
           </div>
 
           {/* Filter Bar */}
-          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2 overflow-x-auto py-1">
-              <button
-                type="button"
-                onClick={() => setDemandFilter('all')}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-colors ${
-                  demandFilter === 'all'
-                    ? 'bg-emerald-700 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                All Buyer Orders ({orders.length || 4})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDemandFilter('matching')}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-1.5 ${
-                  demandFilter === 'matching'
-                    ? 'bg-emerald-700 text-white shadow-2xs'
-                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
-                }`}
-              >
-                <Sprout className="size-3.5" />
-                Matches My Plots ({displayOrders.filter((o) => o.matchesMyCrop).length})
-              </button>
-            </div>
-
-            {/* Crop Specific Filter Buttons */}
+          <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-3 text-xs">
+            <span className="font-bold text-slate-600 text-[11px] uppercase tracking-wider">
+              Filter by Crop:
+            </span>
             <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-              {['ALL', 'PADDY', 'TOMATO', 'WHEAT', 'POTATO'].map((cr) => (
+              {['ALL', 'TOMATO', 'PADDY', 'WHEAT', 'POTATO'].map((cr) => (
                 <button
                   key={cr}
                   type="button"
                   onClick={() => setDemandCropFilter(cr)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
                     demandCropFilter === cr
                       ? 'bg-slate-900 text-white'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {cr === 'ALL' ? 'All Crops' : cropName(cr, lang)}
@@ -813,306 +983,211 @@ export function FarmerDashboardView({
             </div>
           </div>
 
-          {/* List of Buyer Demand Cards */}
-          <div className="space-y-4">
-            {displayOrders.length === 0 ? (
-              <div className="bg-white p-8 rounded-2xl border border-dashed border-slate-200 text-center space-y-2">
-                <ShoppingBag className="w-8 h-8 text-slate-400 mx-auto" />
-                <p className="text-sm font-bold text-slate-700">No buyer orders found for this filter</p>
-                <p className="text-xs text-slate-500">Switch to "All Buyer Orders" to see all open procurement requests.</p>
-                <button
-                  type="button"
-                  onClick={() => { setDemandFilter('all'); setDemandCropFilter('ALL') }}
-                  className="mt-2 px-4 py-2 rounded-xl bg-emerald-700 text-white text-xs font-bold"
+          {/* Demand Cards Grid (Informational only; no supply request buttons) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredDemands.map((demand) => {
+              const cropEmoji =
+                demand.crop === 'TOMATO' ? '🍅' : demand.crop === 'PADDY' ? '🍚' : demand.crop === 'WHEAT' ? '🌾' : '🥔'
+
+              return (
+                <div
+                  key={demand.id}
+                  className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 hover:border-blue-300 transition-all"
                 >
-                  Show All Demands
-                </button>
-              </div>
-            ) : (
-              displayOrders.map((order) => {
-                const normCrop = order.crop.toUpperCase()
-                const cropEmoji = normCrop === 'TOMATO' ? '🍅' : normCrop === 'WHEAT' ? '🌾' : normCrop === 'PADDY' ? '🍚' : normCrop === 'POTATO' ? '🥔' : '🌱'
-                const mandiRef = normCrop === 'PADDY' ? 24.5 : normCrop === 'TOMATO' ? 24.5 : normCrop === 'WHEAT' ? 28.0 : normCrop === 'POTATO' ? 18.0 : 22.0
-                const mandiDelta = Number((order.price_per_kg - mandiRef).toFixed(2))
-                const remainingKg = Math.max(0, order.qty_target_kg - (order.qty_committed_kg || 0))
-                const progressPct = Math.min(100, Math.round(((order.qty_committed_kg || 0) / order.qty_target_kg) * 100))
-                const isSelected = selectedOrderForCommit === order.id
-                const committedKg = committedQuantities[order.id] || Math.min(remainingKg || 200, 200)
-                const isAlreadyAccepted = supplyRequestAccepted && (order.id === latestOffer?.orderId || order.code === latestOffer?.orderCode || order.code === 'AG-1002')
-
-                return (
-                  <div
-                    key={order.id}
-                    className={`bg-white rounded-2xl border transition-all p-5 shadow-xs ${
-                      order.matchesMyCrop ? 'border-emerald-300 ring-1 ring-emerald-500/20' : 'border-slate-200'
-                    }`}
-                  >
-                    {/* Top row: Crop + Match Badge + Order ID */}
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="size-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-2xl shrink-0">
-                          {cropEmoji}
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-extrabold text-base text-slate-900">
-                              {cropName(order.crop, lang)}
-                            </h3>
-                            {order.matchesMyCrop && (
-                              <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-700" />
-                                Matches Your Registered Plot
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Order #{order.code} · {order.buyer_name || 'Verified Institutional Buyer'}
-                          </p>
-                        </div>
+                  {/* Top Bar */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="size-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-xl shrink-0">
+                        {cropEmoji}
                       </div>
-
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                          Guaranteed Price
-                        </div>
-                        <div className="text-xl font-black text-emerald-800">
-                          ₹{order.price_per_kg.toFixed(2)}
-                          <span className="text-xs font-semibold text-slate-500"> / kg</span>
-                        </div>
-                        {mandiDelta > 0 && (
-                          <span className="text-[11px] font-bold text-emerald-700">
-                            +{formatINR(mandiDelta)}/kg vs local Mandi (₹{mandiRef.toFixed(2)})
-                          </span>
-                        )}
+                      <div>
+                        <h3 className="font-extrabold text-base text-slate-900">
+                          {cropName(demand.crop, lang)}
+                        </h3>
+                        <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
+                          {demand.confidence}% Confidence ({demand.confidenceLevel})
+                        </span>
                       </div>
                     </div>
 
-                    {/* Middle details: Quantity progress, Handover slot, Location */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-3.5 text-xs">
-                      {/* Quantity & Progress */}
-                      <div className="space-y-1.5">
-                        <span className="text-slate-400 font-semibold block uppercase text-[10px] tracking-wider">
-                          Total Buyer Demand
-                        </span>
-                        <p className="font-extrabold text-slate-900 text-sm">
-                          {formatKg(order.qty_target_kg)} Needed
-                        </p>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                          <div
-                            className="bg-emerald-600 h-full rounded-full transition-all"
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[11px] text-slate-500">
-                          <span>{formatKg(order.qty_committed_kg || 0)} pooled</span>
-                          <span className="font-bold text-emerald-800">{formatKg(remainingKg)} remaining</span>
-                        </div>
-                      </div>
-
-                      {/* Collection Point & Handover Timing */}
-                      <div className="space-y-1">
-                        <span className="text-slate-400 font-semibold block uppercase text-[10px] tracking-wider">
-                          Handover Window & Hub
-                        </span>
-                        <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-                          {order.delivery_date ? localDate(order.delivery_date, lang) : '24–25 Sep'} • 8–10 AM
-                        </p>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          {collectionCentre}
-                        </p>
-                      </div>
-
-                      {/* Buyer Purpose & Assurance */}
-                      <div className="space-y-1">
-                        <span className="text-slate-400 font-semibold block uppercase text-[10px] tracking-wider">
-                          Procurement Purpose
-                        </span>
-                        <p className="font-semibold text-slate-800">
-                          {order.purpose || 'Institutional bulk supply with direct FPO weighbridge pickup.'}
-                        </p>
-                        <p className="text-[11px] text-emerald-700 font-medium">
-                          ✓ Advance escrow funded by buyer
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Bottom Action Area */}
-                    <div className="pt-3 border-t border-slate-100">
-                      {isAlreadyAccepted ? (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200">
-                          <div className="flex items-center gap-2 text-xs text-emerald-900 font-bold">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                            <span>Supply confirmed for this demand. Your FPO collection entry pass is generated!</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveTab('supply')
-                              setSupplySubTab('handover')
-                            }}
-                            className="px-4 py-2 rounded-lg bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 flex items-center gap-1.5 shrink-0"
-                          >
-                            <QrCode className="w-3.5 h-3.5" />
-                            View Handover QR Slip →
-                          </button>
-                        </div>
-                      ) : isSelected ? (
-                        /* Expandable Commitment Box */
-                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 animate-in fade-in duration-150">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">
-                              How many kilos can you supply from your harvest?
-                            </h4>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedOrderForCommit(null)}
-                              className="text-slate-400 hover:text-slate-600 text-xs font-bold"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-
-                          {/* Quick preset buttons */}
-                          <div className="flex flex-wrap items-center gap-2">
-                            {[50, 100, 200, Math.min(400, remainingKg || 400)].filter(Boolean).map((q) => (
-                              <button
-                                key={q}
-                                type="button"
-                                onClick={() => setCommittedQuantities((prev) => ({ ...prev, [order.id]: q }))}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                                  committedKg === q
-                                    ? 'bg-emerald-700 text-white shadow-2xs'
-                                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
-                                }`}
-                              >
-                                {q} kg
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* Number Input & Earnings Calculation */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-1">
-                            <div className="flex items-center gap-2">
-                              <label htmlFor={`qty-${order.id}`} className="text-xs font-bold text-slate-600 shrink-0">
-                                Quantity (kg):
-                              </label>
-                              <input
-                                id={`qty-${order.id}`}
-                                type="number"
-                                min={10}
-                                max={remainingKg || 1000}
-                                value={committedKg}
-                                onChange={(e) => {
-                                  const val = Math.max(1, Number(e.target.value) || 1)
-                                  setCommittedQuantities((prev) => ({ ...prev, [order.id]: val }))
-                                }}
-                                className="w-28 px-3 py-2 text-sm font-black text-center bg-white border border-slate-300 rounded-lg outline-none focus:border-emerald-600"
-                              />
-                            </div>
-
-                            <div className="bg-emerald-100/70 p-2.5 rounded-lg text-xs text-emerald-950 flex items-center justify-between">
-                              <span className="font-semibold">Guaranteed Net Earnings:</span>
-                              <span className="font-black text-sm text-emerald-900">
-                                {formatINR(committedKg * order.price_per_kg)}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Confirm Action Button */}
-                          <div className="pt-2 flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedOrderForCommit(null)}
-                              className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isProcessingAction}
-                              onClick={() => handleCommitProduce(order, committedKg)}
-                              className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-xs flex items-center gap-2 disabled:opacity-50"
-                            >
-                              {isProcessingAction ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                  Confirming...
-                                </>
-                              ) : (
-                                <>
-                                  <Check className="w-4 h-4" />
-                                  Confirm Supply & Get Handover Pass ({committedKg} kg · {formatINR(committedKg * order.price_per_kg)})
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Default Action Trigger Button */
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-slate-500">
-                            Available remaining: <strong className="text-slate-800">{formatKg(remainingKg)}</strong>
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedOrderForCommit(order.id)
-                              if (!committedQuantities[order.id]) {
-                                setCommittedQuantities((prev) => ({ ...prev, [order.id]: Math.min(200, remainingKg || 200) }))
-                              }
-                            }}
-                            className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-transform active:scale-98"
-                          >
-                            <ShoppingBag className="w-3.5 h-3.5" />
-                            I Can Supply This Produce →
-                          </button>
-                        </div>
-                      )}
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Predicted Demand
+                      </span>
+                      <span className="text-lg font-black text-blue-900">
+                        {formatKg(demand.predictedDemandKg)}
+                      </span>
                     </div>
                   </div>
-                )
-              })
-            )}
+
+                  {/* Details */}
+                  <div className="space-y-2.5 text-xs text-slate-700">
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Forecast Period:</span>
+                      <span className="font-bold text-slate-900">{demand.forecastPeriod}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Data Source:</span>
+                      <span className="font-semibold text-slate-800 text-right max-w-[240px] truncate">
+                        {demand.dataSource}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Indicative Price Range:</span>
+                      <span className="font-black text-emerald-800">{demand.indicativePriceRange}</span>
+                    </div>
+                    <div className="flex justify-between py-1 text-slate-500 text-[11px]">
+                      <span>Local Mandi Benchmark:</span>
+                      <span>{demand.mandiBenchmark}</span>
+                    </div>
+                  </div>
+
+                  {/* Footer Notice */}
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Forecast planning signal only</span>
+                    <span className="text-emerald-700 font-bold">No broker deduction</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 3: MY CROPS & HARVEST REGISTRY                                        */}
-      {/* Plots, harvest windows, and inline GradeCam AI inspection                 */}
+      {/* 4. EXPECTED HARVEST                                                       */}
+      {/* Crop, expected quantity, harvest date, status.                             */}
+      {/* IMPORTANT: expected harvest is planning data, NOT inventory.              */}
       {/* ========================================================================= */}
-      {activeTab === 'crops' && (
-        <div className="space-y-5">
-          {/* Section Header */}
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      {activeTab === 'expected_harvest' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs space-y-3">
             <div>
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Crop Registry</span>
-              <h2 className="text-xl font-black text-slate-900 mt-0.5">My Crops & Expected Harvests</h2>
-              <p className="text-xs text-slate-600 mt-1">
-                Your registered farm plots allow the FPO to match buyer demand early without administrative overhead.
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                Planning Intelligence
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Expected Harvest Schedules 🌾
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Projected harvest maturity timeline for crops currently in your fields.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* PROMINENT MANDATORY ALERT: expected harvest is planning data, NOT inventory */}
+            <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-300 flex items-start gap-3 text-amber-950 shadow-2xs">
+              <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-black text-sm text-amber-900 uppercase tracking-wide block">
+                  IMPORTANT: Expected harvest is planning data, NOT inventory.
+                </span>
+                <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                  Expected yield data allows the FPO to reserve collection trucks and anticipate buyer needs. It is strictly planning data and is never treated as confirmed inventory until you physically harvest the produce and declare it under <strong>My Produce</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Expected Harvest Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {expectedHarvests.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3.5 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <span className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                      {item.crop === 'TOMATO' ? '🍅' : item.crop === 'PADDY' ? '🍚' : '🌾'} {cropName(item.crop, lang)}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                        item.status === 'Ready for Harvest' || item.status === 'Ripening'
+                          ? 'bg-amber-100 text-amber-900'
+                          : 'bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs pt-1">
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Expected Quantity:</span>
+                      <span className="font-extrabold text-slate-900">{formatKg(item.expectedQtyKg)}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Estimated Harvest Date:</span>
+                      <span className="font-bold text-slate-800">{item.harvestDate}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-slate-50">
+                      <span className="text-slate-400">Plot Location:</span>
+                      <span className="font-medium text-slate-600">{item.plotLocation}</span>
+                    </div>
+                    <div className="flex justify-between py-1 text-[11px] text-slate-400">
+                      <span>Inventory Classification:</span>
+                      <span className="font-semibold text-amber-800">Planning Data Only</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('my_produce')
+                    onDeclareHarvest()
+                  }}
+                  className="w-full py-2.5 rounded-xl border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition-colors"
+                >
+                  Harvested this lot? Declare Actual Harvest →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. MY PRODUCE                                                             */}
+      {/* Actual harvested/offered produce, declared quantity, harvest date,        */}
+      {/* collection and verification status. Primary CTA: Request Collection.      */}
+      {/* ========================================================================= */}
+      {activeTab === 'my_produce' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          {/* Header Banner with Primary CTA */}
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                Actual Ready Harvest
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                My Produce (Harvested Lots) 📦
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Produce that has been physically harvested from your fields and is ready for pickup or handover at the collection centre.
+              </p>
+            </div>
+
+            {/* Primary CTA: Request Collection */}
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowGradeCam(!showGradeCam)}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors border ${
-                  showGradeCam
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                }`}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
               >
-                <Camera className="w-4 h-4" />
-                {showGradeCam ? 'Close GradeCam' : 'Scan Quality with GradeCam'}
+                <Camera className="w-4 h-4 text-emerald-700" />
+                {showGradeCam ? 'Close Camera' : 'GradeCam Pre-Check'}
               </button>
               <button
                 type="button"
-                onClick={onDeclareHarvest}
-                className="px-4 py-2 rounded-xl bg-emerald-700 text-white font-bold text-xs shadow-xs hover:bg-emerald-800 flex items-center gap-1.5 shrink-0"
+                onClick={() => {
+                  setSelectedBatchForCollection('')
+                  setIsRequestCollectionModalOpen(true)
+                }}
+                className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs shadow-md flex items-center gap-2 transition-all transform hover:scale-[1.02]"
               >
-                <Plus className="w-4 h-4" /> Declare Harvest
+                <Truck className="w-4 h-4" />
+                Request Collection
               </button>
             </div>
           </div>
@@ -1124,8 +1199,8 @@ export function FarmerDashboardView({
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-emerald-600" />
                   <div>
-                    <h3 className="font-extrabold text-base text-slate-900">GradeCam AI Quality Inspector</h3>
-                    <p className="text-xs text-slate-500">Instant visual grading before bringing produce to collection centre</p>
+                    <h3 className="font-extrabold text-base text-slate-900">GradeCam AI Pre-Inspection</h3>
+                    <p className="text-xs text-slate-500">Scan produce before requesting collection to verify AGMARK quality</p>
                   </div>
                 </div>
                 <button
@@ -1143,29 +1218,26 @@ export function FarmerDashboardView({
                 </div>
 
                 <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Inspection Guidelines</span>
-                    <ul className="text-xs text-slate-600 space-y-1.5 list-disc pl-4">
-                      <li>Hold camera 30–50 cm directly above the produce crate.</li>
-                      <li>Ensure adequate, even natural light without deep shadows.</li>
-                      <li>AI checks color maturity, surface texture, and blemish percentage.</li>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+                    <span className="font-bold uppercase tracking-wider text-slate-500">Pre-Collection Instructions</span>
+                    <ul className="text-slate-600 space-y-1.5 list-disc pl-4">
+                      <li>GradeCam pre-grades your crates according to AGMARK specifications.</li>
+                      <li>Grade A produce qualifies for top guaranteed farmgate contract rates.</li>
+                      <li>Ensures quick weighbridge clearance at the collection hub.</li>
                     </ul>
                   </div>
 
                   {aiResult && (
-                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2.5">
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-900">AI Assessment Result</span>
+                        <span className="text-xs font-bold text-emerald-900">AI Quality Grade</span>
                         <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-700 text-white">
-                          Grade {aiResult.grade} ({aiResult.confidence}% match)
+                          Grade {aiResult.grade} ({aiResult.confidence}% confidence)
                         </span>
                       </div>
                       <p className="text-xs text-emerald-800 leading-relaxed font-medium">
-                        {aiResult.reasoning || 'High quality harvest lot. Premium farm-gate collection rate applies.'}
+                        {aiResult.reasoning || 'High quality harvest lot. Eligible for direct collection.'}
                       </p>
-                      <div className="text-[11px] text-emerald-700 font-semibold pt-1 border-t border-emerald-200/60">
-                        ✓ Eligible for immediate Grade A collection at FPO centre
-                      </div>
                     </div>
                   )}
                 </div>
@@ -1173,504 +1245,756 @@ export function FarmerDashboardView({
             </div>
           )}
 
-          {/* Registered Crop Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {me?.registry && me.registry.length > 0 ? (
-              me.registry.map((reg) => (
-                <div key={reg.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-lg">
-                        {reg.crop === 'TOMATO' ? '🍅' : reg.crop === 'WHEAT' ? '🌾' : reg.crop === 'PADDY' ? '🍚' : '🌱'}
-                      </div>
-                      <div>
-                        <h3 className="font-extrabold text-base text-slate-900">{cropName(reg.crop, lang)}</h3>
-                        <p className="text-xs text-slate-500">Registered Farm Plot</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">
-                      {reg.status || 'Active'}
-                    </span>
+          {/* Harvest Batches List */}
+          <div className="space-y-3">
+            {myProduce.map((batch) => (
+              <div
+                key={batch.id}
+                className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-emerald-300 transition-colors"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-2xl shrink-0">
+                    🍅
                   </div>
-
-                  <div className="space-y-2.5 text-xs">
-                    <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                      <span className="text-slate-400">Estimated Yield:</span>
-                      <span className="font-bold text-slate-900">{formatKg(reg.expectedQtyKg)}</span>
-                    </div>
-                    <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                      <span className="text-slate-400">Harvest Window:</span>
-                      <span className="font-bold text-slate-900">
-                        {reg.harvestWindowStart && reg.harvestWindowEnd
-                          ? `${localDate(reg.harvestWindowStart, lang)} – ${localDate(reg.harvestWindowEnd, lang)}`
-                          : 'Late Season'}
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-extrabold text-base text-slate-900">
+                        {cropName(batch.crop, lang)} — {formatKg(batch.declaredQtyKg)} Lot
+                      </h4>
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                          batch.collectionStatus === 'Scheduled'
+                            ? 'bg-blue-100 text-blue-900'
+                            : batch.collectionStatus === 'Collection Requested'
+                            ? 'bg-amber-100 text-amber-900'
+                            : 'bg-emerald-100 text-emerald-900'
+                        }`}
+                      >
+                        {batch.collectionStatus}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                        {batch.verificationStatus}
                       </span>
                     </div>
-                    <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                      <span className="text-slate-400">Committed to Orders:</span>
-                      <span className="font-bold text-emerald-800">{formatKg(reg.committedKg || 0)}</span>
-                    </div>
-                    <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                      <span className="text-slate-400">Available Stock:</span>
-                      <span className="font-bold text-blue-800">{formatKg(Math.max(0, reg.expectedQtyKg - (reg.committedKg || 0)))}</span>
-                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Harvest Date: <strong>{batch.harvestDate}</strong> • {batch.notes}
+                    </p>
                   </div>
+                </div>
 
-                  <div className="pt-2">
+                <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+                  {batch.collectionStatus === 'Ready for Collection' ? (
                     <button
                       type="button"
-                      onClick={onDeclareHarvest}
-                      className="w-full py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 font-bold text-xs text-slate-700"
+                      onClick={() => {
+                        setSelectedBatchForCollection(batch.id)
+                        setCollectionFormCrop(batch.crop)
+                        setCollectionFormQty(String(batch.declaredQtyKg))
+                        setIsRequestCollectionModalOpen(true)
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5"
                     >
-                      Update Yield / Harvest Window
+                      <Truck className="w-3.5 h-3.5" />
+                      Request Collection
                     </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              // Default registered plot card
-              <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
-                      🍅
-                    </div>
-                    <div>
-                      <h3 className="font-extrabold text-base text-slate-900">Tomato (Hybrid F1)</h3>
-                      <p className="text-xs text-slate-500">Plot 01 • 1.5 Acre</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full">
-                    Active Plot
-                  </span>
-                </div>
-
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                    <span className="text-slate-400">Season:</span>
-                    <span className="font-bold text-slate-900">Kharif Season</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                    <span className="text-slate-400">Expected Harvest Window:</span>
-                    <span className="font-bold text-slate-900">20–25 Sept</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                    <span className="text-slate-400">Estimated Yield:</span>
-                    <span className="font-bold text-emerald-800 text-sm">2,000 kg</span>
-                  </div>
-                  <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                    <span className="text-slate-400">Committed to Orders:</span>
-                    <span className="font-bold text-slate-900">400 kg (Order #123)</span>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={onDeclareHarvest}
-                    className="w-full py-2.5 rounded-xl border border-slate-300 hover:bg-slate-50 font-bold text-xs text-slate-700"
-                  >
-                    Declare Actual Harvest Quantity
-                  </button>
+                  ) : batch.collectionStatus === 'Scheduled' ? (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('handover')}
+                      className="px-4 py-2 rounded-xl bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5"
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      View Handover Slot
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-slate-500">
+                      Awaiting FPO Slot Scheduling
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
-
-            {/* Expected vs Actual Harvest Planning Card */}
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-black">
-                    🌱
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-base text-slate-900">Harvest Planning Overview</h3>
-                    <p className="text-xs text-slate-500">Future Planning Signals vs Confirmed Stock</p>
-                  </div>
-                </div>
-                <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">
-                  Status: Growing
-                </span>
-              </div>
-
-              <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1">
-                <p className="font-bold">Transparent Inventory Rule:</p>
-                <p className="text-[11px] leading-relaxed text-amber-800">
-                  Estimated yields represent future forecasts. Orders are only scheduled for pickup once produce is physically harvested and verified by the FPO at the collection point.
-                </p>
-              </div>
-
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                  <span className="text-slate-400">Total Registered Plots:</span>
-                  <span className="font-bold text-slate-900">{me?.registry?.length || 1} Active Plot</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                  <span className="text-slate-400">Market Demand Window:</span>
-                  <span className="font-bold text-emerald-700">High Demand (~5,000 kg required)</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-50 text-slate-600">
-                  <span className="text-slate-400">Assigned FPO Collection Hub:</span>
-                  <span className="font-bold text-slate-900">{collectionCentre}</span>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('demands')
-                    onNavigate('Orders')
-                  }}
-                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs"
-                >
-                  View Live Buyer Demands →
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB 3: SUPPLY & HANDOVER                                                  */}
-      {/* 3 streamlined views: Requests, Handover Slip, Deliveries                  */}
-      {/* ========================================================================= */}
-      {activeTab === 'supply' && (
-        <div className="space-y-5">
-          {/* Sub-Navigation */}
-          <div className="bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-1.5 text-xs">
-            {[
-              { id: 'requests', label: '1. Supply Requests' },
-              { id: 'handover', label: '2. Handover Pass & QR' },
-              { id: 'deliveries', label: '3. Deliveries & Quality' },
-            ].map((sub) => (
-              <button
-                key={sub.id}
-                type="button"
-                onClick={() => setSupplySubTab(sub.id as SupplySubTabKey)}
-                className={`px-4 py-2.5 rounded-xl font-bold transition-all ${
-                  supplySubTab === sub.id
-                    ? 'bg-emerald-700 text-white shadow-2xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {sub.label}
-              </button>
             ))}
           </div>
-
-          {/* SUB-VIEW 1: INCOMING SUPPLY REQUESTS */}
-          {supplySubTab === 'requests' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs max-w-2xl mx-auto space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
-                    Incoming Request
-                  </span>
-                  <h3 className="text-xl font-black text-slate-900 mt-0.5">Buyer Supply Request</h3>
-                </div>
-                <span className="text-xs font-bold bg-amber-100 text-amber-800 px-3 py-1 rounded-full">
-                  {supplyRequestAccepted ? 'Accepted · Awaiting Handover' : 'Awaiting Confirmation'}
-                </span>
-              </div>
-
-              <div className="p-4 bg-emerald-50/70 border border-emerald-200 rounded-xl text-xs text-emerald-900 leading-relaxed">
-                A verified institutional buyer placed an order matching your ready produce. As the nearest FPO member with available supply, this request has been routed to you.
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Crop:</span>
-                  <span className="font-extrabold text-slate-900 text-sm">
-                    {latestOffer ? cropName(latestOffer.crop, lang) : 'Tomato (Hybrid F1)'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Quantity Requested:</span>
-                  <span className="font-extrabold text-emerald-800 text-base">
-                    {latestOffer ? formatKg(latestOffer.availableKg || 400) : '400 kg'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Reference:</span>
-                  <span className="font-semibold text-slate-700">
-                    {latestOffer ? `Order #${latestOffer.orderCode || 'ORD-123'}` : 'Buyer Order #123 (Annapurna Mess)'}
-                  </span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Collection Centre:</span>
-                  <span className="font-bold text-slate-900">{collectionCentre}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Scheduled Handover Slot:</span>
-                  <span className="font-bold text-blue-900">24 Sep • 8–10 AM</span>
-                </div>
-                <div className="flex justify-between py-2 border-b border-slate-100">
-                  <span className="text-slate-500 font-medium">Agreed Contract Price:</span>
-                  <span className="font-bold text-emerald-700">
-                    {latestOffer ? `₹${latestOffer.pricePerKg} / kg` : '₹30 / kg'} (vs Mandi ₹24.50)
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-3 flex items-center justify-between gap-3">
-                <button
-                  type="button"
-                  disabled={isProcessingAction || supplyRequestAccepted}
-                  onClick={() => handleDeclineSupplyRequest()}
-                  className="w-1/3 py-3 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                >
-                  Pass to Next Farmer
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isProcessingAction || supplyRequestAccepted}
-                  onClick={() => handleAcceptSupplyRequest()}
-                  className="w-2/3 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-md flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
-                >
-                  {isProcessingAction ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Confirming...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      {supplyRequestAccepted ? 'Request Already Accepted' : 'Accept Request & View Handover Pass'}
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* SUB-VIEW 2: FPO HANDOVER PASS & QR */}
-          {supplySubTab === 'handover' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs max-w-xl mx-auto space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
-                    Collection Centre Entry Pass
-                  </span>
-                  <h3 className="text-xl font-black text-slate-900 mt-0.5">FPO Handover Pass</h3>
-                </div>
-                <span className="text-xs font-bold bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                  Slot Confirmed
-                </span>
-              </div>
-
-              {/* Physical Handover Slip with QR */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/40 border border-slate-200 text-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{fpoName}</h4>
-                    <p className="text-[11px] text-slate-500">Collection Point Entry Pass</p>
-                  </div>
-                  <div className="w-12 h-12 rounded-lg bg-white border border-slate-300 p-1 flex items-center justify-center shadow-xs">
-                    <QrCode className="w-10 h-10 text-slate-800" />
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-slate-700">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Lot Code:</span>
-                    <span className="font-mono font-bold text-slate-900">LOT-TOM-0924-400</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Farmer:</span>
-                    <span className="font-bold text-slate-900">{farmerName}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Committed Quantity:</span>
-                    <span className="font-bold text-emerald-800">400 kg Tomato</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Collection Hub:</span>
-                    <span className="font-bold text-slate-900">{collectionCentre}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Assigned Time Slot:</span>
-                    <span className="font-bold text-blue-900">24 Sep • 8–10 AM</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-200 text-[11px] text-slate-500 leading-relaxed">
-                  Present this pass at the weighbridge. The operator will record gross weight and sample quality for Grade A/B verification.
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={onOpenReceipt}
-                  className="flex-1 py-3 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Receipt className="w-4 h-4" /> Print / Save Pass
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSupplySubTab('deliveries')}
-                  className="flex-1 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  Track Delivery Status →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* SUB-VIEW 3: DELIVERIES & QUALITY STATUS */}
-          {supplySubTab === 'deliveries' && (
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs max-w-2xl mx-auto space-y-5">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
-                    Quality & Dispatch
-                  </span>
-                  <h3 className="text-xl font-black text-slate-900 mt-0.5">Produce Delivery Status</h3>
-                </div>
-                <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Grade A Verified
-                </span>
-              </div>
-
-              {/* Weighment & Quality Summary Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <span className="text-slate-400 block text-[11px]">Submitted</span>
-                  <span className="text-base font-extrabold text-slate-800 mt-0.5 block">400 kg</span>
-                </div>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <span className="text-slate-400 block text-[11px]">Verified Weight</span>
-                  <span className="text-base font-extrabold text-slate-800 mt-0.5 block">392 kg</span>
-                  <span className="text-[10px] text-slate-400">(-8kg shrinkage)</span>
-                </div>
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950">
-                  <span className="text-emerald-700 block text-[11px]">Accepted Qty</span>
-                  <span className="text-base font-extrabold text-emerald-800 mt-0.5 block">392 kg</span>
-                </div>
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <span className="text-slate-400 block text-[11px]">Rejected Qty</span>
-                  <span className="text-base font-extrabold text-slate-800 mt-0.5 block">0 kg</span>
-                </div>
-              </div>
-
-              {/* Dispatch Logistics Info */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-2">
-                <div className="flex items-center justify-between font-bold text-slate-900 border-b border-slate-200 pb-2">
-                  <span className="flex items-center gap-1.5">
-                    <Truck className="w-4 h-4 text-emerald-700" />
-                    Consolidated FPO Dispatch Run
-                  </span>
-                  <span className="text-blue-800 font-mono">AP XX XX 1234 (Tata Ace 1.5t)</span>
-                </div>
-                <p className="text-[11px] text-slate-600 leading-relaxed">
-                  Your 392 kg lot was pooled with lots from 2 other local farmers into one consolidated delivery vehicle. Transport cost was shared proportionally.
-                </p>
-                <div className="flex justify-between text-slate-600 pt-1">
-                  <span>Current Vehicle Status:</span>
-                  <span className="font-bold text-emerald-700">Delivered & Discharged at Buyer Hub</span>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('payments')}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 shadow-xs flex items-center gap-1.5 transition-colors"
-                >
-                  View Final Bank Settlement →
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 4: PAYMENTS & AUDITABLE SETTLEMENT PASSBOOK                           */}
-      {/* Formula: Net = Accepted quantity × agreed price − disclosed charges       */}
+      {/* 6. COLLECTION / HANDOVER                                                  */}
+      {/* Request, FPO, collection centre, date/time, quantity, status.             */}
+      {/* Prototype flow: farmer request → FPO schedules → farmer hands over at      */}
+      {/* collection centre → FPO weighs/verifies.                                  */}
       {/* ========================================================================= */}
-      {activeTab === 'payments' && (
-        <div className="space-y-5 max-w-2xl mx-auto">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
-                  Transparent Passbook
-                </span>
-                <h3 className="text-xl font-black text-slate-900 mt-0.5">Farmer Settlement Ledger</h3>
-              </div>
-              <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Credited to Bank
+      {activeTab === 'handover' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+                FPO Handover Tracking
               </span>
-            </div>
-
-            {/* Formula Banner */}
-            <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-xs text-emerald-950 space-y-1">
-              <span className="font-bold">Transparent Auditable Formula:</span>
-              <p className="font-mono text-emerald-900 font-bold text-[11px]">
-                Net Payable = Accepted Qty (392 kg) × Agreed Rate (₹30) − Disclosed Charges (₹240)
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Collection & Handover Operations 🤝
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Standard prototype flow: <strong>Farmer Request → FPO Schedules → Farmer Hands Over at Collection Centre → FPO Weighs/Verifies</strong>.
               </p>
             </div>
 
-            {/* Detailed Ledger Card */}
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-3">
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>Produce & Handover Date:</span>
-                <span className="font-bold text-slate-900">Tomato • 24 Sep</span>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedBatchForCollection('')
+                setIsRequestCollectionModalOpen(true)
+              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 shrink-0 self-start md:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              New Collection Request
+            </button>
+          </div>
+
+          {/* Collection Requests & Handovers */}
+          <div className="space-y-4">
+            {collectionHandovers.map((col) => {
+              const stepIndex =
+                col.status === 'Requested'
+                  ? 1
+                  : col.status === 'Scheduled'
+                  ? 2
+                  : col.status === 'Handed Over'
+                  ? 3
+                  : 4
+
+              return (
+                <div key={col.id} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                  {/* Top Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="size-10 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-700 font-bold">
+                        <QrCode className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-extrabold text-base text-slate-900">
+                            {col.requestId} — {formatKg(col.quantityKg)} {cropName(col.crop, lang)}
+                          </h4>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                            {col.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Assigned FPO: <strong>{col.fpoName}</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={onOpenReceipt}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        Print Handover Pass
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4-Step Prototype Flow Stepper */}
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Handover Progress Pipeline
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div
+                        className={`p-2.5 rounded-lg border ${
+                          stepIndex >= 1 ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' : 'bg-white border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">1</span>
+                          <span>1. Farmer Request</span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`p-2.5 rounded-lg border ${
+                          stepIndex >= 2 ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' : 'bg-white border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">2</span>
+                          <span>2. FPO Schedules</span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`p-2.5 rounded-lg border ${
+                          stepIndex >= 3 ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' : 'bg-white border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">3</span>
+                          <span>3. Farmer Hands Over</span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`p-2.5 rounded-lg border ${
+                          stepIndex >= 4 ? 'bg-emerald-50 border-emerald-200 text-emerald-950 font-bold' : 'bg-white border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="size-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center">4</span>
+                          <span>4. FPO Weighs/Verifies</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Details Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Collection Centre</span>
+                      <span className="font-bold text-slate-800 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        {col.collectionCentre}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Scheduled Time Slot</span>
+                      <span className="font-bold text-blue-900 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        {col.dateTimeSlot}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-bold">Weighbridge & Quality</span>
+                      <span className="font-bold text-slate-800 mt-0.5 block">
+                        {col.verifiedGrossKg ? `${col.verifiedGrossKg} kg verified (${col.grade})` : 'Pending physical weighbridge'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. LOGISTICS STATUS                                                       */}
+      {/* Only farmer-relevant status. No complex telematics or unnecessary maps.    */}
+      {/* ========================================================================= */}
+      {activeTab === 'logistics' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs">
+            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+              Farmer Transit Information
+            </span>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+              Logistics & Pickup Status 🚚
+            </h2>
+            <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+              Farmer-relevant transport details. Shows collection van assignment, scheduled arrival window, and transit progress to the FPO central hub.
+            </p>
+          </div>
+
+          {/* Core Farmer-Relevant Logistics Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="size-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    Tata Ace 1.5t (Vehicle: AP XX XX 1234)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Transporter: Rameshwar Cluster Logistics • Driver Contact: +91 98765 43210
+                  </p>
+                </div>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>FPO Verified Accepted Weight:</span>
-                <span className="font-bold text-emerald-800">392 kg (Grade A)</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>Pre-Agreed Contract Rate:</span>
-                <span className="font-bold text-slate-900">₹30.00 / kg</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
-                <span>Gross Crop Value:</span>
-                <span className="font-bold text-slate-900">₹11,760.00</span>
+              <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                Vehicle Assigned
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Scheduled Arrival Window</span>
+                <p className="font-extrabold text-slate-900 text-sm mt-1 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-blue-700" />
+                  24 Sep • 8:00 AM – 10:00 AM
+                </p>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">Estimated pickup time for your lot</span>
               </div>
 
-              {/* Itemized Disclosed Deductions */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Collection Destination</span>
+                <p className="font-extrabold text-slate-900 text-sm mt-1 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-emerald-700" />
+                  {collectionCentre}
+                </p>
+                <span className="text-[11px] text-slate-500 mt-0.5 block">Weighbridge & Quality Inspection Hub</span>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Consolidation Status</span>
+                <p className="font-extrabold text-slate-900 text-sm mt-1">
+                  Pooled with 2 Village Farmers
+                </p>
+                <span className="text-[11px] text-emerald-700 mt-0.5 block">Shared transport saves 60% freight cost</span>
+              </div>
+            </div>
+
+            {/* Current Transit Status Stepper */}
+            <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2 text-xs">
+              <span className="font-bold text-blue-900 block">Current Vehicle Status:</span>
+              <p className="text-blue-800 leading-relaxed">
+                Collection van dispatched from Anand depot. Routing through Anand Rural cluster collection points. Please ensure produce crates are ready with your Handover QR pass.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 8. PAYMENTS / PASSBOOK                                                    */}
+      {/* Accepted quantity, agreed rate, gross, charges, net, disbursement status. */}
+      {/* ========================================================================= */}
+      {activeTab === 'passbook' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                Auditable Passbook
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Farmer Settlement Passbook & Payments 💰
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Itemized, auditable breakdown. Formula: <strong>Net Payable = Accepted Quantity × Agreed Rate − Disclosed Charges</strong>.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenReceipt}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 shrink-0 self-start md:self-auto"
+            >
+              <Download className="w-4 h-4" />
+              Download Bank Receipt
+            </button>
+          </div>
+
+          {/* Latest Verified Settlement Ledger Card */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Settlement Slip #LOT-TOM-0924
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                  Tomato Lot (400 kg declared • 392 kg accepted)
+                </h3>
+              </div>
+              <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                Disbursed to Bank Account
+              </span>
+            </div>
+
+            {/* Formula Itemization */}
+            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-3">
+              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                <span>1. Accepted Quantity (Post-GradeCam & Weighbridge QC):</span>
+                <span className="font-extrabold text-slate-900 text-sm">392 kg (Grade A)</span>
+              </div>
+
+              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                <span>2. Agreed Contract Rate:</span>
+                <span className="font-extrabold text-slate-900">₹30.00 / kg</span>
+              </div>
+
+              <div className="flex justify-between py-1 border-b border-slate-200/60 text-slate-600">
+                <span>3. Gross Value (392 kg × ₹30.00):</span>
+                <span className="font-extrabold text-slate-900 text-sm">₹11,760.00</span>
+              </div>
+
+              {/* Itemized Disclosed Charges */}
               <div className="py-2 border-b border-slate-200/60 space-y-1.5 text-[11px] text-slate-500">
                 <span className="font-bold text-slate-700 block">Disclosed Legitimate Deductions:</span>
-                <div className="flex justify-between pl-2">
+                <div className="flex justify-between pl-3">
                   <span>• FPO Weighbridge & QC Handling:</span>
-                  <span className="text-slate-800 font-medium">- ₹120.00</span>
+                  <span className="text-slate-800 font-semibold">- ₹120.00</span>
                 </div>
-                <div className="flex justify-between pl-2">
+                <div className="flex justify-between pl-3">
                   <span>• Cluster Shared Transport:</span>
-                  <span className="text-slate-800 font-medium">- ₹120.00</span>
+                  <span className="text-slate-800 font-semibold">- ₹120.00</span>
                 </div>
-                <div className="flex justify-between pl-2 font-bold text-slate-700">
+                <div className="flex justify-between pl-3 font-bold text-slate-700 pt-0.5">
                   <span>Total Charges:</span>
                   <span>- ₹240.00</span>
                 </div>
               </div>
 
               {/* Net Payable */}
-              <div className="flex justify-between pt-2 text-sm font-extrabold text-emerald-900">
+              <div className="flex justify-between pt-2 text-sm sm:text-base font-extrabold text-emerald-950">
                 <span>Net Credited to Bank Account:</span>
-                <span className="text-lg font-black text-emerald-700">{formatINR(totalSettledNet)}</span>
+                <span className="text-lg sm:text-xl font-black text-emerald-800">
+                  {formatINR(totalSettledNet)}
+                </span>
               </div>
             </div>
 
-            {/* Audit Trail & Linked Artifacts */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs">
-              <span className="text-slate-500">
-                Linked to: <strong>Supply Request #123</strong> & <strong>FPO Receipt #LOT-TOM-0924</strong>
+            {/* Disbursement Proof & Banking Trail */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-emerald-50/60 p-4 rounded-xl border border-emerald-100">
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Disbursement Status</span>
+                <span className="font-bold text-emerald-900 mt-0.5 block">Direct Bank Transfer Complete</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Bank Account Reference</span>
+                <span className="font-bold text-slate-800 mt-0.5 block">State Bank of India (A/c ...4920)</span>
+              </div>
+              <div>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Transaction / UTR Code</span>
+                <span className="font-mono font-bold text-slate-800 mt-0.5 block">AGR-2026-98124</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 9. NOTIFICATIONS                                                          */}
+      {/* Relevant alerts (handover schedules, advance payments, AGMARK grading).   */}
+      {/* ========================================================================= */}
+      {activeTab === 'notifications' && (
+        <div className="space-y-5 animate-in fade-in duration-150">
+          <div className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                Farmer Activity Feed
               </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 mt-0.5">
+                Notifications & Alerts 🔔
+              </h2>
+              <p className="text-xs text-slate-600 mt-1 max-w-2xl leading-relaxed">
+                Critical updates on handover time slots, AI quality grading scores, weighbridge net receipts, and bank disbursement confirmations.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
+                flash('ok', 'All notifications marked as read.')
+              }}
+              className="px-3.5 py-2 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs self-start md:self-auto"
+            >
+              Mark All as Read
+            </button>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex items-center gap-2 overflow-x-auto py-1 text-xs">
+            {[
+              { key: 'all', label: `All Alerts (${notifications.length})` },
+              { key: 'collection', label: 'Collections' },
+              { key: 'payment', label: 'Payments' },
+              { key: 'quality', label: 'Quality Checks' },
+            ].map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setNotificationFilter(f.key as any)}
+                className={`px-3.5 py-1.5 rounded-xl font-bold transition-colors ${
+                  notificationFilter === f.key
+                    ? 'bg-emerald-700 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Notifications Feed */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs divide-y divide-slate-100">
+            {filteredNotifications.map((notif) => (
+              <div
+                key={notif.id}
+                className={`p-5 flex items-start gap-4 transition-colors ${
+                  notif.unread ? 'bg-emerald-50/20' : 'hover:bg-slate-50/50'
+                }`}
+              >
+                <div className="size-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+                  {notif.category === 'collection' ? (
+                    <Clock className="w-5 h-5 text-purple-600" />
+                  ) : notif.category === 'payment' ? (
+                    <CircleDollarSign className="w-5 h-5 text-emerald-600" />
+                  ) : notif.category === 'quality' ? (
+                    <Sparkles className="w-5 h-5 text-amber-600" />
+                  ) : (
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                  )}
+                </div>
+
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                      {notif.title}
+                      {notif.unread && (
+                        <span className="size-2 rounded-full bg-emerald-600 inline-block" />
+                      )}
+                    </h4>
+                    <span className="text-[11px] text-slate-400 shrink-0">{notif.time}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">{notif.detail}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: REQUEST COLLECTION (Primary CTA for My Produce)                    */}
+      {/* ========================================================================= */}
+      {isRequestCollectionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                  Farmgate Aggregation
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                  Request Produce Collection 🚚
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={onOpenReceipt}
-                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-colors"
+                onClick={() => setIsRequestCollectionModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
               >
-                <Receipt className="w-3.5 h-3.5" /> Download Tax / Bank Receipt
+                <X className="w-5 h-5" />
               </button>
             </div>
+
+            <form onSubmit={handleSubmitCollectionRequest} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Harvested Crop:</label>
+                <select
+                  value={collectionFormCrop}
+                  onChange={(e) => setCollectionFormCrop(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                >
+                  <option value="TOMATO">Tomato (Hybrid F1)</option>
+                  <option value="PADDY">Paddy (PB 1121)</option>
+                  <option value="WHEAT">Wheat (Sharbati)</option>
+                  <option value="POTATO">Potato (Kufri Jyoti)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Quantity to Handover (kg):</label>
+                  <input
+                    type="number"
+                    min={20}
+                    max={10000}
+                    value={collectionFormQty}
+                    onChange={(e) => setCollectionFormQty(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Preferred Date:</label>
+                  <input
+                    type="date"
+                    value={collectionFormDate}
+                    onChange={(e) => setCollectionFormDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Preferred Handover Slot:</label>
+                <select
+                  value={collectionFormSlot}
+                  onChange={(e) => setCollectionFormSlot(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                >
+                  <option value="Morning (8:00 AM – 10:00 AM)">Morning (8:00 AM – 10:00 AM)</option>
+                  <option value="Midday (11:00 AM – 1:00 PM)">Midday (11:00 AM – 1:00 PM)</option>
+                  <option value="Afternoon (2:00 PM – 4:00 PM)">Afternoon (2:00 PM – 4:00 PM)</option>
+                </select>
+              </div>
+
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1">
+                <span className="font-bold text-emerald-950 block">Assigned Collection Point:</span>
+                <p className="text-emerald-800 text-[11px]">
+                  {collectionCentre} • Weighbridge & QC Operator on duty.
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Optional Notes / Remarks:</label>
+                <textarea
+                  rows={2}
+                  value={collectionFormNotes}
+                  onChange={(e) => setCollectionFormNotes(e.target.value)}
+                  placeholder="e.g. Graded into 16 crates, stored under shade."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsRequestCollectionModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessingAction}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isProcessingAction ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" /> Confirm Collection Request
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: REGISTER NEW CROP PLOT (For Crop Registry)                         */}
+      {/* ========================================================================= */}
+      {isAddPlotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">
+                  Land Holding Record
+                </span>
+                <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                  Register Crop Plot 🌱
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddPlotModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPlot} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Crop Sown:</label>
+                  <select
+                    value={newPlotCrop}
+                    onChange={(e) => setNewPlotCrop(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                  >
+                    <option value="TOMATO">Tomato</option>
+                    <option value="PADDY">Paddy</option>
+                    <option value="WHEAT">Wheat</option>
+                    <option value="POTATO">Potato</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Cultivated Area:</label>
+                  <input
+                    type="text"
+                    value={newPlotArea}
+                    onChange={(e) => setNewPlotArea(e.target.value)}
+                    placeholder="e.g. 1.5 Acres or 0.6 Hectares"
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Expected Yield (kg):</label>
+                  <input
+                    type="number"
+                    min={100}
+                    value={newPlotQty}
+                    onChange={(e) => setNewPlotQty(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 block">Harvest Period:</label>
+                  <input
+                    type="text"
+                    value={newPlotPeriod}
+                    onChange={(e) => setNewPlotPeriod(e.target.value)}
+                    placeholder="e.g. 20–25 Sep 2026"
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900 font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700 block">Plot Name & Location:</label>
+                <input
+                  type="text"
+                  value={newPlotLocation}
+                  onChange={(e) => setNewPlotLocation(e.target.value)}
+                  placeholder="e.g. Plot 01 — North Canal"
+                  required
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:border-emerald-600 text-slate-900"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPlotModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold shadow-xs flex items-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" /> Save Plot to Registry
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

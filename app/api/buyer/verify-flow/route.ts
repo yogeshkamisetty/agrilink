@@ -119,10 +119,16 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
-      action?: 'review' | 'simulate_approve' | 'simulate_reject'
+      action?:
+        | 'review'
+        | 'simulate_approve'
+        | 'simulate_reject'
+        | 'simulate_needs_correction'
+        | 'simulate_under_review'
+        | 'simulate_pending'
       phone?: string
       userId?: string
-      decision?: 'verified' | 'rejected' | 'pending_review'
+      decision?: 'verified' | 'rejected' | 'pending_review' | 'under_review' | 'pending' | 'needs_correction'
       reviewerNotes?: string
     }
 
@@ -160,13 +166,28 @@ export async function POST(request: Request) {
         ? 'verified'
         : body.action === 'simulate_reject'
           ? 'rejected'
-          : body.decision || 'verified'
+          : body.action === 'simulate_needs_correction'
+            ? 'needs_correction'
+            : body.action === 'simulate_under_review'
+              ? 'under_review'
+              : body.action === 'simulate_pending'
+                ? 'pending'
+                : body.decision || 'verified'
+
+    const defaultNotes: Record<string, string> = {
+      verified: 'Documents verified by FPO administrative desk.',
+      under_review: 'Application is currently under review by the local FPO administrative desk.',
+      pending_review: 'Application is currently under review by the local FPO administrative desk.',
+      pending: 'Application received and awaiting administrative review.',
+      needs_correction: 'Correction required: Please re-upload a clear copy of your business proof or FSSAI registration.',
+      rejected: 'Verification declined: Business registration credentials could not be validated.',
+    }
 
     const existingMeta = typeof userRow.metadata === 'string' ? JSON.parse(userRow.metadata) : (userRow.metadata || {})
     const updatedMeta = {
       ...existingMeta,
       reviewedAt: new Date().toISOString(),
-      reviewerNotes: body.reviewerNotes || (newStatus === 'verified' ? 'Documents verified by admin.' : 'Additional proof required.'),
+      reviewerNotes: body.reviewerNotes || defaultNotes[newStatus] || 'Status updated.',
     }
 
     await db.query(

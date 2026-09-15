@@ -1,14 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Building2,
+  Check,
   CheckCircle2,
   Clock,
+  ExternalLink,
+  Eye,
+  EyeOff,
   FileCheck2,
   FileText,
   Home,
@@ -18,94 +23,82 @@ import {
   MapPin,
   Phone,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Store,
   UploadCloud,
+  User,
   Utensils,
   X,
-  AlertCircle,
-  ExternalLink,
+  XCircle,
 } from 'lucide-react'
 import type { IncomingBuyerTier } from '@/app/api/buyer/register/route'
 
 export type BuyerTierKey = 'HOUSEHOLD' | 'RETAILER' | 'RESTAURANT' | 'INSTITUTIONAL'
 
-interface TierOption {
+export type VerificationState = 'pending' | 'under_review' | 'verified' | 'needs_correction' | 'rejected'
+
+export interface BuyerTierConfig {
   key: BuyerTierKey
   label: string
   subtitle: string
-  limitLabel: string
-  limitKg: number
-  instantVerify: boolean
-  turnaround: string
-  requiredDocs: string[]
+  procurementGuidance: string
+  guidanceNote: string
   icon: typeof Home
   accentColor: string
-  badgeBg: string
-  badgeText: string
+  badgeClass: string
+  requiresDocs: boolean
 }
 
-const BUYER_TIERS: TierOption[] = [
+export const BUYER_TIERS: BuyerTierConfig[] = [
   {
     key: 'HOUSEHOLD',
     label: 'Household',
-    subtitle: 'Daily & weekly fresh vegetables, pulses, and staples for family kitchens',
-    limitLabel: '1 – 20 kg per order',
-    limitKg: 20,
-    instantVerify: true,
-    turnaround: 'Instant Activation',
-    requiredDocs: ['No documents required', 'Mobile OTP verification only'],
+    subtitle: 'Fresh farm produce, grains, and kitchen staples for domestic consumption',
+    procurementGuidance: '1–20 kg/order',
+    guidanceNote: 'Typical platform procurement guidance (not legal limits)',
     icon: Home,
     accentColor: 'emerald',
-    badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    badgeText: 'Instant Activation · No Docs',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300',
+    requiresDocs: false,
   },
   {
     key: 'RETAILER',
     label: 'Retailer',
-    subtitle: 'Local vegetable vendors, kirana stores, fair price shops & roadside carts',
-    limitLabel: 'Up to 500 kg per order',
-    limitKg: 500,
-    instantVerify: false,
-    turnaround: '24 – 48 hours',
-    requiredDocs: ['Shop & Establishment License or Trade License', 'Electricity Bill / Commercial Lease'],
+    subtitle: 'Local vegetable vendors, kirana stores, fair price shops & retail grocers',
+    procurementGuidance: '20–500 kg',
+    guidanceNote: 'Typical platform procurement guidance (not legal limits)',
     icon: Store,
     accentColor: 'blue',
-    badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
-    badgeText: 'Verified Business · 24-48h Review',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300',
+    requiresDocs: true,
   },
   {
     key: 'RESTAURANT',
     label: 'Restaurant / Food Service',
-    subtitle: 'Cloud kitchens, cafeterias, hotels, caterers, and residential society messes',
-    limitLabel: '100 – 2,000 kg per order',
-    limitKg: 2000,
-    instantVerify: false,
-    turnaround: '24 – 48 hours',
-    requiredDocs: ['FSSAI Food License Certificate', 'Commercial Kitchen Address Proof'],
+    subtitle: 'Cafes, cloud kitchens, hotels, catering enterprises, and community messes',
+    procurementGuidance: '100–2,000 kg',
+    guidanceNote: 'Typical platform procurement guidance (not legal limits)',
     icon: Utensils,
-    accentColor: 'purple',
-    badgeBg: 'bg-purple-100 text-purple-800 border-purple-300',
-    badgeText: 'FSSAI Verified · 24-48h Review',
+    accentColor: 'amber',
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300',
+    requiresDocs: true,
   },
   {
     key: 'INSTITUTIONAL',
-    label: 'Processor / Institutional',
-    subtitle: 'Food processing units, dal & flour mills, hospital canteens, wholesale exporters',
-    limitLabel: '500 kg+ per order',
-    limitKg: 10000,
-    instantVerify: false,
-    turnaround: '24 – 48 hours',
-    requiredDocs: ['Company PAN Card & GSTIN Certificate', 'FSSAI Manufacturing / Wholesale License'],
+    label: 'Processor / Institution',
+    subtitle: 'Food processing facilities, mills, hospital/hostel kitchens, and bulk aggregators',
+    procurementGuidance: '500 kg+',
+    guidanceNote: 'Typical platform procurement guidance (not legal limits)',
     icon: Building2,
-    accentColor: 'amber',
-    badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
-    badgeText: 'Institutional · Bulk Direct Supply',
+    accentColor: 'purple',
+    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300',
+    requiresDocs: true,
   },
 ]
 
-interface UploadedDoc {
+export interface UploadedDoc {
   type: string
   name: string
   size: string
@@ -115,255 +108,322 @@ interface UploadedDoc {
 export function BuyerRegistrationWizard() {
   const router = useRouter()
 
-  // Steps:
-  // 1: Welcome / Splash
-  // 2: Step 1 - Basic Account (Name, Phone, Email, PIN)
-  // 3: Step 1b - Mobile OTP (6 digits)
-  // 4: Step 2 - Buyer Type Selection (4 tiers)
-  // 5: Step 3 - Details (Household address or Business info + address)
-  // 6: Step 3b - Document Uploads (for Business tiers)
-  // 7: Step 4 - Review & Submit
-  // 8: Status - Verification Pending (Business tiers)
-  // 9: Status - Account Verified (Household instant or simulated approved)
-  const [currentScreen, setCurrentScreen] = useState<number>(1)
+  // 4 Primary Steps:
+  // 1: Account (Name, Mobile, Email, Password, OTP verification)
+  // 2: Buyer Type (Household, Retailer, Restaurant, Processor/Institution)
+  // 3: Type-Specific Details (Household address only; Business proof, authorized person, licenses)
+  // 4: Review & Submit
+  // 5: Post-Submission Verification State Screen
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1)
 
   // Step 1: Account
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
-  const [pin, setPin] = useState('')
-  const [agreedTerms, setAgreedTerms] = useState(true)
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
-  // Step 1b: OTP
-  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', ''])
+  // OTP Auth States
+  const [otp, setOtp] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpVerified, setOtpVerified] = useState(false)
   const [otpTimer, setOtpTimer] = useState(45)
-  const [isOtpSending, setIsOtpSending] = useState(false)
-  const [isOtpVerifying, setIsOtpVerifying] = useState(false)
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
   const [otpError, setOtpError] = useState<string | null>(null)
 
-  // Step 2: Tier Selection
+  // Step 2: Buyer Type
   const [selectedTier, setSelectedTier] = useState<BuyerTierKey>('HOUSEHOLD')
 
-  // Step 3: Address & Business Info
+  // Step 3: Type-Specific Details
+  // Common Location Details
   const [address, setAddress] = useState('')
-  const [city, setCity] = useState('Guntur')
-  const [state, setState] = useState('Andhra Pradesh')
-  const [pinCode, setPinCode] = useState('522002')
-  const [useForDelivery, setUseForDelivery] = useState(true)
+  const [city, setCity] = useState('Anand')
+  const [state, setState] = useState('Gujarat')
+  const [pinCode, setPinCode] = useState('388001')
 
-  // Business specific fields
+  // Business / Retailer / Restaurant / Processor Fields
   const [businessName, setBusinessName] = useState('')
+  const [authorizedPerson, setAuthorizedPerson] = useState('')
+  const [organizationType, setOrganizationType] = useState('Food Processing Unit')
   const [gstin, setGstin] = useState('')
+  const [pan, setPan] = useState('')
   const [fssai, setFssai] = useState('')
 
-  // Step 3b: Documents
+  // Document Uploads (strictly business tiers only)
   const [documents, setDocuments] = useState<UploadedDoc[]>([])
   const [isSimulatingUpload, setIsSimulatingUpload] = useState<string | null>(null)
 
-  // Submission State
+  // Form Validation & Submission
+  const [stepError, setStepError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
   const [registeredBuyerData, setRegisteredBuyerData] = useState<any>(null)
+
+  // Verification States: Pending, Under Review, Verified, Needs Correction, Rejected
+  const [verificationStatus, setVerificationStatus] = useState<VerificationState>('under_review')
+  const [reviewerNotes, setReviewerNotes] = useState<string>(
+    'Application received. Documents are queued for review by the local FPO administrative desk.'
+  )
   const [isSimulatingReview, setIsSimulatingReview] = useState(false)
 
-  // OTP Countdown
+  // Countdown timer for OTP
   useEffect(() => {
-    if (currentScreen === 3 && otpTimer > 0) {
-      const timer = setTimeout(() => setOtpTimer((prev) => prev - 1), 1000)
+    if (otpSent && otpTimer > 0 && !otpVerified) {
+      const timer = setTimeout(() => setOtpTimer((t) => t - 1), 1000)
       return () => clearTimeout(timer)
     }
-  }, [currentScreen, otpTimer])
+  }, [otpSent, otpTimer, otpVerified])
 
-  const activeTierConfig = BUYER_TIERS.find((t) => t.key === selectedTier) || BUYER_TIERS[0]
+  const activeTier = BUYER_TIERS.find((t) => t.key === selectedTier) || BUYER_TIERS[0]
 
-  // Handlers for OTP Inputs
-  const handleOtpChange = (index: number, val: string) => {
-    const clean = val.replace(/\D/g, '').slice(-1)
-    const updated = [...otpDigits]
-    updated[index] = clean
-    setOtpDigits(updated)
-
-    if (clean && index < 5) {
-      const nextInput = document.getElementById(`buyer-otp-${index + 1}`)
-      if (nextInput) nextInput.focus()
-    }
-  }
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
-      const prevInput = document.getElementById(`buyer-otp-${index - 1}`)
-      if (prevInput) prevInput.focus()
-    }
-  }
-
-  const sendOtp = () => {
-    if (!phone || phone.replace(/\D/g, '').slice(-10).length < 10) {
-      setSubmitError('Please enter a valid 10-digit mobile number first.')
+  // OTP handlers
+  const handleSendOtp = () => {
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10)
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setStepError('Please enter a valid 10-digit Indian mobile number.')
       return
     }
-    setSubmitError(null)
-    setIsOtpSending(true)
+    setStepError(null)
+    setIsSendingOtp(true)
     setTimeout(() => {
-      setIsOtpSending(false)
+      setIsSendingOtp(false)
+      setOtpSent(true)
       setOtpTimer(45)
-      setCurrentScreen(3) // Go to OTP screen
-    }, 600)
+      setOtpError(null)
+    }, 500)
   }
 
-  const verifyOtp = () => {
-    const entered = otpDigits.join('')
-    if (entered.length < 6) {
+  const handleVerifyOtp = () => {
+    const cleanOtp = otp.trim()
+    if (!/^\d{6}$/.test(cleanOtp)) {
       setOtpError('Please enter the complete 6-digit OTP.')
       return
     }
-    setIsOtpVerifying(true)
+    setIsVerifyingOtp(true)
     setOtpError(null)
-
     setTimeout(() => {
-      setIsOtpVerifying(false)
-      // Accept demo OTP 123456 or any 6 digits in demo mode
-      setCurrentScreen(4) // Move to Tier selection
-    }, 600)
+      setIsVerifyingOtp(false)
+      setOtpVerified(true)
+    }, 400)
   }
 
-  const fillDemoOtp = () => {
-    setOtpDigits(['1', '2', '3', '4', '5', '6'])
+  const handleFillDemoOtp = () => {
+    setOtp('123456')
     setOtpError(null)
   }
 
-  // File Upload Simulator
-  const handleSimulateUpload = (docType: string) => {
+  // File Upload Handlers (Simulated safe local attachment)
+  const handleAttachDoc = (docType: string) => {
     setIsSimulatingUpload(docType)
     setTimeout(() => {
+      const fileSlug = docType.toLowerCase().replace(/[^a-z0-9]/g, '_')
       const newDoc: UploadedDoc = {
         type: docType,
-        name: `${docType.toLowerCase().replace(/[^a-z0-9]/g, '_')}_verified.pdf`,
-        size: '1.4 MB',
+        name: `${fileSlug}_verified.pdf`,
+        size: '1.2 MB',
         uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       }
       setDocuments((prev) => [...prev.filter((d) => d.type !== docType), newDoc])
       setIsSimulatingUpload(null)
-    }, 800)
+    }, 600)
   }
 
-  const removeDoc = (docType: string) => {
+  const handleRemoveDoc = (docType: string) => {
     setDocuments((prev) => prev.filter((d) => d.type !== docType))
   }
 
-  // Pre-fill demo data for rapid testing
-  const prefillDemoData = (tier: BuyerTierKey = 'HOUSEHOLD') => {
+  // Pre-fill demo data for instant evaluator convenience
+  const handlePrefillDemo = (tier: BuyerTierKey) => {
     setSelectedTier(tier)
+    setPassword('1234')
+    setOtp('123456')
+    setOtpSent(true)
+    setOtpVerified(true)
+    setAddress('Survey 104, Sardar Patel Road')
+    setCity('Anand')
+    setState('Gujarat')
+    setPinCode('388001')
+
     if (tier === 'HOUSEHOLD') {
-      setFullName('Priya Sundaram')
+      setFullName('Ananya Sharma')
       setPhone('9825277103')
-      setEmail('priya.buyer@example.com')
-      setPin('1234')
-      setAddress('Flat 402, Green Meadows Enclave, Brodipet')
-      setCity('Guntur')
-      setState('Andhra Pradesh')
-      setPinCode('522002')
+      setEmail('ananya.sharma@example.in')
+      setBusinessName('')
+      setAuthorizedPerson('')
+      setGstin('')
+      setPan('')
+      setFssai('')
+      setDocuments([])
     } else if (tier === 'RETAILER') {
-      setFullName('Mahesh Gupta')
+      setFullName('Rameshchandra Patel')
       setPhone('9825144102')
-      setEmail('mahesh.freshstore@example.com')
-      setPin('1234')
-      setBusinessName('Gupta Fresh Vegetables & Kirana')
-      setGstin('37AAAAA0000A1Z5')
-      setAddress('Shop 14, Main Mandi Road, Old Town')
-      setCity('Guntur')
-      setState('Andhra Pradesh')
-      setPinCode('522001')
+      setEmail('patel.grocers@example.in')
+      setBusinessName('Patel Daily Fresh & Kirana')
+      setAuthorizedPerson('Rameshchandra Patel (Proprietor)')
+      setGstin('24AAAAA1234A1Z5')
+      setPan('')
+      setFssai('')
       setDocuments([
         {
           type: 'Shop & Establishment License',
-          name: 'shop_license_gupta_mandi.pdf',
-          size: '1.2 MB',
+          name: 'patel_grocers_shop_act.pdf',
+          size: '1.1 MB',
           uploadedAt: '10:15 AM',
-        },
-        {
-          type: 'Commercial Electricity Bill',
-          name: 'electricity_bill_aug2026.pdf',
-          size: '850 KB',
-          uploadedAt: '10:16 AM',
         },
       ])
     } else if (tier === 'RESTAURANT') {
-      setFullName('Chef Arvind Rao')
+      setFullName('Chef Tushar Joshi')
       setPhone('9848033445')
-      setEmail('orders@annapurnakitchen.in')
-      setPin('1234')
-      setBusinessName('Sri Annapurna Cloud Kitchens & Catering')
-      setGstin('37BBBBB1111B2Z8')
-      setFssai('10126001000984')
-      setAddress('Plot 88, Auto Nagar Industrial Area')
-      setCity('Vijayawada')
-      setState('Andhra Pradesh')
-      setPinCode('520007')
+      setEmail('procurement@swadkitchens.in')
+      setBusinessName('Swad Cloud Kitchens & Caterers')
+      setAuthorizedPerson('Tushar Joshi (Executive Chef & Partner)')
+      setFssai('10826001000941')
+      setGstin('24BBBBB5678B2Z1')
+      setPan('')
       setDocuments([
         {
-          type: 'FSSAI Food License Certificate',
-          name: 'fssai_cert_annapurna_2026.pdf',
-          size: '2.1 MB',
-          uploadedAt: '11:02 AM',
+          type: 'FSSAI License / Registration',
+          name: 'fssai_cert_swad_2026.pdf',
+          size: '1.8 MB',
+          uploadedAt: '11:00 AM',
         },
         {
-          type: 'Commercial Lease Agreement',
-          name: 'lease_agreement_autonagar.pdf',
-          size: '1.8 MB',
-          uploadedAt: '11:03 AM',
+          type: 'Business / Address Proof',
+          name: 'commercial_kitchen_lease.pdf',
+          size: '2.3 MB',
+          uploadedAt: '11:02 AM',
         },
       ])
     } else {
-      setFullName('Vikram Singhania')
+      setFullName('Suresh Varma')
       setPhone('9848077889')
-      setEmail('procurement@krishnagrains.com')
-      setPin('1234')
-      setBusinessName('Krishna Valley Agro Processors Ltd.')
-      setGstin('37CCCCC2222C3Z1')
+      setEmail('procurement@mahigrains.com')
+      setBusinessName('Mahi Agro Processing Industries Ltd.')
+      setOrganizationType('Food Processing Unit')
+      setAuthorizedPerson('Suresh Varma (Head of Procurement)')
+      setPan('AACCM1234P')
+      setGstin('24CCCC1234C1Z9')
       setFssai('10025002000512')
-      setAddress('Survey 42, Food Park Phase II, Mangalagiri')
-      setCity('Guntur')
-      setState('Andhra Pradesh')
-      setPinCode('522503')
       setDocuments([
         {
-          type: 'Company PAN & GSTIN Certificate',
-          name: 'krishna_valley_gst_pan.pdf',
-          size: '3.4 MB',
-          uploadedAt: '09:30 AM',
+          type: 'Organization Registration Proof',
+          name: 'certificate_of_incorporation.pdf',
+          size: '3.1 MB',
+          uploadedAt: '09:20 AM',
         },
         {
-          type: 'FSSAI Central Manufacturing License',
+          type: 'FSSAI Manufacturing License',
           name: 'fssai_central_license.pdf',
-          size: '2.8 MB',
-          uploadedAt: '09:31 AM',
+          size: '2.4 MB',
+          uploadedAt: '09:22 AM',
         },
       ])
     }
   }
 
-  // Handle final submission to backend API
+  // Navigation Validation
+  const handleProceedFromStep1 = () => {
+    setStepError(null)
+    if (!fullName.trim() || fullName.trim().length < 2) {
+      setStepError('Please enter your full name.')
+      return
+    }
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10)
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setStepError('Please enter a valid 10-digit Indian mobile number.')
+      return
+    }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setStepError('Please enter a valid email address.')
+      return
+    }
+    if (!password || password.length < 4) {
+      setStepError('Please enter a password or MPIN of at least 4 characters.')
+      return
+    }
+    if (!otpVerified) {
+      setStepError('Please verify your mobile number with the one-time password.')
+      return
+    }
+    setStep(2)
+  }
+
+  const handleProceedFromStep2 = () => {
+    setStepError(null)
+    setStep(3)
+  }
+
+  const handleProceedFromStep3 = () => {
+    setStepError(null)
+    if (!address.trim() || !city.trim() || !state.trim() || !pinCode.trim()) {
+      setStepError('Please fill in complete address, city, state, and PIN code.')
+      return
+    }
+    if (!/^\d{6}$/.test(pinCode.trim())) {
+      setStepError('Please enter a valid 6-digit postal PIN code.')
+      return
+    }
+
+    if (selectedTier === 'RETAILER') {
+      if (!businessName.trim()) {
+        setStepError('Please enter your shop or business name.')
+        return
+      }
+      if (!authorizedPerson.trim()) {
+        setStepError('Please enter the name of the authorized contact person.')
+        return
+      }
+    } else if (selectedTier === 'RESTAURANT') {
+      if (!businessName.trim()) {
+        setStepError('Please enter your restaurant, kitchen, or business name.')
+        return
+      }
+      if (!fssai.trim()) {
+        setStepError('Please enter your FSSAI registration or license number.')
+        return
+      }
+      if (!authorizedPerson.trim()) {
+        setStepError('Please enter the authorized contact person.')
+        return
+      }
+    } else if (selectedTier === 'INSTITUTIONAL') {
+      if (!businessName.trim()) {
+        setStepError('Please enter your organization or company name.')
+        return
+      }
+      if (!authorizedPerson.trim()) {
+        setStepError('Please enter the authorized signatory or procurement head.')
+        return
+      }
+    }
+
+    setStep(4)
+  }
+
+  // Final Submission
   const handleSubmitRegistration = async () => {
     setIsSubmitting(true)
-    setSubmitError(null)
+    setStepError(null)
 
     try {
       const payload = {
-        fullName,
-        phone,
-        email,
-        password: pin || '1234',
-        pin: pin || '1234',
+        fullName: fullName.trim(),
+        phone: phone.replace(/\D/g, '').slice(-10),
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+        pin: password.trim(),
         buyerType: selectedTier,
-        address,
-        city,
-        state,
-        pinCode,
-        businessName: selectedTier === 'HOUSEHOLD' ? undefined : businessName,
-        gstin: selectedTier === 'HOUSEHOLD' ? undefined : gstin,
-        fssai: selectedTier === 'HOUSEHOLD' ? undefined : fssai,
-        documents,
-        useForDelivery,
+        address: address.trim(),
+        city: city.trim(),
+        state: state.trim(),
+        pinCode: pinCode.trim(),
+        businessName: selectedTier === 'HOUSEHOLD' ? undefined : businessName.trim(),
+        organizationType: selectedTier === 'INSTITUTIONAL' ? organizationType : undefined,
+        authorizedPerson: selectedTier === 'HOUSEHOLD' ? fullName.trim() : authorizedPerson.trim() || fullName.trim(),
+        gstin: selectedTier === 'HOUSEHOLD' ? undefined : gstin.trim() || undefined,
+        pan: selectedTier === 'INSTITUTIONAL' ? pan.trim() || undefined : undefined,
+        fssai: selectedTier === 'HOUSEHOLD' ? undefined : fssai.trim() || undefined,
+        documents: selectedTier === 'HOUSEHOLD' ? [] : documents,
       }
 
       const res = await fetch('/api/buyer/register', {
@@ -379,96 +439,98 @@ export function BuyerRegistrationWizard() {
 
       setRegisteredBuyerData(data)
 
-      // Screen routing based on tier & verification status
-      if (data.status === 'verified') {
-        setCurrentScreen(9) // Screen 9: Account Verified!
+      if (selectedTier === 'HOUSEHOLD') {
+        setVerificationStatus('verified')
+        setReviewerNotes('Account verified instantly via mobile OTP.')
       } else {
-        setCurrentScreen(8) // Screen 8: Verification Pending
+        setVerificationStatus('under_review')
+        setReviewerNotes(
+          'Your business application and uploaded proofs have been submitted to the local FPO administrative desk for review.'
+        )
       }
+
+      setStep(5)
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Error submitting registration.')
+      setStepError(err instanceof Error ? err.message : 'Registration error occurred.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Simulate District Coordinator instant approval for testing/demo
-  const handleSimulateApproval = async () => {
+  // Evaluator status switcher to simulate all 5 verification states
+  const handleSimulateStatusChange = async (targetStatus: VerificationState) => {
     setIsSimulatingReview(true)
     try {
+      const actionMap: Record<VerificationState, string> = {
+        verified: 'simulate_approve',
+        rejected: 'simulate_reject',
+        needs_correction: 'simulate_needs_correction',
+        under_review: 'simulate_under_review',
+        pending: 'simulate_pending',
+      }
+
+      const cleanPhone = phone.replace(/\D/g, '').slice(-10) || '9825144102'
       const res = await fetch('/api/buyer/verify-flow', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'simulate_approve',
-          phone,
-          decision: 'verified',
-          reviewerNotes: 'Simulated approval by AgriLink District FPO Coordinator.',
+          action: actionMap[targetStatus],
+          phone: cleanPhone,
+          decision: targetStatus,
         }),
       })
+
       const data = await res.json()
       if (res.ok && data.ok) {
-        setRegisteredBuyerData((prev: any) => ({
-          ...prev,
-          status: 'verified',
-        }))
-        setCurrentScreen(9) // Transition to Screen 9: Account Verified!
+        setVerificationStatus(targetStatus)
+        setReviewerNotes(data.notes || 'Status updated by FPO administrative desk.')
       } else {
-        alert('Simulator note: Switched to verified preview.')
-        setCurrentScreen(9)
+        setVerificationStatus(targetStatus)
       }
     } catch {
-      setCurrentScreen(9)
+      setVerificationStatus(targetStatus)
     } finally {
       setIsSimulatingReview(false)
     }
   }
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-4 py-6 font-sans">
-      {/* Main Wizard Card Container */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        {/* Progress Stepper Header (Screens 2 - 7) */}
-        {currentScreen >= 2 && currentScreen <= 7 && (
-          <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-4">
-            <div className="flex items-center justify-between max-w-2xl mx-auto">
+    <div className="w-full max-w-4xl mx-auto px-4 py-6 font-sans">
+      {/* Main Container */}
+      <div className="bg-white dark:bg-card rounded-3xl shadow-sm border border-slate-200 dark:border-border overflow-hidden">
+        {/* Progress Bar & Stepper (Steps 1 to 4) */}
+        {step >= 1 && step <= 4 && (
+          <div className="border-b border-slate-100 dark:border-border bg-slate-50/70 dark:bg-muted/30 px-6 py-4">
+            <div className="flex items-center justify-between max-w-xl mx-auto">
               {[
-                { stepNum: 1, title: 'Account', screenTarget: 2 },
-                { stepNum: 2, title: 'Profile Type', screenTarget: 4 },
-                { stepNum: 3, title: 'Details & Docs', screenTarget: 5 },
-                { stepNum: 4, title: 'Review', screenTarget: 7 },
-              ].map((item) => {
-                const isPassed =
-                  (item.stepNum === 1 && currentScreen > 3) ||
-                  (item.stepNum === 2 && currentScreen > 4) ||
-                  (item.stepNum === 3 && currentScreen > 6)
-                const isCurrent =
-                  (item.stepNum === 1 && (currentScreen === 2 || currentScreen === 3)) ||
-                  (item.stepNum === 2 && currentScreen === 4) ||
-                  (item.stepNum === 3 && (currentScreen === 5 || currentScreen === 6)) ||
-                  (item.stepNum === 4 && currentScreen === 7)
-
+                { num: 1, title: 'Account' },
+                { num: 2, title: 'Buyer Type' },
+                { num: 3, title: 'Details' },
+                { num: 4, title: 'Review' },
+              ].map((item, idx) => {
+                const isCurrent = step === item.num
+                const isPassed = step > item.num
                 return (
-                  <div key={item.stepNum} className="flex items-center gap-2">
+                  <div key={item.num} className="flex items-center gap-2">
                     <div
-                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                      className={`size-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                         isPassed
                           ? 'bg-emerald-600 text-white'
                           : isCurrent
-                            ? 'bg-emerald-700 text-white ring-4 ring-emerald-100'
-                            : 'bg-slate-200 text-slate-500'
+                          ? 'bg-emerald-800 text-white ring-2 ring-emerald-200 dark:ring-emerald-900'
+                          : 'bg-slate-200 dark:bg-muted text-slate-500'
                       }`}
                     >
-                      {isPassed ? <CheckCircle2 className="w-4 h-4" /> : item.stepNum}
+                      {isPassed ? <Check className="size-3.5" /> : item.num}
                     </div>
                     <span
-                      className={`text-xs font-medium hidden sm:inline ${
-                        isCurrent ? 'text-emerald-900 font-semibold' : 'text-slate-500'
+                      className={`text-xs font-bold hidden sm:inline ${
+                        isCurrent ? 'text-slate-900 dark:text-foreground' : 'text-slate-500'
                       }`}
                     >
                       {item.title}
                     </span>
-                    {item.stepNum < 4 && <div className="w-8 h-[2px] bg-slate-200 mx-1 hidden sm:block" />}
+                    {idx < 3 && <div className="w-6 sm:w-10 h-0.5 bg-slate-200 dark:bg-border ml-1" />}
                   </div>
                 )
               })}
@@ -476,1100 +538,1202 @@ export function BuyerRegistrationWizard() {
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* SCREEN 1: Welcome / Sign Up ("Good Food, Brighter Tomorrows") */}
-        {/* ========================================================================= */}
-        {currentScreen === 1 && (
-          <div className="p-6 md:p-10">
-            <div className="max-w-3xl mx-auto text-center">
-              {/* Hero Badge */}
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-6">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                AgriLink Direct Buyer Network
-              </div>
-
-              {/* Tagline from Design Diagram */}
-              <h1 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tight leading-tight mb-4">
-                Good Food, <br className="hidden sm:inline" />
-                <span className="text-emerald-700">Brighter Tomorrows.</span>
-              </h1>
-              <p className="text-slate-600 text-base md:text-lg max-w-xl mx-auto mb-8 leading-relaxed">
-                Connect directly with certified smallholder farmers and FPO clusters. Fresh harvest, transparent
-                fair pricing, and fully traceable farm-to-door delivery.
-              </p>
-
-              {/* Value Pillars */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 text-left">
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-300 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 mb-3">
-                    <Home className="w-5 h-5" />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm mb-1">Household Kitchens</h3>
-                  <p className="text-xs text-slate-600">
-                    Order 1–20 kg fresh farm harvests directly. Instant activation without paperwork.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 mb-3">
-                    <Store className="w-5 h-5" />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm mb-1">Retailers & Grocers</h3>
-                  <p className="text-xs text-slate-600">
-                    Stock your shop with up to 500 kg daily lots at transparent wholesale mandi-linked rates.
-                  </p>
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 hover:border-amber-300 transition-colors">
-                  <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 mb-3">
-                    <Building2 className="w-5 h-5" />
-                  </div>
-                  <h3 className="font-bold text-slate-900 text-sm mb-1">Institutions & Processors</h3>
-                  <p className="text-xs text-slate-600">
-                    Contract 500 kg to multi-ton lots with scheduled cold-chain delivery & GST invoicing.
-                  </p>
-                </div>
-              </div>
-
-              {/* Primary Call to Action */}
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setCurrentScreen(2)}
-                  className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                >
-                  Create Buyer Account
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-                <Link
-                  href="/login"
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm border border-slate-300 shadow-sm transition-all text-center"
-                >
-                  I already have an account / Login
-                </Link>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 2: Step 1 — Basic Account Details */}
-        {/* ========================================================================= */}
-        {currentScreen === 2 && (
-          <div className="p-6 md:p-8 max-w-2xl mx-auto">
-            <div className="mb-6">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 1 of 4</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-1">Create Your Buyer Account</h2>
-              <p className="text-slate-600 text-sm mt-1">
-                Enter your basic contact details to receive verification codes and farm delivery updates.
-              </p>
-            </div>
-
-            {submitError && (
-              <div className="mb-6 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{submitError}</span>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Full Name / Contact Person <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Ramesh Kumar or Priya Sundaram"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Mobile Number (for SMS & WhatsApp) <span className="text-red-500">*</span>
-                </label>
-                <div className="flex rounded-xl border border-slate-300 overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500">
-                  <span className="px-3.5 py-2.5 bg-slate-100 text-slate-600 font-semibold text-sm border-r border-slate-300">
-                    +91
+        {/* Wizard Form Content */}
+        <div className="p-6 sm:p-10">
+          {/* ========================================================================= */}
+          {/* STEP 1: ACCOUNT DETAILS & OTP AUTH                                         */}
+          {/* ========================================================================= */}
+          {step === 1 && (
+            <div className="space-y-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                    Step 1 of 4
                   </span>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="98251 44102"
-                    className="w-full px-4 py-2.5 focus:outline-none text-sm"
-                  />
+                  <h1 className="text-2xl font-black text-slate-900 dark:text-foreground mt-2">
+                    Create Buyer Account
+                  </h1>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                    Enter your name, mobile, email, and password to establish your verified procurement identity.
+                  </p>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Email Address <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. buyer@example.com"
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  Security PIN / Password (4-6 digits) <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                  <input
-                    type="password"
-                    value={pin}
-                    onChange={(e) => setPin(e.target.value)}
-                    placeholder="e.g. 1234"
-                    maxLength={12}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                </div>
-                <p className="text-[11px] text-slate-500 mt-1">Used for fast mobile login & MPIN approval.</p>
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-start gap-2.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agreedTerms}
-                    onChange={(e) => setAgreedTerms(e.target.checked)}
-                    className="mt-0.5 rounded border-slate-300 text-emerald-700 focus:ring-emerald-500"
-                  />
-                  <span className="text-xs text-slate-600 leading-tight">
-                    I agree to the AgriLink Fair Trade Terms of Service and consent to receive harvest notifications and
-                    order delivery OTPs.
+                {/* 1-Click Demo Pre-fills */}
+                <div className="hidden sm:block text-right">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                    Quick Evaluator Fill
                   </span>
-                </label>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePrefillDemo('HOUSEHOLD')}
+                      className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 transition"
+                    >
+                      Household
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePrefillDemo('RETAILER')}
+                      className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 transition"
+                    >
+                      Retailer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePrefillDemo('RESTAURANT')}
+                      className="px-2 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 transition"
+                    >
+                      Restaurant
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(1)}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 text-sm font-semibold flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={!fullName || !phone || !email || !agreedTerms || isOtpSending}
-                onClick={sendOtp}
-                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold shadow-md flex items-center gap-2"
-              >
-                {isOtpSending ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Sending OTP...
-                  </>
-                ) : (
-                  <>
-                    Send Mobile OTP
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Full Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative flex rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100">
+                    <span className="grid place-items-center pl-3.5 text-slate-400">
+                      <User className="size-4" />
+                    </span>
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="e.g. Ananya Sharma"
+                      className="w-full bg-transparent px-3 py-2.5 text-sm outline-none font-medium"
+                    />
+                  </div>
+                </div>
 
-        {/* ========================================================================= */}
-        {/* SCREEN 3: Step 1b — Mobile OTP Verification */}
-        {/* ========================================================================= */}
-        {currentScreen === 3 && (
-          <div className="p-6 md:p-8 max-w-md mx-auto text-center">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-4">
-              <Phone className="w-7 h-7" />
-            </div>
+                {/* Email */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative flex rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100">
+                    <span className="grid place-items-center pl-3.5 text-slate-400">
+                      <Mail className="size-4" />
+                    </span>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="e.g. ananya@example.com"
+                      className="w-full bg-transparent px-3 py-2.5 text-sm outline-none font-medium"
+                    />
+                  </div>
+                </div>
 
-            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 1b · Security</span>
-            <h2 className="text-2xl font-black text-slate-900 mt-1">Verify Mobile Number</h2>
-            <p className="text-slate-600 text-sm mt-1 mb-2">
-              We sent a 6-digit verification code to <span className="font-semibold text-slate-900">+91 {phone}</span>
-            </p>
-            <button
-              type="button"
-              onClick={() => setCurrentScreen(2)}
-              className="text-xs text-emerald-700 hover:underline font-semibold"
-            >
-              Edit Mobile Number
-            </button>
-
-            {/* 6 Digit OTP Input Boxes */}
-            <div className="flex justify-center gap-2.5 my-6">
-              {otpDigits.map((digit, idx) => (
-                <input
-                  key={idx}
-                  id={`buyer-otp-${idx}`}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  className="w-11 h-12 text-center text-xl font-bold rounded-xl border-2 border-slate-300 focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all"
-                />
-              ))}
-            </div>
-
-            {otpError && <p className="text-xs text-red-600 font-medium mb-4">{otpError}</p>}
-
-            {/* Verification Helper Badge */}
-            <div className="mb-6 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between">
-              <span>Verification Code: <strong>123456</strong></span>
-              <button
-                type="button"
-                onClick={fillDemoOtp}
-                className="px-2 py-0.5 rounded bg-emerald-200/80 hover:bg-emerald-200 font-semibold text-emerald-900"
-              >
-                Fill Code
-              </button>
-            </div>
-
-            {/* Resend Timer */}
-            <div className="text-xs text-slate-500 mb-6">
-              {otpTimer > 0 ? (
-                <span>Resend code in {otpTimer}s</span>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpTimer(45)
-                    fillDemoOtp()
-                  }}
-                  className="text-emerald-700 font-bold hover:underline"
-                >
-                  Resend OTP Now
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(2)}
-                className="w-1/3 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-semibold hover:bg-slate-50"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={isOtpVerifying}
-                onClick={verifyOtp}
-                className="w-2/3 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold shadow-md flex items-center justify-center gap-2"
-              >
-                {isOtpVerifying ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    Verify & Continue
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 4: Step 2 — Buyer Type Selection */}
-        {/* ========================================================================= */}
-        {currentScreen === 4 && (
-          <div className="p-6 md:p-8 max-w-3xl mx-auto">
-            <div className="mb-6 text-center sm:text-left">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 2 of 4</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-1">Select Your Buyer Profile</h2>
-              <p className="text-slate-600 text-sm mt-1">
-                Choose the profile that matches your purchasing volume. Verification is tailored to your tier.
-              </p>
-            </div>
-
-            {/* 4 Tier Selection Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {BUYER_TIERS.map((tier) => {
-                const IconComponent = tier.icon
-                const isSelected = selectedTier === tier.key
-
-                return (
-                  <div
-                    key={tier.key}
-                    onClick={() => setSelectedTier(tier.key)}
-                    className={`cursor-pointer rounded-2xl p-5 border-2 transition-all relative ${
-                      isSelected
-                        ? 'border-emerald-600 bg-emerald-50/40 shadow-md ring-2 ring-emerald-200'
-                        : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center ${
-                          isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
-                        }`}
+                {/* Mobile Number & OTP Trigger */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Mobile Number <span className="text-red-500">*</span>
+                    </label>
+                    {otpVerified && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                        <CheckCircle2 className="size-3.5" /> Mobile Verified
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100">
+                    <span className="border-r border-slate-200 dark:border-border px-3 py-2.5 text-sm font-mono text-slate-500">
+                      +91
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      value={phone}
+                      onChange={(e) => {
+                        setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))
+                        setOtpVerified(false)
+                        setOtpSent(false)
+                      }}
+                      placeholder="98251 44102"
+                      className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm font-mono outline-none font-medium"
+                    />
+                    {!otpVerified && (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={isSendingOtp || phone.length < 10}
+                        className="px-3 text-xs font-bold text-emerald-800 hover:text-emerald-950 disabled:opacity-40 transition"
                       >
-                        <IconComponent className="w-6 h-6" />
-                      </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${tier.badgeBg}`}>
-                        {tier.instantVerify ? 'Instant (No Docs)' : '24-48h Review'}
+                        {isSendingOtp ? 'Sending…' : otpSent ? 'Resend' : 'Send OTP'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Password / MPIN */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Password / MPIN <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative flex rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-100">
+                    <span className="grid place-items-center pl-3.5 text-slate-400">
+                      <Lock className="size-4" />
+                    </span>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min 4 characters (e.g. 1234)"
+                      className="w-full bg-transparent px-3 py-2.5 text-sm outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="pr-3 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* OTP Verification Box */}
+              {otpSent && !otpVerified && (
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-emerald-700" />
+                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
+                        Enter 6-digit OTP sent to +91 {phone}
                       </span>
                     </div>
-
-                    <h3 className="font-bold text-slate-900 text-base mb-1">{tier.label}</h3>
-                    <p className="text-xs text-slate-600 mb-3 line-clamp-2">{tier.subtitle}</p>
-
-                    <div className="pt-3 border-t border-slate-100 space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between text-slate-700">
-                        <span className="text-slate-500">Purchase Limit:</span>
-                        <span className="font-bold text-slate-900">{tier.limitLabel}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700">
-                        <span className="text-slate-500">Verification:</span>
-                        <span className="font-medium text-slate-700">{tier.turnaround}</span>
-                      </div>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={handleFillDemoOtp}
+                      className="text-[11px] font-bold text-emerald-700 hover:underline"
+                    >
+                      Fill Demo (123456)
+                    </button>
                   </div>
-                )
-              })}
-            </div>
 
-            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(3)}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 text-sm font-semibold flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(5)}
-                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-md flex items-center gap-2"
-              >
-                Next: {selectedTier === 'HOUSEHOLD' ? 'Delivery Address' : 'Business & Address'}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="123456"
+                      className="w-40 px-3 py-2 rounded-xl border border-emerald-300 bg-white dark:bg-card text-sm font-mono tracking-widest outline-none text-center font-bold"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyOtp}
+                      disabled={isVerifyingOtp || otp.length < 6}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition disabled:opacity-50"
+                    >
+                      {isVerifyingOtp ? 'Verifying…' : 'Verify OTP'}
+                    </button>
+                    <span className="text-xs text-slate-500 ml-2">
+                      {otpTimer > 0 ? `Resend in ${otpTimer}s` : 'You can resend now'}
+                    </span>
+                  </div>
 
-        {/* ========================================================================= */}
-        {/* SCREEN 5: Step 3 — Details (Household Address vs Business Info) */}
-        {/* ========================================================================= */}
-        {currentScreen === 5 && (
-          <div className="p-6 md:p-8 max-w-2xl mx-auto">
-            <div className="mb-6">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 3 of 4</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-1">
-                {selectedTier === 'HOUSEHOLD' ? 'Delivery Address Details' : `${activeTierConfig.label} Business Details`}
-              </h2>
-              <p className="text-slate-600 text-sm mt-1">
-                {selectedTier === 'HOUSEHOLD'
-                  ? 'Enter where you want fresh farm harvest baskets delivered.'
-                  : 'Enter your registered trade details and delivery warehouse/kitchen location.'}
-              </p>
-            </div>
+                  {otpError && <p className="text-xs font-semibold text-red-600">{otpError}</p>}
+                </div>
+              )}
 
-            <div className="space-y-4">
-              {/* Business-Only Fields */}
+              {/* Error Notice */}
+              {stepError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700 flex items-center gap-2">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{stepError}</span>
+                </div>
+              )}
+
+              {/* Navigation Action */}
+              <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-border">
+                <Link href="/login" className="text-xs font-bold text-slate-500 hover:text-slate-800">
+                  Already registered? Sign in &rarr;
+                </Link>
+                <button
+                  type="button"
+                  onClick={handleProceedFromStep1}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-xs transition"
+                >
+                  Continue to Buyer Type
+                  <ArrowRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 2: BUYER TYPE SELECTION                                               */}
+          {/* ========================================================================= */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                  Step 2 of 4
+                </span>
+                <h1 className="text-2xl font-black text-slate-900 dark:text-foreground mt-2">
+                  Select Buyer Profile
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  Choose your procurement profile. Typical platform guidance indicates expected order sizes (not legal limits).
+                </p>
+              </div>
+
+              {/* 4 Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {BUYER_TIERS.map((tier) => {
+                  const isSelected = selectedTier === tier.key
+                  const Icon = tier.icon
+                  return (
+                    <button
+                      key={tier.key}
+                      type="button"
+                      onClick={() => setSelectedTier(tier.key)}
+                      className={`p-5 rounded-2xl border-2 text-left transition-all flex flex-col justify-between relative ${
+                        isSelected
+                          ? 'border-emerald-600 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-sm ring-1 ring-emerald-600'
+                          : 'border-slate-200 dark:border-border bg-white dark:bg-card hover:border-slate-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div
+                            className={`size-10 rounded-xl grid place-items-center ${
+                              isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 dark:bg-muted text-slate-700'
+                            }`}
+                          >
+                            <Icon className="size-5" />
+                          </div>
+                          <span
+                            className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${tier.badgeClass}`}
+                          >
+                            {tier.procurementGuidance}
+                          </span>
+                        </div>
+
+                        <h2 className="text-base font-black text-slate-900 dark:text-foreground">
+                          {tier.label}
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          {tier.subtitle}
+                        </p>
+                      </div>
+
+                      <div className="mt-4 pt-3 border-t border-slate-100 dark:border-border/60">
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {tier.guidanceNote}
+                        </span>
+                        {!tier.requiresDocs && (
+                          <span className="block text-[11px] font-bold text-emerald-700 mt-0.5">
+                            ✓ Instant mobile activation · No business documents
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Guidance Explanation Alert */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-muted/40 border border-slate-200 dark:border-border flex items-start gap-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                <Info className="size-4 shrink-0 text-emerald-700 mt-0.5" />
+                <div>
+                  <strong className="text-slate-900 dark:text-slate-100">Procurement Guidance Notice:</strong> Typical platform procurement guidance helps FPO clusters allocate vehicle capacities (e.g. Tata Ace, Dost, or Eicher). These reflect customary basket volumes and are not statutory legal limits.
+                </div>
+              </div>
+
+              {/* Navigation Action */}
+              <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-border">
+                <button
+                  type="button"
+                  onClick={() => setStep(1)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800"
+                >
+                  <ArrowLeft className="size-4" /> Back to Account
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProceedFromStep2}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-xs transition"
+                >
+                  Continue to Details
+                  <ArrowRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 3: TYPE-SPECIFIC DETAILS & VERIFICATION PROOF                         */}
+          {/* ========================================================================= */}
+          {step === 3 && (
+            <div className="space-y-6">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                  Step 3 of 4 · {activeTier.label} Profile
+                </span>
+                <h1 className="text-2xl font-black text-slate-900 dark:text-foreground mt-2">
+                  {selectedTier === 'HOUSEHOLD'
+                    ? 'Delivery Address'
+                    : selectedTier === 'RETAILER'
+                    ? 'Retailer & Shop Details'
+                    : selectedTier === 'RESTAURANT'
+                    ? 'Restaurant & Kitchen Details'
+                    : 'Organization & Facility Details'}
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  {selectedTier === 'HOUSEHOLD'
+                    ? 'Enter your residential delivery address. No business documents are requested from households.'
+                    : 'Provide business credentials and registration proof for FPO desk verification.'}
+                </p>
+              </div>
+
+              {/* Notice for Household */}
+              {selectedTier === 'HOUSEHOLD' && (
+                <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/60 flex items-start gap-3">
+                  <CheckCircle2 className="size-5 text-emerald-700 shrink-0 mt-0.5" />
+                  <div className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
+                    <strong className="block font-bold mb-0.5">Instant Household Activation</strong>
+                    As a household buyer, no commercial registration, GSTIN, or trade proof is required. Your account activates immediately upon registration with full farm-gate market access (1–20 kg/order).
+                  </div>
+                </div>
+              )}
+
+              {/* Business-Specific Inputs */}
               {selectedTier !== 'HOUSEHOLD' && (
-                <>
+                <div className="space-y-4 p-5 rounded-2xl bg-slate-50/60 dark:bg-muted/30 border border-slate-200 dark:border-border">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Business Identification
+                  </h2>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Business / Shop / Org Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        {selectedTier === 'RETAILER'
+                          ? 'Shop / Business Name'
+                          : selectedTier === 'RESTAURANT'
+                          ? 'Restaurant / Kitchen Name'
+                          : 'Organization / Mill Name'}{' '}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        placeholder={
+                          selectedTier === 'RETAILER'
+                            ? 'e.g. Patel Daily Fresh Vegetables'
+                            : selectedTier === 'RESTAURANT'
+                            ? 'e.g. Swad Cloud Kitchens'
+                            : 'e.g. Mahi Agro Processing Ltd.'
+                        }
+                        className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+
+                    {/* Authorized Person */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        Authorized Person <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={authorizedPerson}
+                        onChange={(e) => setAuthorizedPerson(e.target.value)}
+                        placeholder="e.g. Ramesh Patel (Owner / Manager)"
+                        className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                      />
+                    </div>
+
+                    {/* Processor Organization Type */}
+                    {selectedTier === 'INSTITUTIONAL' && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Organization Type <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={organizationType}
+                          onChange={(e) => setOrganizationType(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600"
+                        >
+                          <option value="Food Processing Unit">Food Processing Unit</option>
+                          <option value="Dal & Flour Mill">Dal & Flour Mill</option>
+                          <option value="Hospital / Healthcare Canteen">Hospital / Healthcare Canteen</option>
+                          <option value="Hostel / Educational Mess">Hostel / Educational Mess</option>
+                          <option value="Wholesale Exporter / Aggregator">Wholesale Exporter / Aggregator</option>
+                          <option value="Cooperative Society">Cooperative Society</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* FSSAI License (Restaurant / Processor) */}
+                    {(selectedTier === 'RESTAURANT' || selectedTier === 'INSTITUTIONAL') && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          FSSAI License / Registration No.{' '}
+                          {selectedTier === 'RESTAURANT' ? (
+                            <span className="text-red-500">*</span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">(where applicable)</span>
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={14}
+                          value={fssai}
+                          onChange={(e) => setFssai(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                          placeholder="14-digit FSSAI Number"
+                          className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm font-mono outline-none font-medium focus:border-emerald-600"
+                        />
+                      </div>
+                    )}
+
+                    {/* GSTIN (where applicable) */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                        GSTIN <span className="text-slate-400 font-normal">(if applicable)</span>
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={15}
+                        value={gstin}
+                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                        placeholder="e.g. 24AAAAA0000A1Z5"
+                        className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm font-mono outline-none font-medium uppercase focus:border-emerald-600"
+                      />
+                    </div>
+
+                    {/* PAN (Processor/Institution where applicable) */}
+                    {selectedTier === 'INSTITUTIONAL' && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Company / Trust PAN{' '}
+                          <span className="text-slate-400 font-normal">(where applicable)</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={10}
+                          value={pan}
+                          onChange={(e) => setPan(e.target.value.toUpperCase())}
+                          placeholder="e.g. AABBC1234D"
+                          className="w-full rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-background px-3 py-2.5 text-sm font-mono outline-none font-medium uppercase focus:border-emerald-600"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Location & Address */}
+              <div className="space-y-4">
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  {selectedTier === 'HOUSEHOLD' ? 'Delivery Location' : 'Facility / Commercial Address'}
+                </h2>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Street Address & Landmark <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="e.g. Flat 402, Green Meadows, Sardar Patel Road"
+                    className="w-full rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                      Business / Shop Legal Name <span className="text-red-500">*</span>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      City / District <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
-                      value={businessName}
-                      onChange={(e) => setBusinessName(e.target.value)}
-                      placeholder="e.g. Gupta Fresh Vegetables & Kirana"
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Anand"
+                      className="w-full rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600"
                     />
                   </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      State <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="Gujarat"
+                      className="w-full rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background px-3 py-2.5 text-sm outline-none font-medium focus:border-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      PIN Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={pinCode}
+                      onChange={(e) => setPinCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="388001"
+                      className="w-full rounded-xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-background px-3 py-2.5 text-sm font-mono outline-none font-medium focus:border-emerald-600"
+                    />
+                  </div>
+                </div>
+              </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Document Uploads (Strictly Business Tiers Only) */}
+              {selectedTier !== 'HOUSEHOLD' && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                        GSTIN (Optional for small retail)
-                      </label>
-                      <input
-                        type="text"
-                        value={gstin}
-                        onChange={(e) => setGstin(e.target.value.toUpperCase())}
-                        placeholder="37AAAAA0000A1Z5"
-                        maxLength={15}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm uppercase"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                        FSSAI License No. {selectedTier === 'RESTAURANT' && <span className="text-red-500">*</span>}
-                      </label>
-                      <input
-                        type="text"
-                        value={fssai}
-                        onChange={(e) => setFssai(e.target.value.replace(/\D/g, '').slice(0, 14))}
-                        placeholder="14-digit FSSAI number"
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                      />
+                      <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Required Business Proofs
+                      </h2>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Reviewed by the local FPO administrative desk. No live government KYC/API integration is claimed.
+                      </p>
                     </div>
                   </div>
-                </>
-              )}
 
-              {/* Address Fields */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                  {selectedTier === 'HOUSEHOLD' ? 'Street Address / Flat No.' : 'Commercial Address / Mandi Stall'}
-                  <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder={
-                    selectedTier === 'HOUSEHOLD'
-                      ? 'Flat 402, Green Meadows Enclave, Brodipet 4th Lane'
-                      : 'Shop 14, Main Mandi Road, Near Grain Yard'
-                  }
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    City / Town <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Guntur"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    State <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm bg-white"
-                  >
-                    <option value="Andhra Pradesh">Andhra Pradesh</option>
-                    <option value="Telangana">Telangana</option>
-                    <option value="Gujarat">Gujarat</option>
-                    <option value="Maharashtra">Maharashtra</option>
-                    <option value="Karnataka">Karnataka</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    PIN Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={pinCode}
-                    onChange={(e) => setPinCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="522002"
-                    maxLength={6}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useForDelivery}
-                    onChange={(e) => setUseForDelivery(e.target.checked)}
-                    className="rounded border-slate-300 text-emerald-700 focus:ring-emerald-500"
-                  />
-                  <span className="text-xs text-slate-700 font-medium">
-                    Set this as my primary delivery & consignment unloading address
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(4)}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 text-sm font-semibold flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={!address || !city || !pinCode || (selectedTier !== 'HOUSEHOLD' && !businessName)}
-                onClick={() => {
-                  if (selectedTier === 'HOUSEHOLD') {
-                    setCurrentScreen(7) // Skip docs for Household, jump straight to review!
-                  } else {
-                    setCurrentScreen(6) // Go to Document upload
-                  }
-                }}
-                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold shadow-md flex items-center gap-2"
-              >
-                {selectedTier === 'HOUSEHOLD' ? 'Next: Review & Confirm' : 'Next: Upload Documents'}
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 6: Step 3b — Document Uploads (For Business tiers) */}
-        {/* ========================================================================= */}
-        {currentScreen === 6 && (
-          <div className="p-6 md:p-8 max-w-2xl mx-auto">
-            <div className="mb-6">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 3b · Verification</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-1">Upload Business Documents</h2>
-              <p className="text-slate-600 text-sm mt-1">
-                To unlock wholesale wholesale quotas ({activeTierConfig.limitLabel}), upload proof of business or food safety license.
-              </p>
-            </div>
-
-            {/* Document Upload Slots */}
-            <div className="space-y-4">
-              {activeTierConfig.requiredDocs.map((docRequirement, idx) => {
-                const uploaded = documents.find((d) => d.type === docRequirement)
-                const isUploading = isSimulatingUpload === docRequirement
-
-                return (
-                  <div
-                    key={idx}
-                    className={`p-4 rounded-xl border-2 transition-all ${
-                      uploaded
-                        ? 'border-emerald-300 bg-emerald-50/50'
-                        : 'border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100/70'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                            uploaded ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                          }`}
-                        >
-                          {uploaded ? <FileCheck2 className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                        </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedTier === 'RETAILER' && (
+                      <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50/50 dark:bg-muted/20 flex flex-col justify-between">
                         <div>
-                          <h4 className="text-xs font-bold text-slate-900">{docRequirement}</h4>
-                          <p className="text-[11px] text-slate-500">
-                            {uploaded ? `${uploaded.name} (${uploaded.size})` : 'PDF, JPG or PNG up to 10MB'}
-                          </p>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                            Shop & Establishment / Trade License
+                          </span>
+                          <span className="text-[11px] text-slate-500">
+                            Municipal certificate or commercial electricity bill
+                          </span>
                         </div>
-                      </div>
-
-                      <div>
-                        {uploaded ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full flex items-center gap-1">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Uploaded
-                            </span>
+                        <div className="mt-3">
+                          {documents.some((d) => d.type.includes('Shop')) ? (
+                            <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                              <span>✓ Attached</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDoc('Shop & Establishment License')}
+                                className="text-slate-400 hover:text-red-600"
+                              >
+                                <X className="size-3.5" />
+                              </button>
+                            </div>
+                          ) : (
                             <button
                               type="button"
-                              onClick={() => removeDoc(docRequirement)}
-                              className="text-slate-400 hover:text-red-600 p-1"
-                              title="Remove file"
+                              onClick={() => handleAttachDoc('Shop & Establishment License')}
+                              className="w-full py-2 rounded-xl bg-white dark:bg-card border border-slate-200 text-xs font-bold text-emerald-700 hover:bg-slate-50 transition"
                             >
-                              <X className="w-4 h-4" />
+                              {isSimulatingUpload === 'Shop & Establishment License'
+                                ? 'Uploading…'
+                                : '+ Attach License Copy'}
                             </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={isUploading}
-                            onClick={() => handleSimulateUpload(docRequirement)}
-                            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-300 shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {isUploading ? (
-                              <>
-                                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Uploading...
-                              </>
-                            ) : (
-                              <>
-                                <UploadCloud className="w-3.5 h-3.5 text-emerald-700" /> Upload File
-                              </>
-                            )}
-                          </button>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                    )}
 
-            {/* Privacy notice box */}
-            <div className="mt-6 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span>
-                Your documents are securely encrypted and reviewed only by AgriLink FPO verification officers.
-                Documents are never shared with third parties.
-              </span>
-            </div>
+                    {selectedTier === 'RESTAURANT' && (
+                      <>
+                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50/50 dark:bg-muted/20 flex flex-col justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                              FSSAI Food License Certificate
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              State or Central FSSAI registration certificate
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            {documents.some((d) => d.type.includes('FSSAI')) ? (
+                              <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                <span>✓ Attached</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDoc('FSSAI Food License Certificate')}
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAttachDoc('FSSAI Food License Certificate')}
+                                className="w-full py-2 rounded-xl bg-white dark:bg-card border border-slate-200 text-xs font-bold text-emerald-700 hover:bg-slate-50 transition"
+                              >
+                                {isSimulatingUpload === 'FSSAI Food License Certificate'
+                                  ? 'Uploading…'
+                                  : '+ Attach FSSAI Certificate'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
 
-            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(5)}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 text-sm font-semibold flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(7)}
-                className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-md flex items-center gap-2"
-              >
-                Next: Review & Submit
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50/50 dark:bg-muted/20 flex flex-col justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                              Commercial Lease or Utility Bill
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Kitchen premises address verification
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            {documents.some((d) => d.type.includes('Lease') || d.type.includes('Business')) ? (
+                              <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                <span>✓ Attached</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDoc('Commercial Lease Agreement')}
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAttachDoc('Commercial Lease Agreement')}
+                                className="w-full py-2 rounded-xl bg-white dark:bg-card border border-slate-200 text-xs font-bold text-emerald-700 hover:bg-slate-50 transition"
+                              >
+                                {isSimulatingUpload === 'Commercial Lease Agreement'
+                                  ? 'Uploading…'
+                                  : '+ Attach Lease / Utility Bill'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
 
-        {/* ========================================================================= */}
-        {/* SCREEN 7: Step 4 — Review & Submit */}
-        {/* ========================================================================= */}
-        {currentScreen === 7 && (
-          <div className="p-6 md:p-8 max-w-2xl mx-auto">
-            <div className="mb-6">
-              <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Step 4 of 4</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-1">Review Your Registration</h2>
-              <p className="text-slate-600 text-sm mt-1">
-                Please verify your details before submitting. You will receive an instant account activation or tracking ticket.
-              </p>
-            </div>
+                    {selectedTier === 'INSTITUTIONAL' && (
+                      <>
+                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50/50 dark:bg-muted/20 flex flex-col justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                              Organization Registration Proof
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Certificate of Incorporation, Society Registration, or Partnership Deed
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            {documents.some((d) => d.type.includes('Registration')) ? (
+                              <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                <span>✓ Attached</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDoc('Organization Registration Proof')}
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAttachDoc('Organization Registration Proof')}
+                                className="w-full py-2 rounded-xl bg-white dark:bg-card border border-slate-200 text-xs font-bold text-emerald-700 hover:bg-slate-50 transition"
+                              >
+                                {isSimulatingUpload === 'Organization Registration Proof'
+                                  ? 'Uploading…'
+                                  : '+ Attach Registration Proof'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
 
-            {submitError && (
-              <div className="mb-6 p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{submitError}</span>
-              </div>
-            )}
-
-            {/* Review Cards */}
-            <div className="space-y-4">
-              {/* Profile Tier Card */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
-                    <activeTierConfig.icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-slate-900 text-sm">{activeTierConfig.label} Tier</h4>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${activeTierConfig.badgeBg}`}>
-                        {activeTierConfig.instantVerify ? 'Instant' : '24-48h Review'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500">Purchase Limit: {activeTierConfig.limitLabel}</p>
+                        <div className="p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50/50 dark:bg-muted/20 flex flex-col justify-between">
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                              FSSAI / Tax Certificate (if applicable)
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Manufacturing license, GSTIN or PAN card copy
+                            </span>
+                          </div>
+                          <div className="mt-3">
+                            {documents.some((d) => d.type.includes('FSSAI') || d.type.includes('Tax')) ? (
+                              <div className="flex items-center justify-between bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-semibold">
+                                <span>✓ Attached</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDoc('FSSAI Manufacturing License')}
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleAttachDoc('FSSAI Manufacturing License')}
+                                className="w-full py-2 rounded-xl bg-white dark:bg-card border border-slate-200 text-xs font-bold text-emerald-700 hover:bg-slate-50 transition"
+                              >
+                                {isSimulatingUpload === 'FSSAI Manufacturing License'
+                                  ? 'Uploading…'
+                                  : '+ Attach FSSAI / Tax Proof'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
+              )}
+
+              {/* Error Notice */}
+              {stepError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700 flex items-center gap-2">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{stepError}</span>
+                </div>
+              )}
+
+              {/* Navigation Action */}
+              <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-border">
                 <button
                   type="button"
-                  onClick={() => setCurrentScreen(4)}
-                  className="text-xs font-semibold text-emerald-700 hover:underline"
+                  onClick={() => setStep(2)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800"
                 >
-                  Change
+                  <ArrowLeft className="size-4" /> Back to Buyer Type
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProceedFromStep3}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-xs transition"
+                >
+                  Continue to Review
+                  <ArrowRight className="size-4" />
                 </button>
               </div>
+            </div>
+          )}
 
-              {/* Personal & Contact Details */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-700">Account Details</span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentScreen(2)}
-                    className="text-xs font-semibold text-emerald-700 hover:underline"
-                  >
-                    Edit
-                  </button>
+          {/* ========================================================================= */}
+          {/* STEP 4: REVIEW & SUBMIT                                                    */}
+          {/* ========================================================================= */}
+          {step === 4 && (
+            <div className="space-y-6">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 px-2.5 py-0.5 rounded-full">
+                  Step 4 of 4 · Verification Review
+                </span>
+                <h1 className="text-2xl font-black text-slate-900 dark:text-foreground mt-2">
+                  Review & Submit Registration
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  Please review your credentials and profile details before submitting to the AgriLink platform.
+                </p>
+              </div>
+
+              {/* Review Sections */}
+              <div className="space-y-4">
+                {/* 1. Account Summary */}
+                <div className="p-4 rounded-2xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-muted/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <User className="size-3.5 text-emerald-700" /> Account Details
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="text-xs font-bold text-emerald-700 hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 block">Name</span>
+                      <strong className="text-slate-900 dark:text-foreground font-semibold">{fullName}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Mobile</span>
+                      <strong className="text-slate-900 dark:text-foreground font-semibold flex items-center gap-1">
+                        +91 {phone} <CheckCircle2 className="size-3.5 text-emerald-600 inline" />
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Email</span>
+                      <strong className="text-slate-900 dark:text-foreground font-semibold">{email}</strong>
+                    </div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-slate-600">
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Full Name:</span>
-                    <span className="font-medium text-slate-900">{fullName}</span>
+
+                {/* 2. Buyer Profile & Guidance */}
+                <div className="p-4 rounded-2xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-muted/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <activeTier.icon className="size-3.5 text-emerald-700" /> Buyer Profile & Guidance
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStep(2)}
+                      className="text-xs font-bold text-emerald-700 hover:underline"
+                    >
+                      Edit
+                    </button>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Mobile Number:</span>
-                    <span className="font-medium text-slate-900">+91 {phone} (Verified)</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 block">Category</span>
+                      <strong className="text-slate-900 dark:text-foreground font-semibold">
+                        {activeTier.label}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Typical Platform Procurement Guidance</span>
+                      <strong className="text-emerald-800 dark:text-emerald-300 font-bold">
+                        {activeTier.procurementGuidance}
+                      </strong>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">
+                        (Not legal limits; standard operational vehicle corridor capacity)
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Email Address:</span>
-                    <span className="font-medium text-slate-900">{email}</span>
+                </div>
+
+                {/* 3. Business & Type Specific Details */}
+                <div className="p-4 rounded-2xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-muted/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <MapPin className="size-3.5 text-emerald-700" />
+                      {selectedTier === 'HOUSEHOLD' ? 'Delivery Address' : 'Business & Facility Info'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setStep(3)}
+                      className="text-xs font-bold text-emerald-700 hover:underline"
+                    >
+                      Edit
+                    </button>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[11px]">Security PIN:</span>
-                    <span className="font-medium text-slate-900">••••</span>
+
+                  <div className="space-y-2 text-xs">
+                    {selectedTier !== 'HOUSEHOLD' && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-2 border-b border-slate-200/60 dark:border-border/60">
+                        <div>
+                          <span className="text-slate-400 block">Business Name</span>
+                          <strong className="text-slate-900 dark:text-foreground font-semibold">{businessName}</strong>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Authorized Contact</span>
+                          <strong className="text-slate-900 dark:text-foreground font-semibold">{authorizedPerson}</strong>
+                        </div>
+                        {fssai && (
+                          <div>
+                            <span className="text-slate-400 block">FSSAI Registration</span>
+                            <strong className="text-slate-900 dark:text-foreground font-mono">{fssai}</strong>
+                          </div>
+                        )}
+                        {gstin && (
+                          <div>
+                            <span className="text-slate-400 block">GSTIN</span>
+                            <strong className="text-slate-900 dark:text-foreground font-mono">{gstin}</strong>
+                          </div>
+                        )}
+                        {pan && (
+                          <div>
+                            <span className="text-slate-400 block">PAN</span>
+                            <strong className="text-slate-900 dark:text-foreground font-mono">{pan}</strong>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div>
+                      <span className="text-slate-400 block">Address</span>
+                      <strong className="text-slate-900 dark:text-foreground font-semibold">
+                        {address}, {city}, {state} - {pinCode}
+                      </strong>
+                    </div>
+
+                    {/* Attached Proofs */}
+                    {selectedTier !== 'HOUSEHOLD' && (
+                      <div className="pt-2">
+                        <span className="text-slate-400 block mb-1">Attached Verification Documents</span>
+                        {documents.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {documents.map((d, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200"
+                              >
+                                <FileCheck2 className="size-3" />
+                                {d.type} ({d.size})
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic text-[11px]">
+                            No documents attached yet (can be provided upon FPO desk request).
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Business & Address Details */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                  <span className="font-bold text-slate-700">
-                    {selectedTier === 'HOUSEHOLD' ? 'Delivery Address' : 'Business & Unloading Location'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setCurrentScreen(5)}
-                    className="text-xs font-semibold text-emerald-700 hover:underline"
-                  >
-                    Edit
-                  </button>
+              {/* Compliance & Verification Disclaimer */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-muted/30 border border-slate-200 dark:border-border text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-slate-900 dark:text-foreground">
+                  <ShieldCheck className="size-4 text-emerald-700" />
+                  <span>Administrative Verification Protocol</span>
                 </div>
-                {selectedTier !== 'HOUSEHOLD' && (
-                  <div className="grid grid-cols-2 gap-2 text-slate-600 mb-2">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Business Name:</span>
-                      <span className="font-medium text-slate-900">{businessName}</span>
-                    </div>
-                    {gstin && (
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">GSTIN:</span>
-                        <span className="font-medium text-slate-900">{gstin}</span>
-                      </div>
-                    )}
-                    {fssai && (
-                      <div>
-                        <span className="text-slate-400 block text-[11px]">FSSAI License:</span>
-                        <span className="font-medium text-slate-900">{fssai}</span>
-                      </div>
-                    )}
+                <p className="text-[11px]">
+                  Verification is conducted directly by the local FPO administrative desk. AgriLink does not claim automated government KYC or GSTIN portal integrations.
+                  {selectedTier === 'HOUSEHOLD'
+                    ? ' Household buyers are activated instantly with mobile verification.'
+                    : ' Commercial buyer accounts are subject to administrative review within 24–48 hours.'}
+                </p>
+              </div>
+
+              {/* Error Notice */}
+              {stepError && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-700 flex items-center gap-2">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <span>{stepError}</span>
+                </div>
+              )}
+
+              {/* Navigation Action */}
+              <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-border">
+                <button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800"
+                >
+                  <ArrowLeft className="size-4" /> Back to Details
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleSubmitRegistration}
+                  className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold shadow-sm transition disabled:opacity-60"
+                >
+                  {isSubmitting ? (
+                    'Submitting to FPO Registry…'
+                  ) : (
+                    <>
+                      Confirm & Submit Registration
+                      <ArrowRight className="size-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 5: VERIFICATION STATUS & POST-SUBMISSION DASHBOARD                    */}
+          {/* ========================================================================= */}
+          {step === 5 && (
+            <div className="space-y-6">
+              {/* Status Header */}
+              <div className="text-center max-w-lg mx-auto space-y-3 pt-2">
+                {/* State Badge & Icon */}
+                {verificationStatus === 'verified' && (
+                  <div className="size-16 rounded-3xl bg-emerald-100 text-emerald-700 grid place-items-center mx-auto shadow-2xs">
+                    <CheckCircle2 className="size-8" />
                   </div>
                 )}
+                {verificationStatus === 'under_review' && (
+                  <div className="size-16 rounded-3xl bg-blue-100 text-blue-700 grid place-items-center mx-auto shadow-2xs animate-pulse">
+                    <Clock className="size-8" />
+                  </div>
+                )}
+                {verificationStatus === 'pending' && (
+                  <div className="size-16 rounded-3xl bg-slate-100 text-slate-600 grid place-items-center mx-auto shadow-2xs">
+                    <FileText className="size-8" />
+                  </div>
+                )}
+                {verificationStatus === 'needs_correction' && (
+                  <div className="size-16 rounded-3xl bg-amber-100 text-amber-700 grid place-items-center mx-auto shadow-2xs">
+                    <ShieldAlert className="size-8" />
+                  </div>
+                )}
+                {verificationStatus === 'rejected' && (
+                  <div className="size-16 rounded-3xl bg-red-100 text-red-700 grid place-items-center mx-auto shadow-2xs">
+                    <XCircle className="size-8" />
+                  </div>
+                )}
+
                 <div>
-                  <span className="text-slate-400 block text-[11px]">Unloading Address:</span>
-                  <p className="font-medium text-slate-900 leading-relaxed">
-                    {address}, {city}, {state} - {pinCode}
+                  <span
+                    className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 ${
+                      verificationStatus === 'verified'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : verificationStatus === 'under_review'
+                        ? 'bg-blue-100 text-blue-800'
+                        : verificationStatus === 'needs_correction'
+                        ? 'bg-amber-100 text-amber-800'
+                        : verificationStatus === 'rejected'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-slate-100 text-slate-800'
+                    }`}
+                  >
+                    Verification Status:{' '}
+                    {verificationStatus === 'under_review'
+                      ? 'Under Review'
+                      : verificationStatus === 'needs_correction'
+                      ? 'Needs Correction'
+                      : verificationStatus.toUpperCase()}
+                  </span>
+
+                  <h1 className="text-2xl font-black text-slate-900 dark:text-foreground">
+                    {verificationStatus === 'verified'
+                      ? 'Account Verified & Active'
+                      : verificationStatus === 'under_review'
+                      ? 'Application Under Review'
+                      : verificationStatus === 'needs_correction'
+                      ? 'Action Required: Needs Correction'
+                      : verificationStatus === 'rejected'
+                      ? 'Verification Declined'
+                      : 'Application Pending'}
+                  </h1>
+
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">
+                    {reviewerNotes}
                   </p>
                 </div>
               </div>
 
-              {/* Documents Summary (if business tier) */}
-              {selectedTier !== 'HOUSEHOLD' && (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-                    <span className="font-bold text-slate-700">Uploaded Documents</span>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentScreen(6)}
-                      className="text-xs font-semibold text-emerald-700 hover:underline"
-                    >
-                      Manage
-                    </button>
-                  </div>
-                  {documents.length === 0 ? (
-                    <p className="text-slate-500 italic">No files attached yet. (Can also be verified post-signup)</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {documents.map((d, i) => (
-                        <div key={i} className="flex items-center justify-between text-slate-700">
-                          <span className="flex items-center gap-1.5 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> {d.type}
-                          </span>
-                          <span className="text-slate-400 text-[11px]">{d.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              {/* Registration Receipt Summary */}
+              <div className="p-5 rounded-2xl border border-slate-200 dark:border-border bg-slate-50/50 dark:bg-muted/20 max-w-xl mx-auto space-y-3 text-xs">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-border">
+                  <span className="text-slate-500">Buyer Entity</span>
+                  <strong className="text-slate-900 dark:text-foreground font-bold">
+                    {businessName || fullName}
+                  </strong>
                 </div>
-              )}
-            </div>
-
-            <div className="mt-8 flex items-center justify-between pt-6 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => (selectedTier === 'HOUSEHOLD' ? setCurrentScreen(5) : setCurrentScreen(6))}
-                className="px-4 py-2.5 rounded-xl text-slate-600 hover:text-slate-900 text-sm font-semibold flex items-center gap-1.5"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={handleSubmitRegistration}
-                className="px-8 py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white text-sm font-bold shadow-lg flex items-center gap-2"
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Submitting Registration...
-                  </>
-                ) : (
-                  <>
-                    Complete Registration
-                    <CheckCircle2 className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 8: Verification Pending (For Business Tiers: Retailer / Restaurant / Processor) */}
-        {/* ========================================================================= */}
-        {currentScreen === 8 && (
-          <div className="p-6 md:p-10 max-w-xl mx-auto text-center">
-            {/* Amber Status Icon */}
-            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4 ring-8 ring-amber-50">
-              <Clock className="w-8 h-8" />
-            </div>
-
-            <span className="text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1 rounded-full uppercase tracking-wider">
-              Verification in Progress
-            </span>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 mt-3 mb-2">
-              Application Under Review
-            </h2>
-            <p className="text-slate-600 text-sm max-w-md mx-auto mb-6 leading-relaxed">
-              Thank you, <span className="font-bold text-slate-900">{fullName}</span>. Your {activeTierConfig.label} registration
-              and documents have been submitted to the district AgriLink FPO verification desk.
-            </p>
-
-            {/* Turnaround Box */}
-            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-left text-xs text-amber-900 mb-6 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-amber-950">
-                <Info className="w-4 h-4 text-amber-700 shrink-0" />
-                <span>Estimated Turnaround: 24 – 48 Hours</span>
-              </div>
-              <p className="text-amber-800 text-[11px] leading-relaxed">
-                An AgriLink cluster coordinator will verify your trade license and FSSAI credentials. You will receive
-                an SMS and WhatsApp confirmation as soon as wholesale quotas ({activeTierConfig.limitLabel}) are unlocked.
-              </p>
-            </div>
-
-            {/* Step Progress Checklist */}
-            <div className="border border-slate-200 rounded-xl p-4 text-left text-xs mb-8 space-y-3">
-              <div className="flex items-center gap-3 text-emerald-700">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="font-semibold">Step 1: Account & Mobile OTP Verified</span>
-              </div>
-              <div className="flex items-center gap-3 text-emerald-700">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span className="font-semibold">Step 2: Business Information & Documents Uploaded</span>
-              </div>
-              <div className="flex items-center gap-3 text-amber-700 font-semibold">
-                <Clock className="w-4 h-4 shrink-0 animate-spin" />
-                <span>Step 3: FPO District Coordinator Physical & Document Audit (Active)</span>
-              </div>
-              <div className="flex items-center gap-3 text-slate-400">
-                <div className="w-4 h-4 rounded-full border border-slate-300 flex items-center justify-center text-[10px]">
-                  4
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-border">
+                  <span className="text-slate-500">Buyer Tier</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{activeTier.label}</span>
                 </div>
-                <span>Step 4: Wholesale Farm-Gate Quota ({activeTierConfig.limitLabel}) Activated</span>
-              </div>
-            </div>
-
-            {/* Instant Verification Status Check */}
-            <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl mb-6 text-xs flex flex-col sm:flex-row items-center justify-between gap-2">
-              <span className="text-slate-700">
-                <strong>District Audit Status:</strong> Instant verification sync available
-              </span>
-              <button
-                type="button"
-                disabled={isSimulatingReview}
-                onClick={handleSimulateApproval}
-                className="px-3.5 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-              >
-                {isSimulatingReview ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Checking...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Refresh Verification Status
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                href="/portal"
-                className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
-              >
-                Browse Marketplace (Limited View)
-              </Link>
-              <button
-                type="button"
-                onClick={() => setCurrentScreen(1)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50"
-              >
-                Back to Start
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* SCREEN 9: Account Verified! (Household Instant or Approved Business) */}
-        {/* ========================================================================= */}
-        {currentScreen === 9 && (
-          <div className="p-6 md:p-10 max-w-xl mx-auto text-center">
-            {/* Green Celebration Badge */}
-            <div className="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-4 ring-8 ring-emerald-50">
-              <ShieldCheck className="w-10 h-10" />
-            </div>
-
-            <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-3.5 py-1 rounded-full uppercase tracking-wider">
-              {activeTierConfig.instantVerify ? 'Instant Activation' : 'Official FPO Approval'}
-            </span>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 mt-3 mb-2">
-              Account Verified!
-            </h2>
-            <p className="text-slate-600 text-sm max-w-md mx-auto mb-6 leading-relaxed">
-              Welcome to AgriLink, <span className="font-bold text-slate-900">{fullName || 'Valued Buyer'}</span>!
-              Your buyer profile is active and connected to nearby farmer producer organizations.
-            </p>
-
-            {/* Approved Profile Summary Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-slate-50 border border-emerald-200 text-left text-xs mb-8 space-y-3">
-              <div className="flex items-center justify-between border-b border-emerald-200/60 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
-                    <activeTierConfig.icon className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900 text-sm">{activeTierConfig.label} Buyer</h4>
-                    <span className="text-[11px] text-emerald-700 font-semibold">Status: Active & Verified</span>
-                  </div>
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-border">
+                  <span className="text-slate-500">Procurement Guidance</span>
+                  <span className="font-bold text-emerald-700">{activeTier.procurementGuidance}</span>
                 </div>
-                <span className="text-xs font-bold bg-white text-slate-800 border border-slate-200 px-2.5 py-1 rounded-md">
-                  {registeredBuyerData?.buyer?.id ? `ID: ${registeredBuyerData.buyer.id.slice(0, 8)}` : 'ID: BUYER-2026'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Purchase Capacity:</span>
-                  <span className="font-bold text-emerald-800 text-sm">{activeTierConfig.limitLabel}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Delivery Hub:</span>
-                  <span className="font-semibold text-slate-900">{city || 'Guntur'} Cluster FPO</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-400 block text-[11px]">Primary Unloading Location:</span>
-                  <span className="font-medium text-slate-800">
-                    {address ? `${address}, ${city}` : 'Default Delivery Address Confirmed'}
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200 dark:border-border">
+                  <span className="text-slate-500">Delivery Location</span>
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {city}, {state}
                   </span>
                 </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Authorized Phone</span>
+                  <span className="font-mono text-slate-700 dark:text-slate-300">+91 {phone}</span>
+                </div>
+              </div>
+
+              {/* Actions & Next Steps */}
+              <div className="max-w-md mx-auto space-y-3 pt-2">
+                <Link
+                  href="/portal"
+                  className="w-full py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-bold shadow-xs transition flex items-center justify-center gap-2"
+                >
+                  Enter AgriLink Buyer Portal
+                  <ArrowRight className="size-4" />
+                </Link>
+                <Link
+                  href="/portal/purchase"
+                  className="w-full py-3 rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center justify-center gap-2"
+                >
+                  Browse Direct Farm Marketplace
+                  <ExternalLink className="size-3.5" />
+                </Link>
+              </div>
+
+              {/* 5-State Evaluator Testing Tool */}
+              <div className="mt-8 p-4 rounded-2xl border border-dashed border-slate-300 dark:border-border bg-slate-50 dark:bg-muted/30 max-w-xl mx-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Sparkles className="size-3.5 text-emerald-600" />
+                    SIH Evaluator Simulation Tool
+                  </span>
+                  <span className="text-[10px] text-slate-400">Test all 5 verification states</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mb-3">
+                  Click below to simulate how the portal reflects each state from the FPO administrative desk:
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                  <button
+                    type="button"
+                    disabled={isSimulatingReview}
+                    onClick={() => handleSimulateStatusChange('pending')}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                      verificationStatus === 'pending'
+                        ? 'bg-slate-800 text-white border-slate-800'
+                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Pending
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulatingReview}
+                    onClick={() => handleSimulateStatusChange('under_review')}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                      verificationStatus === 'under_review'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Under Review
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulatingReview}
+                    onClick={() => handleSimulateStatusChange('verified')}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                      verificationStatus === 'verified'
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Verified
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulatingReview}
+                    onClick={() => handleSimulateStatusChange('needs_correction')}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                      verificationStatus === 'needs_correction'
+                        ? 'bg-amber-600 text-white border-amber-600'
+                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Correction
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSimulatingReview}
+                    onClick={() => handleSimulateStatusChange('rejected')}
+                    className={`px-2 py-1.5 rounded-lg text-[11px] font-bold border transition ${
+                      verificationStatus === 'rejected'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : 'bg-white dark:bg-card text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Rejected
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Direct Marketplace Actions */}
-            <div className="space-y-3">
-              <Link
-                href="/portal"
-                className="w-full block py-3.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm shadow-md hover:shadow-lg transition-all"
-              >
-                Start Shopping Fresh Produce
-              </Link>
-              <Link
-                href="/marketplace"
-                className="w-full block py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300"
-              >
-                View Live Harvest Mandi Prices
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* FOOTER: 4-Tier Verification Comparison Table (from uploaded diagram) */}
-        {/* ========================================================================= */}
-        <div className="border-t border-slate-200 bg-slate-50/60 p-6">
-          <div className="mb-4 text-center sm:text-left">
-            <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-              AgriLink Buyer Verification Tiers & Order Limits
-            </h4>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Transparent tier requirements aligned with FPO farm-gate capacity and compliance rules.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {BUYER_TIERS.map((tier) => {
-              const IconComp = tier.icon
-              const isCurrent = selectedTier === tier.key
-
-              return (
-                <div
-                  key={tier.key}
-                  onClick={() => {
-                    setSelectedTier(tier.key)
-                    if (currentScreen === 4) {
-                      // Already on tier selection
-                    }
-                  }}
-                  className={`p-3.5 rounded-xl border text-xs cursor-pointer transition-all ${
-                    isCurrent
-                      ? 'border-emerald-600 bg-emerald-50 shadow-sm ring-1 ring-emerald-200'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                        isCurrent ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      <IconComp className="w-4 h-4" />
-                    </div>
-                    <span className="font-bold text-slate-900">{tier.label}</span>
-                  </div>
-
-                  <div className="space-y-1 text-[11px] text-slate-600">
-                    <div>
-                      <span className="text-slate-400">Limit: </span>
-                      <strong className="text-slate-800">{tier.limitLabel}</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Proof: </span>
-                      <span>{tier.instantVerify ? 'None (Instant OTP)' : tier.requiredDocs[0]}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">Speed: </span>
-                      <span className={tier.instantVerify ? 'text-emerald-700 font-bold' : 'text-slate-700'}>
-                        {tier.turnaround}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -171,4 +171,87 @@ describe('Buyer Registration & Tiered Verification Flow Engine', () => {
     expect(approveData.ok).toBe(true)
     expect(approveData.status).toBe('verified')
   })
+
+  it('registers Processor / Institution with 500 kg+ guidance, organization type, and authorized person', async () => {
+    const req = new Request('http://localhost/api/buyer/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: 'Suresh Varma',
+        phone: '9848077889',
+        email: 'procurement@mahigrains.com',
+        password: '1234',
+        buyerType: 'INSTITUTIONAL',
+        businessName: 'Mahi Agro Processing Industries Ltd.',
+        organizationType: 'Food Processing Unit',
+        authorizedPerson: 'Suresh Varma (Head of Procurement)',
+        pan: 'AACCM1234P',
+        gstin: '24CCCC1234C1Z9',
+        fssai: '10025002000512',
+        address: 'Survey 42, Food Park, Anand',
+        city: 'Anand',
+        state: 'Gujarat',
+        pinCode: '388001',
+        documents: [
+          { type: 'Organization Registration Proof', name: 'inc_cert.pdf', size: 3100000 },
+        ],
+      }),
+    })
+
+    const res = await registerBuyer(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(data.ok).toBe(true)
+    expect(data.buyerType).toBe('INSTITUTIONAL')
+    expect(data.purchaseLimitKg).toBe(10000)
+    expect(data.procurementGuidance).toBe('500 kg+')
+    expect(data.authorizedPerson).toBe('Suresh Varma (Head of Procurement)')
+  })
+
+  it('handles all 5 verification states: pending, under_review, verified, needs_correction, rejected', async () => {
+    // 1. Simulate needs_correction
+    const correctionReq = new Request('http://localhost/api/buyer/verify-flow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'simulate_needs_correction',
+        phone: '9848077889',
+        reviewerNotes: 'Please re-upload a readable copy of your FSSAI certificate.',
+      }),
+    })
+    const correctionRes = await postBuyerVerify(correctionReq)
+    const correctionData = await correctionRes.json()
+    expect(correctionRes.status).toBe(200)
+    expect(correctionData.status).toBe('needs_correction')
+    expect(correctionData.notes).toContain('readable copy')
+
+    // 2. Simulate under_review
+    const reviewReq = new Request('http://localhost/api/buyer/verify-flow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'simulate_under_review',
+        phone: '9848077889',
+      }),
+    })
+    const reviewRes = await postBuyerVerify(reviewReq)
+    const reviewData = await reviewRes.json()
+    expect(reviewRes.status).toBe(200)
+    expect(reviewData.status).toBe('under_review')
+
+    // 3. Simulate rejected
+    const rejectReq = new Request('http://localhost/api/buyer/verify-flow', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'simulate_reject',
+        phone: '9848077889',
+      }),
+    })
+    const rejectRes = await postBuyerVerify(rejectReq)
+    const rejectData = await rejectRes.json()
+    expect(rejectRes.status).toBe(200)
+    expect(rejectData.status).toBe('rejected')
+  })
 })

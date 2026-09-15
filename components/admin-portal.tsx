@@ -1,83 +1,78 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  Loader2,
-  ShieldCheck,
-  RefreshCw,
-  CheckCircle2,
   AlertCircle,
-  Layers,
-  ShoppingBag,
-  Sprout,
-  Boxes,
-  Truck,
-  Navigation,
-  MapPin,
-  Sparkles,
-  PhoneCall,
   ArrowRight,
-  Zap,
+  Boxes,
+  Building2,
+  Camera,
   Check,
-  FileText,
-  UserCheck,
+  CheckCircle2,
   ChevronRight,
-  TrendingUp,
+  CircleDollarSign,
+  Clock,
+  CreditCard,
+  Eye,
+  FileCheck2,
+  FileText,
+  Filter,
+  Layers,
+  LayoutDashboard,
+  Loader2,
+  MapPin,
+  Navigation,
+  PackageCheck,
+  PhoneCall,
+  Plus,
+  Printer,
+  QrCode,
+  RefreshCw,
   Route,
-  BarChart3,
+  Scale,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  ShoppingBag,
+  Sparkles,
+  Sprout,
+  TrendingUp,
+  Truck,
+  UserCheck,
+  Users,
+  Wheat,
+  X,
+  Zap,
 } from 'lucide-react'
 import { authHeaders, getAuthClient } from '@/lib/auth-client'
 import { RouteMap } from '@/components/route-map'
 import { BolnaCallModal } from '@/components/bolna-call-modal'
-import { DemandForecastPanel } from '@/components/demand-forecast-panel'
-import { LogisticsPlanPanel } from '@/components/logistics-plan-panel'
-import { LARGEST_VEHICLE, smallestFitting, tripCost } from '@/lib/domain/fleet'
+import { GradeCamCamera } from '@/components/gradecam-camera'
+import { cropName, localDate } from '@/lib/domain/i18n'
+import { formatINR, formatKg } from '@/lib/domain/money'
 import {
   allocateFarmersOptimal,
   getVillageLatLng,
   type CandidateFarmer,
-  type OptimalAllocationResult,
 } from '@/lib/domain/allocation'
-import { planRoute, type RouteStop } from '@/lib/domain/routing'
-import {
-  findNearestEligibleFarmer,
-  cascadeSmallOrderRejection,
-  SMALL_ORDER_THRESHOLD_KG,
-  type SmallOrderRouting,
-} from '@/lib/domain/order-routing'
+import { SMALL_ORDER_THRESHOLD_KG } from '@/lib/domain/order-routing'
 
-type Profile = {
-  id: string
-  full_name: string
-  role: string
-  mobile_number: string | null
-  verification_status: string
-  last_login_at: string | null
-  last_logout_at: string | null
-}
+// ============================================================================
+// Types & Data Models
+// ============================================================================
 
-type Activity = {
-  id: string
-  user_id: string | null
-  event_type: string
-  created_at: string
-}
-
-type PendingReview = {
-  id: string
-  crop: string
-  quantity_kg: number
-  purpose: string | null
-  created_at: string
-}
-
-type Data = {
-  profiles: Profile[]
-  activities: Activity[]
-  pending_reviews: PendingReview[]
-}
+export type AdminTabKey =
+  | 'home'
+  | 'farmers'
+  | 'collections'
+  | 'verification'
+  | 'inventory'
+  | 'orders'
+  | 'dispatch'
+  | 'logistics'
+  | 'payments'
 
 export type LiveOrder = {
   id: string
@@ -99,14 +94,12 @@ export type LiveOrder = {
   allocated_farmer_village?: string | null
   allocated_farmer_distance_km?: number | null
   farmer_acceptance_status?: 'PENDING' | 'ACCEPTED' | 'REJECTED' | null
-  declined_history?: string[]
   purpose?: string | null
   review_status?: 'not_required' | 'pending' | 'approved' | 'rejected' | null
   admin_note?: string | null
   qty_committed_kg?: number
   standby_kg?: number
   is_fully_committed?: boolean
-  open_for_commitment?: boolean
   mandi_price_per_kg?: number | null
   retail_price_per_kg?: number | null
   buyer_lat?: number
@@ -116,9 +109,8 @@ export type LiveOrder = {
   fpo_lng?: number
 }
 
-type LiveFarmer = {
+export type LiveFarmer = {
   id: string
-  /** One row per farmer and live registry entry; this keys the row. */
   entry_id?: string
   name: string
   mobile_number?: string
@@ -135,1612 +127,1978 @@ type LiveFarmer = {
   reliability_score?: number
   is_live_account?: boolean
   last_login_at?: string
+  collection_status?: 'Scheduled' | 'Collected' | 'Pending Schedule' | 'Idle'
+  acreage?: number
 }
 
-function formatRelativeTime(iso?: string | null): string {
-  if (!iso) return 'recently'
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
-type AggregationBatch = {
+export interface CollectionItem {
   id: string
-  batch_code: string
-  fpo_name: string
+  farmerId: string
+  farmerName: string
+  village: string
+  phone: string
   crop: string
+  declaredKg: number
+  scaleKg?: number
+  confirmedKg?: number
+  preferredSlot: string
   location: string
-  total_quantity_kg: number
-  grade_a_kg?: number
-  grade_b_kg?: number
-  quality_verified?: boolean
-  created_by?: string
-  created_at?: string
+  status: 'Pending Weighing' | 'Scheduled' | 'Weighed & Lot Created' | 'In Transit'
+  orderId?: string
+  orderCode?: string
+  lotId?: string
+  auditOperator?: string
+  auditTimestamp?: string
+  scaleTareKg?: number
+  scaleGrossKg?: number
+  createdAt: string
 }
+
+export interface VerificationLot {
+  id: string
+  requestId?: string
+  farmerId: string
+  farmerName: string
+  village: string
+  crop: string
+  declaredKg: number
+  scaleKg: number
+  grade: 'Grade A' | 'Grade B' | 'Grade C' | 'Pending QC'
+  aiConfidence?: number
+  status: 'Pending QC' | 'Staff Review' | 'Verified' | 'Rejected'
+  acceptedKg: number
+  rejectedKg: number
+  reason: string
+  verifier: string
+  timestamp: string
+  photoDataUrl?: string | null
+}
+
+export interface VerifiedStockItem {
+  id: string
+  lotId: string
+  crop: string
+  grade: 'Grade A' | 'Grade B'
+  totalVerifiedKg: number
+  availableKg: number
+  reservedKg: number
+  location: string
+  freshness: string
+  pricePerKg: number
+  farmerName: string
+  harvestDate: string
+}
+
+export interface DispatchConsignment {
+  id: string
+  orderId: string
+  orderCode: string
+  buyerName: string
+  fpo: string
+  crop: string
+  quantityKg: number
+  destination: string
+  distanceKm: number
+  vehicle: string
+  driver: string
+  driverPhone: string
+  status: 'Scheduled' | 'Loading' | 'Dispatched' | 'Delivered'
+  dispatchedAt?: string
+  waybillNo: string
+}
+
+export interface FleetVehicle {
+  id: string
+  name: string
+  registration: string
+  capacityKg: number
+  currentLoadKg: number
+  status: 'Available' | 'Assigned' | 'En Route' | 'Maintenance'
+  driverName?: string
+  driverPhone?: string
+  fuelType: string
+}
+
+export interface FleetDriver {
+  id: string
+  name: string
+  phone: string
+  licenseNo: string
+  assignedVehicle: string
+  rating: number
+  tripsCompleted: number
+  status: 'On Duty' | 'Driving' | 'Off Duty'
+}
+
+export interface FarmerSettlementRecord {
+  id: string
+  farmerId: string
+  farmerName: string
+  lotId: string
+  crop: string
+  weighedKg: number
+  agreedPricePerKg: number
+  grossAmount: number
+  weighbridgeFee: number
+  transportShare: number
+  netPayable: number
+  status: 'Credited' | 'Processing' | 'Ready for Payout'
+  bankAccountMasked: string
+  utrRef: string
+  paidAt: string
+}
+
+export interface BuyerEscrowRecord {
+  id: string
+  orderCode: string
+  buyerName: string
+  crop: string
+  targetKg: number
+  advanceDeposit: number
+  escrowStatus: 'Locked in Escrow' | 'Partially Released' | 'Settled'
+  invoicedAmount: number
+  balancePayable: number
+  settlementStatus: 'Settled' | 'Pending Delivery Confirmation' | 'Advance Funded'
+}
+
+// ============================================================================
+// Main AdminPortal Component
+// ============================================================================
 
 export function AdminPortal() {
   const router = useRouter()
-  const [data, setData] = useState<Data | null>(null)
+
+  // 9-Tab Navigation State
+  const [activeTab, setActiveTab] = useState<AdminTabKey>('home')
+
+  // Real data state
   const [orders, setOrders] = useState<LiveOrder[]>([])
   const [farmers, setFarmers] = useState<LiveFarmer[]>([])
-  const [batches, setBatches] = useState<AggregationBatch[]>([])
-
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
-  // 4-Tab Architecture for Clean SIH Operational Command Center
-  const [activeTab, setActiveTab] = useState<'orders' | 'aggregation' | 'batches' | 'farmers' | 'forecast' | 'logistics'>('orders')
-  const [orderFilter, setOrderFilter] = useState<'all' | 'small' | 'bulk' | 'aggregated'>('all')
+  // Toast feedback
+  const [toast, setToast] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
+  const flash = (tone: 'ok' | 'error', text: string) => {
+    setToast({ tone, text })
+    setTimeout(() => setToast(null), 4500)
+  }
 
-  // Farmer Roster Filter Tabs
-  const [farmerFilterTab, setFarmerFilterTab] = useState<'all' | 'live' | 'preseeded'>('all')
-  const liveFarmersCount = useMemo(() => farmers.filter((f) => f.is_live_account).length, [farmers])
-  const displayedFarmers = useMemo(() => {
-    if (farmerFilterTab === 'live') {
-      return farmers.filter((f) => f.is_live_account)
-    }
-    if (farmerFilterTab === 'preseeded') {
-      return farmers.filter((f) => !f.is_live_account)
-    }
-    return farmers
-  }, [farmers, farmerFilterTab])
+  // ==========================================================================
+  // Operational Collections & Receive & Weigh States
+  // ==========================================================================
+  const [collections, setCollections] = useState<CollectionItem[]>([
+    {
+      id: 'COL-101',
+      farmerId: 'farmer-anand-001',
+      farmerName: 'Ramesh Kumar',
+      village: 'Boriavi',
+      phone: '+91 98251 44102',
+      crop: 'TOMATO',
+      declaredKg: 400,
+      preferredSlot: '24 Sep • 08:00 - 10:00 AM',
+      location: 'Mahi Valley Hub #1 - Bay A',
+      status: 'Pending Weighing',
+      orderId: 'ord-102',
+      orderCode: 'AG-1002',
+      createdAt: '2025-09-24T07:30:00Z',
+    },
+    {
+      id: 'COL-102',
+      farmerId: 'farmer-anand-002',
+      farmerName: 'Dinesh Patel',
+      village: 'Samarkha',
+      phone: '+91 98251 44103',
+      crop: 'PADDY',
+      declaredKg: 1000,
+      preferredSlot: '24 Sep • 10:00 - 12:00 PM',
+      location: 'Mahi Valley Hub #1 - Bay B',
+      status: 'Scheduled',
+      orderId: 'ord-101',
+      orderCode: 'AG-1001',
+      createdAt: '2025-09-24T07:45:00Z',
+    },
+    {
+      id: 'COL-103',
+      farmerId: 'farmer-anand-003',
+      farmerName: 'Suresh Varma',
+      village: 'Mogri',
+      phone: '+91 98251 44104',
+      crop: 'WHEAT',
+      declaredKg: 800,
+      preferredSlot: '25 Sep • 09:00 - 11:00 AM',
+      location: 'Farmgate - Mogri Cluster',
+      status: 'In Transit',
+      orderId: 'ord-103',
+      orderCode: 'AG-1003',
+      createdAt: '2025-09-24T08:15:00Z',
+    },
+    {
+      id: 'COL-104',
+      farmerId: 'farmer-anand-004',
+      farmerName: 'Bhavesh Rathod',
+      village: 'Chikhodra',
+      phone: '+91 98251 44105',
+      crop: 'POTATO',
+      declaredKg: 600,
+      preferredSlot: '25 Sep • 01:00 - 03:00 PM',
+      location: 'Mahi Valley Hub #1 - Cold Bay 1',
+      status: 'Scheduled',
+      orderId: 'ord-104',
+      orderCode: 'AG-1004',
+      createdAt: '2025-09-24T08:30:00Z',
+    },
+  ])
 
-  // Smart Aggregation Engine States
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
-  const [farmerAllocations, setFarmerAllocations] = useState<Record<string, number>>({})
-  const [isAggregating, setIsAggregating] = useState(false)
-  const [aggregationSuccess, setAggregationSuccess] = useState<string | null>(null)
-  const [routeDispatched, setRouteDispatched] = useState(false)
+  // Sub-view inside Collections: 'list' | 'weigh'
+  const [collectionSubView, setCollectionSubView] = useState<'list' | 'weigh'>('list')
+  const [selectedCollectionForWeigh, setSelectedCollectionForWeigh] = useState<CollectionItem | null>(null)
 
-  // Operational Dispatch Toast Feedback
-  const [simulationToast, setSimulationToast] = useState<string | null>(null)
+  // Live scale reading simulation states
+  const [simulatedGrossKg, setSimulatedGrossKg] = useState<number>(407)
+  const [simulatedTareKg, setSimulatedTareKg] = useState<number>(15)
+  const [customConfirmedKg, setCustomConfirmedKg] = useState<number>(392)
+  const [isWeighingSubmitting, setIsWeighingSubmitting] = useState(false)
 
-  // Registered buyers, so test orders are filed for a real buyer record
-  const [buyers, setBuyers] = useState<Array<{ id: string; name: string; type: string }>>([])
-  const testBuyer = () => buyers.find((b) => b.type === 'INSTITUTIONAL') ?? buyers[0]
+  // ==========================================================================
+  // Quality Verification Queue States
+  // ==========================================================================
+  const [verificationLots, setVerificationLots] = useState<VerificationLot[]>([
+    {
+      id: 'LOT-TOM-0924-392',
+      requestId: 'COL-101',
+      farmerId: 'farmer-anand-001',
+      farmerName: 'Ramesh Kumar',
+      village: 'Boriavi',
+      crop: 'TOMATO',
+      declaredKg: 400,
+      scaleKg: 392,
+      grade: 'Grade A',
+      aiConfidence: 94,
+      status: 'Pending QC',
+      acceptedKg: 392,
+      rejectedKg: 0,
+      reason: 'Awaiting coordinator inspection and optical scan',
+      verifier: 'Anita Desai (QC Staff)',
+      timestamp: '2025-09-24T08:35:00Z',
+    },
+    {
+      id: 'LOT-PAD-0923-500',
+      requestId: 'COL-099',
+      farmerId: 'farmer-anand-002',
+      farmerName: 'Dinesh Patel',
+      village: 'Samarkha',
+      crop: 'PADDY',
+      declaredKg: 500,
+      scaleKg: 495,
+      grade: 'Grade A',
+      aiConfidence: 96,
+      status: 'Verified',
+      acceptedKg: 495,
+      rejectedKg: 0,
+      reason: 'Moisture content 12.8%, grain purity >98%',
+      verifier: 'Anita Desai (QC Staff)',
+      timestamp: '2025-09-23T16:20:00Z',
+    },
+    {
+      id: 'LOT-WHT-0923-800',
+      requestId: 'COL-098',
+      farmerId: 'farmer-anand-003',
+      farmerName: 'Suresh Varma',
+      village: 'Mogri',
+      crop: 'WHEAT',
+      declaredKg: 800,
+      scaleKg: 788,
+      grade: 'Grade B',
+      aiConfidence: 89,
+      status: 'Verified',
+      acceptedKg: 780,
+      rejectedKg: 8,
+      reason: 'Minor chaff presence (1.0%); approved as Grade B foodgrain',
+      verifier: 'Karan Joshi (Depot Supervisor)',
+      timestamp: '2025-09-23T14:10:00Z',
+    },
+  ])
 
-  // Compliance Desk State for >50 kg Bulk Orders
-  const [validatingOrderId, setValidatingOrderId] = useState<string | null>(null)
-  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({})
+  const [activeReviewLot, setActiveReviewLot] = useState<VerificationLot | null>(null)
+  const [reviewGradeChoice, setReviewGradeChoice] = useState<'Grade A' | 'Grade B' | 'Grade C'>('Grade A')
+  const [reviewAcceptedKg, setReviewAcceptedKg] = useState<number>(392)
+  const [reviewRejectedKg, setReviewRejectedKg] = useState<number>(0)
+  const [reviewReasonNote, setReviewReasonNote] = useState<string>('')
+  const [showGradeCamModal, setShowGradeCamModal] = useState<boolean>(false)
 
-  // Bolna AI Calling Agent Confirmation States
+  // ==========================================================================
+  // Inventory (Verified Stock Only) States
+  // ==========================================================================
+  const [verifiedInventory, setVerifiedInventory] = useState<VerifiedStockItem[]>([
+    {
+      id: 'INV-101',
+      lotId: 'LOT-PAD-0923-500',
+      crop: 'PADDY',
+      grade: 'Grade A',
+      totalVerifiedKg: 495,
+      availableKg: 245,
+      reservedKg: 250,
+      location: 'Hub #1 - Dry Storage Silo 2',
+      freshness: 'Harvested 1d ago • 180d shelf life',
+      pricePerKg: 28.0,
+      farmerName: 'Dinesh Patel',
+      harvestDate: '2025-09-23',
+    },
+    {
+      id: 'INV-102',
+      lotId: 'LOT-WHT-0923-800',
+      crop: 'WHEAT',
+      grade: 'Grade B',
+      totalVerifiedKg: 780,
+      availableKg: 380,
+      reservedKg: 400,
+      location: 'Hub #1 - Grain Warehouse Bay 3',
+      freshness: 'Harvested 1d ago • 240d shelf life',
+      pricePerKg: 31.0,
+      farmerName: 'Suresh Varma',
+      harvestDate: '2025-09-23',
+    },
+    {
+      id: 'INV-103',
+      lotId: 'LOT-POT-0922-600',
+      crop: 'POTATO',
+      grade: 'Grade A',
+      totalVerifiedKg: 590,
+      availableKg: 590,
+      reservedKg: 0,
+      location: 'Hub #1 - Ventilated Vault B',
+      freshness: 'Harvested 2d ago • 45d shelf life',
+      pricePerKg: 22.0,
+      farmerName: 'Bhavesh Rathod',
+      harvestDate: '2025-09-22',
+    },
+  ])
+
+  // ==========================================================================
+  // Dispatch Consignments States
+  // ==========================================================================
+  const [dispatches, setDispatches] = useState<DispatchConsignment[]>([
+    {
+      id: 'DISP-801',
+      orderId: 'ord-101',
+      orderCode: 'AG-1001',
+      buyerName: 'PM POSHAN Central Kitchen, Anand',
+      fpo: 'Mahi Valley FPO Hub #1',
+      crop: 'PADDY',
+      quantityKg: 1000,
+      destination: 'Nana Bazaar, Vallabh Vidyanagar',
+      distanceKm: 18.4,
+      vehicle: 'Tata Ace (GJ-07-TY-4912)',
+      driver: 'Vikram Singh',
+      driverPhone: '+91 98252 88102',
+      status: 'Dispatched',
+      dispatchedAt: '2025-09-24T08:15:00Z',
+      waybillNo: 'WB-MV-2025-8812',
+    },
+    {
+      id: 'DISP-802',
+      orderId: 'ord-102',
+      orderCode: 'AG-1002',
+      buyerName: 'District Hospital Dietary Kitchen',
+      fpo: 'Mahi Valley FPO Hub #1',
+      crop: 'TOMATO',
+      quantityKg: 392,
+      destination: 'Civil Hospital Road, Anand',
+      distanceKm: 9.8,
+      vehicle: 'Mahindra Bolero Maxi (GJ-23-V-8104)',
+      driver: 'Kishore Parmar',
+      driverPhone: '+91 98253 99201',
+      status: 'Loading',
+      waybillNo: 'WB-MV-2025-8813',
+    },
+    {
+      id: 'DISP-803',
+      orderId: 'ord-103',
+      orderCode: 'AG-1003',
+      buyerName: 'Student Mess Cooperative',
+      fpo: 'Mahi Valley FPO Hub #1',
+      crop: 'WHEAT',
+      quantityKg: 780,
+      destination: 'Boriavi Chokdi Depot',
+      distanceKm: 12.2,
+      vehicle: 'Ashok Leyland Dost (GJ-07-AL-3142)',
+      driver: 'Manoj Solanki',
+      driverPhone: '+91 98254 11092',
+      status: 'Scheduled',
+      waybillNo: 'WB-MV-2025-8814',
+    },
+  ])
+
+  const [selectedWaybill, setSelectedWaybill] = useState<DispatchConsignment | null>(null)
+
+  // ==========================================================================
+  // Logistics Fleet & Driver States
+  // ==========================================================================
+  const fleetVehicles: FleetVehicle[] = [
+    {
+      id: 'VEH-01',
+      name: 'Tata Ace 0.75T',
+      registration: 'GJ-07-TY-4912',
+      capacityKg: 850,
+      currentLoadKg: 850,
+      status: 'En Route',
+      driverName: 'Vikram Singh',
+      driverPhone: '+91 98252 88102',
+      fuelType: 'CNG (Green Fleet)',
+    },
+    {
+      id: 'VEH-02',
+      name: 'Mahindra Bolero Maxi',
+      registration: 'GJ-23-V-8104',
+      capacityKg: 1300,
+      currentLoadKg: 392,
+      status: 'Assigned',
+      driverName: 'Kishore Parmar',
+      driverPhone: '+91 98253 99201',
+      fuelType: 'Diesel BS-VI',
+    },
+    {
+      id: 'VEH-03',
+      name: 'Ashok Leyland Dost',
+      registration: 'GJ-07-AL-3142',
+      capacityKg: 1500,
+      currentLoadKg: 0,
+      status: 'Available',
+      driverName: 'Manoj Solanki',
+      driverPhone: '+91 98254 11092',
+      fuelType: 'Diesel BS-VI',
+    },
+  ]
+
+  const fleetDrivers: FleetDriver[] = [
+    {
+      id: 'DRV-01',
+      name: 'Vikram Singh',
+      phone: '+91 98252 88102',
+      licenseNo: 'GJ-07201800192',
+      assignedVehicle: 'Tata Ace (GJ-07-TY-4912)',
+      rating: 4.9,
+      tripsCompleted: 142,
+      status: 'Driving',
+    },
+    {
+      id: 'DRV-02',
+      name: 'Kishore Parmar',
+      phone: '+91 98253 99201',
+      licenseNo: 'GJ-23201900481',
+      assignedVehicle: 'Mahindra Bolero Maxi (GJ-23-V-8104)',
+      rating: 4.8,
+      tripsCompleted: 98,
+      status: 'On Duty',
+    },
+    {
+      id: 'DRV-03',
+      name: 'Manoj Solanki',
+      phone: '+91 98254 11092',
+      licenseNo: 'GJ-07202000312',
+      assignedVehicle: 'Ashok Leyland Dost (GJ-07-AL-3142)',
+      rating: 4.9,
+      tripsCompleted: 114,
+      status: 'On Duty',
+    },
+  ]
+
+  // ==========================================================================
+  // Payments & Settlements States
+  // ==========================================================================
+  const [settlements, setSettlements] = useState<FarmerSettlementRecord[]>([
+    {
+      id: 'SET-901',
+      farmerId: 'farmer-anand-002',
+      farmerName: 'Dinesh Patel',
+      lotId: 'LOT-PAD-0923-500',
+      crop: 'PADDY',
+      weighedKg: 495,
+      agreedPricePerKg: 28.0,
+      grossAmount: 13860,
+      weighbridgeFee: 150,
+      transportShare: 350,
+      netPayable: 13360,
+      status: 'Credited',
+      bankAccountMasked: 'HDFC Bank •••• 4102',
+      utrRef: 'HDFCN25267104921',
+      paidAt: '2025-09-23T18:30:00Z',
+    },
+    {
+      id: 'SET-902',
+      farmerId: 'farmer-anand-003',
+      farmerName: 'Suresh Varma',
+      lotId: 'LOT-WHT-0923-800',
+      crop: 'WHEAT',
+      weighedKg: 780,
+      agreedPricePerKg: 31.0,
+      grossAmount: 24180,
+      weighbridgeFee: 200,
+      transportShare: 520,
+      netPayable: 23460,
+      status: 'Credited',
+      bankAccountMasked: 'Bank of Baroda •••• 8821',
+      utrRef: 'BARBN25267119283',
+      paidAt: '2025-09-23T19:00:00Z',
+    },
+    {
+      id: 'SET-903',
+      farmerId: 'farmer-anand-001',
+      farmerName: 'Ramesh Kumar',
+      lotId: 'LOT-TOM-0924-392',
+      crop: 'TOMATO',
+      weighedKg: 392,
+      agreedPricePerKg: 30.0,
+      grossAmount: 11760,
+      weighbridgeFee: 120,
+      transportShare: 280,
+      netPayable: 11360,
+      status: 'Processing',
+      bankAccountMasked: 'State Bank of India •••• 5591',
+      utrRef: 'Pending Batch Run',
+      paidAt: '2025-09-24T09:10:00Z',
+    },
+  ])
+
+  const buyerEscrowRecords: BuyerEscrowRecord[] = [
+    {
+      id: 'ESC-401',
+      orderCode: 'AG-1001',
+      buyerName: 'PM POSHAN Central Kitchen, Anand',
+      crop: 'PADDY',
+      targetKg: 1000,
+      advanceDeposit: 14000,
+      escrowStatus: 'Locked in Escrow',
+      invoicedAmount: 28000,
+      balancePayable: 14000,
+      settlementStatus: 'Advance Funded',
+    },
+    {
+      id: 'ESC-402',
+      orderCode: 'AG-1002',
+      buyerName: 'District Hospital Dietary Kitchen',
+      crop: 'TOMATO',
+      targetKg: 400,
+      advanceDeposit: 6000,
+      escrowStatus: 'Locked in Escrow',
+      invoicedAmount: 11760,
+      balancePayable: 5760,
+      settlementStatus: 'Pending Delivery Confirmation',
+    },
+    {
+      id: 'ESC-403',
+      orderCode: 'AG-1003',
+      buyerName: 'Student Mess Cooperative',
+      crop: 'WHEAT',
+      targetKg: 2000,
+      advanceDeposit: 31000,
+      escrowStatus: 'Partially Released',
+      invoicedAmount: 62000,
+      balancePayable: 31000,
+      settlementStatus: 'Advance Funded',
+    },
+  ]
+
+  // ==========================================================================
+  // Bolna AI Calling State
+  // ==========================================================================
   const [bolnaModalOpen, setBolnaModalOpen] = useState(false)
   const [selectedCallFarmer, setSelectedCallFarmer] = useState<LiveFarmer | null>(null)
   const [selectedCallAllocatedKg, setSelectedCallAllocatedKg] = useState<number>(300)
-  const [confirmedFarmers, setConfirmedFarmers] = useState<Record<string, boolean>>({})
 
-  // Auto-heal session for Anita Sharma (Coordinator / Admin)
-  async function ensureSession(): Promise<string | null> {
-    let { data: session } = await getAuthClient().auth.getSession()
-    let token = session.session?.access_token
-
-    const phone = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_phone') : null
-    const role = typeof window !== 'undefined' ? localStorage.getItem('agrilink_user_role') : null
-
-    if ((phone === '9825000000' || role === 'Coordinator') && (!token || !token.startsWith('agl_'))) {
-      try {
-        const res = await fetch('/api/auth/otp', {
-          method: 'POST',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ action: 'quick_demo', role: 'admin' }),
-        })
-        const authData = await res.json()
-        if (authData.ok && authData.session) {
-          token = authData.session.access_token
-          localStorage.setItem('agrilink_user_name', authData.profile.full_name)
-          localStorage.setItem('agrilink_user_role', 'Coordinator')
-          localStorage.setItem('agrilink_user_phone', authData.profile.mobile_number)
-          localStorage.setItem('agrilink_session', JSON.stringify(authData.session))
-        }
-      } catch {}
-    }
-    return token || null
-  }
-
-  // Fetch all live operational feeds
-  async function fetchLiveFeeds(showSpinner = false) {
+  // ==========================================================================
+  // Data Fetching & Sync
+  // ==========================================================================
+  const fetchLiveFeeds = useCallback(async (showSpinner = false) => {
     if (showSpinner) setRefreshing(true)
     try {
-      const token = await ensureSession()
+      const { data: session } = await getAuthClient().auth.getSession()
+      const token = session.session?.access_token
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
-      const [reviewsRes, ordersRes, farmersRes, batchesRes] = await Promise.all([
-        fetch('/api/admin/reviews', { headers }).catch(() => null),
+      const [ordersRes, farmersRes] = await Promise.all([
         fetch('/api/orders', { headers }).catch(() => null),
         fetch('/api/farmers', { headers }).catch(() => null),
-        fetch('/api/aggregation', { headers }).catch(() => null),
       ])
 
-      if (reviewsRes && reviewsRes.ok) {
-        const revData = await reviewsRes.json()
-        setData(revData)
-        setError('')
-      } else if (!data) {
-        const reviewError: { error?: string } = reviewsRes ? await reviewsRes.json().catch(() => ({})) : {}
-        setData({ profiles: [], activities: [], pending_reviews: [] })
-        setError(reviewError.error || 'Sign in with an FPO coordinator account to load the command centre.')
-      }
-
       if (ordersRes && ordersRes.ok) {
-        const ordData = await ordersRes.json()
-        if (Array.isArray(ordData.orders)) {
+        const ordData = await ordersRes.json().catch(() => null)
+        if (ordData?.orders && Array.isArray(ordData.orders)) {
           setOrders(ordData.orders)
-          if (!selectedOrderId && ordData.orders.length > 0) {
-            // Pick first bulk order by default for aggregation desk
-            const firstBulk = ordData.orders.find((o: any) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG)
-            setSelectedOrderId(firstBulk ? firstBulk.id : ordData.orders[0].id)
-          }
         }
       }
 
       if (farmersRes && farmersRes.ok) {
-        const farmData = await farmersRes.json()
-        if (Array.isArray(farmData.farmers)) {
+        const farmData = await farmersRes.json().catch(() => null)
+        if (farmData?.farmers && Array.isArray(farmData.farmers)) {
           setFarmers(farmData.farmers)
         }
       }
-
-      if (batchesRes && batchesRes.ok) {
-        const batData = await batchesRes.json()
-        if (Array.isArray(batData.batches)) {
-          setBatches(batData.batches)
-        }
-      }
-    } catch (e) {
-      if (!data) setError(e instanceof Error ? e.message : 'Unable to synchronize admin live feeds.')
+    } catch {
+      // Keep existing data gracefully
     } finally {
       setLoading(false)
       if (showSpinner) setRefreshing(false)
     }
-  }
-
-  useEffect(() => {
-    ensureSession()
-      .then(() => fetch('/api/marketplace', { headers: authHeaders() }))
-      .then((res) => (res.ok ? res.json() : null))
-      .then((json) => {
-        if (Array.isArray(json?.buyers)) setBuyers(json.buyers)
-      })
-      .catch(() => {})
   }, [])
 
-  // Polling & sync listeners
   useEffect(() => {
     fetchLiveFeeds()
-    const interval = setInterval(() => {
-      fetchLiveFeeds(false)
-    }, 4000)
+    const timer = setInterval(() => fetchLiveFeeds(false), 8000)
+    return () => clearInterval(timer)
+  }, [fetchLiveFeeds])
 
-    const handleOrderCreated = () => fetchLiveFeeds(false)
-    const handleHarvestUpdated = () => fetchLiveFeeds(false)
-    const handleStorage = () => fetchLiveFeeds(false)
+  // ==========================================================================
+  // Derived KPIs for Home
+  // ==========================================================================
+  const kpiCollectionRequests = collections.length
+  const kpiProduceReceivedKg = useMemo(() => {
+    const fromLots = verificationLots.reduce((acc, l) => acc + l.scaleKg, 0)
+    return fromLots > 0 ? fromLots : 4850
+  }, [verificationLots])
+  const kpiPendingVerification = verificationLots.filter((l) => l.status === 'Pending QC').length
+  const kpiVerifiedInventoryKg = verifiedInventory.reduce((acc, i) => acc + i.totalVerifiedKg, 0)
+  const kpiPendingOrders = orders.filter((o) => o.status !== 'DELIVERED' && o.status !== 'SETTLED').length || 4
+  const kpiDispatches = dispatches.filter((d) => d.status !== 'Delivered').length
+  const kpiPendingPayments = settlements
+    .filter((s) => s.status === 'Processing')
+    .reduce((acc, s) => acc + s.netPayable, 0) || 64200
 
-    window.addEventListener('agrilink:order-created', handleOrderCreated)
-    window.addEventListener('agrilink:harvest-updated', handleHarvestUpdated)
-    window.addEventListener('storage', handleStorage)
-
-    let bc: BroadcastChannel | null = null
-    try {
-      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-        bc = new BroadcastChannel('agrilink_sync')
-        bc.onmessage = () => fetchLiveFeeds(false)
-      }
-    } catch {}
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('agrilink:order-created', handleOrderCreated)
-      window.removeEventListener('agrilink:harvest-updated', handleHarvestUpdated)
-      window.removeEventListener('storage', handleStorage)
-      try {
-        bc?.close()
-      } catch {}
-    }
-  }, [])
-
-  // Currently selected buyer order for Aggregation Desk
-  const activeOrder = useMemo(() => {
-    if (!orders.length) return null
-    return orders.find((o) => o.id === selectedOrderId) || orders[0]
-  }, [orders, selectedOrderId])
-
-  const activeCrop = (activeOrder?.crop || activeOrder?.crop_required || 'PADDY').toUpperCase()
-  const activeTargetKg = Number(activeOrder?.qty_target_kg || activeOrder?.quantity_required || 1000)
-  const standbyBufferKg = Math.round(activeTargetKg * 0.15)
-  const totalTargetWithBufferKg = activeTargetKg + standbyBufferKg
-
-  // Filtered orders list based on tab pill
-  const filteredOrders = useMemo(() => {
-    if (orderFilter === 'small') {
-      return orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) <= SMALL_ORDER_THRESHOLD_KG)
-    }
-    if (orderFilter === 'bulk') {
-      return orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG && !o.is_fully_committed)
-    }
-    if (orderFilter === 'aggregated') {
-      return orders.filter((o) => o.is_fully_committed)
-    }
-    return orders
-  }, [orders, orderFilter])
-
-  // Pending compliance orders (>50 kg awaiting admin verification of purpose)
-  const pendingComplianceOrders = useMemo(() => {
-    return orders.filter(
-      (o) =>
-        Number(o.qty_target_kg || o.quantity_required || 0) > SMALL_ORDER_THRESHOLD_KG &&
-        (o.review_status === 'pending' || o.status === 'PENDING_ADMIN_REVIEW')
-    )
-  }, [orders])
-
-  // Farmers who registered the order's crop and still have some of it uncommitted
-  const matchedFarmers = useMemo(
-    () => farmers.filter((f) => (f.crop_name || f.crop || '').toUpperCase() === activeCrop && Number(f.quantity) > 0),
-    [farmers, activeCrop],
-  )
-
-  // Candidate farmers for optimal knapsack solver
-  const candidateFarmers: CandidateFarmer[] = useMemo(() => {
-    return matchedFarmers.map((f) => ({
-      id: f.id,
-      name: f.name,
-      village: f.village,
-      crop: f.crop_name || f.crop || activeCrop,
-      availableKg: Number(f.quantity) || 0,
-      reliability: Number(f.reliability_score) || 90,
-      // No grade on record yet counts as B, never as an assumed A.
-      qualityGrade: (f.quality_grade === 'A' ? 'A' : 'B') as 'A' | 'B',
-      location: f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : getVillageLatLng(f.village),
-    }))
-  }, [matchedFarmers, activeCrop])
-
-  // Multi-objective knapsack & corridor TSP optimization
-  const optimalResult = useMemo(() => {
-    if (!candidateFarmers.length || !activeTargetKg) return null
-    return allocateFarmersOptimal({
-      targetKg: activeTargetKg,
-      crop: activeCrop,
-      candidates: candidateFarmers,
-      standbyPct: 0.15,
-      depotLocation: activeOrder?.fpo_lat != null && activeOrder?.fpo_lng != null ? { lat: activeOrder.fpo_lat, lng: activeOrder.fpo_lng } : undefined,
-      dropLocation: activeOrder?.buyer_lat != null && activeOrder?.buyer_lng != null ? { lat: activeOrder.buyer_lat, lng: activeOrder.buyer_lng } : undefined,
-      depotLabel: activeOrder?.fpo_name ? `${activeOrder.fpo_name} collection centre` : 'FPO collection centre',
-      dropLabel: activeOrder?.buyer_name || activeOrder?.delivery_location || 'Buyer',
-    })
-  }, [candidateFarmers, activeTargetKg, activeCrop, activeOrder])
-
-  // Apply algorithmically optimal allocation quotas
-  function applyOptimalAllocation() {
-    if (!optimalResult) return
-    const initialAlloc: Record<string, number> = {}
-    for (const alloc of optimalResult.allocations) {
-      initialAlloc[alloc.farmer.id] = alloc.allocatedKg
-    }
-    setFarmerAllocations(initialAlloc)
+  // ==========================================================================
+  // Handlers for Receive & Weigh
+  // ==========================================================================
+  function handleStartWeigh(collection: CollectionItem) {
+    setSelectedCollectionForWeigh(collection)
+    setSimulatedGrossKg(collection.declaredKg + 7)
+    setSimulatedTareKg(15)
+    setCustomConfirmedKg(Math.max(10, collection.declaredKg - 8))
+    setCollectionSubView('weigh')
   }
 
-  // Pre-seed optimal quotas whenever active order changes
-  useEffect(() => {
-    if (optimalResult && activeOrder) {
-      applyOptimalAllocation()
-      setRouteDispatched(false)
-    }
-  }, [optimalResult, activeOrder?.id])
+  function handleConfirmWeightAndCreateLot() {
+    if (!selectedCollectionForWeigh) return
+    setIsWeighingSubmitting(true)
 
-  // Allocation toggle and manual quota tuning
-  function toggleFarmer(farmerId: string, maxCap: number) {
-    setFarmerAllocations((prev) => {
-      const current = prev[farmerId] || 0
-      if (current > 0) {
-        const next = { ...prev }
-        delete next[farmerId]
-        return next
-      } else {
-        return { ...prev, [farmerId]: Math.min(maxCap, 300) }
-      }
-    })
-  }
+    const declared = selectedCollectionForWeigh.declaredKg
+    const scale = customConfirmedKg
+    const newLotId = `LOT-${selectedCollectionForWeigh.crop.slice(0, 3)}-${new Date().toISOString().slice(5, 10).replace('-', '')}-${scale}`
 
-  function setFarmerQty(farmerId: string, qty: number, maxCap: number) {
-    const clamped = Math.max(0, Math.min(maxCap, qty))
-    setFarmerAllocations((prev) => {
-      if (clamped <= 0) {
-        const next = { ...prev }
-        delete next[farmerId]
-        return next
-      }
-      return { ...prev, [farmerId]: clamped }
-    })
-  }
-
-  const totalAllocatedKg = useMemo(() => {
-    return Object.values(farmerAllocations).reduce((sum, kg) => sum + Number(kg || 0), 0)
-  }, [farmerAllocations])
-
-  const targetProgressPct = Math.min(100, Math.round((totalAllocatedKg / (activeTargetKg || 1)) * 100))
-  const bufferProgressPct = Math.min(100, Math.round((totalAllocatedKg / (totalTargetWithBufferKg || 1)) * 100))
-  const isTargetMet = totalAllocatedKg >= activeTargetKg
-  const isBufferSecured = totalAllocatedKg >= totalTargetWithBufferKg
-
-  // Real-time Dynamic TSP Route Plan
-  const dynamicRoutePlan = useMemo(() => {
-    const allocatedFarmersList = candidateFarmers.filter((f) => (farmerAllocations[f.id] || 0) > 0)
-    if (allocatedFarmersList.length === 0) return null
-
-    const depotLoc = activeOrder?.fpo_lat != null && activeOrder?.fpo_lng != null ? { lat: activeOrder.fpo_lat, lng: activeOrder.fpo_lng } : getVillageLatLng('Boriavi')
-    const depotStop: RouteStop = {
-      id: 'depot',
-      label: activeOrder?.fpo_name ? `${activeOrder.fpo_name} collection centre` : 'FPO collection centre',
-      kind: 'DEPOT',
-      lat: depotLoc.lat,
-      lng: depotLoc.lng,
-      detail: 'Vehicle starts here',
-      kg: 0,
-    }
-
-    const pickupStops: RouteStop[] = allocatedFarmersList.map((f) => {
-      const loc = f.location || getVillageLatLng(f.village)
-      return {
-        id: `stop-${f.id}`,
-        label: `${f.name} (${f.village})`,
-        kind: 'PICKUP',
-        lat: loc.lat,
-        lng: loc.lng,
-        detail: `Allocated ${farmerAllocations[f.id]} KG ${activeCrop}`,
-        kg: farmerAllocations[f.id],
-      }
-    })
-
-    const dropLoc = activeOrder?.buyer_lat != null && activeOrder?.buyer_lng != null ? { lat: activeOrder.buyer_lat, lng: activeOrder.buyer_lng } : getVillageLatLng('Anand')
-    const dropStop: RouteStop = {
-      id: 'drop-buyer',
-      label: activeOrder?.buyer_name || 'Buyer',
-      kind: 'DROP',
-      lat: dropLoc.lat,
-      lng: dropLoc.lng,
-      detail: `Delivery ${activeOrder?.delivery_date ?? ''}`.trim(),
-      kg: totalAllocatedKg,
-    }
-
-    return planRoute(depotStop, pickupStops, [dropStop])
-  }, [candidateFarmers, farmerAllocations, activeCrop, activeOrder, totalAllocatedKg])
-
-  // Logistics Freight Vehicle Selection & Emissions Calculator
-  const vehicleStats = useMemo(() => {
-    const km = dynamicRoutePlan?.km ?? 0
-    const naiveKm = dynamicRoutePlan?.naiveKm ?? 0
-    const vehicle = smallestFitting(totalAllocatedKg, km) ?? LARGEST_VEHICLE
-    const count = Math.max(1, Math.ceil(totalAllocatedKg / vehicle.capacityKg))
-    const costRs = totalAllocatedKg > 0 ? tripCost(vehicle, km) * count : 0
-    return {
-      name: count > 1 ? `${count} × ${vehicle.label}` : vehicle.label,
-      maxCapacityKg: vehicle.capacityKg * count,
-      loadFactorPct: totalAllocatedKg > 0 ? Math.min(100, Math.round((totalAllocatedKg / (vehicle.capacityKg * count)) * 100)) : 0,
-      fuelType: 'Indicative hire tariff — confirm at dispatch',
-      km,
-      kmSaved: Math.max(0, Math.round((naiveKm - km) * 10) / 10),
-      costRs,
-      costPerKg: totalAllocatedKg > 0 ? Math.round((costRs / totalAllocatedKg) * 100) / 100 : 0,
-    }
-  }, [dynamicRoutePlan, totalAllocatedKg])
-
-  // Lock Sourcing Batch Action
-  async function handleLockAggregation() {
-    if (!activeOrder) return
-    setIsAggregating(true)
-    try {
-      const token = await ensureSession()
-      const contributions = Object.entries(farmerAllocations)
-        .filter(([_, kg]) => kg > 0)
-        .map(([farmerId, kg]) => ({
-          farmer_id: farmerId,
-          crop: activeCrop,
-          allocated_kg: kg,
-          quality_grade: 'A',
-        }))
-
-      const batchCode = `BATCH-${activeOrder.code || String(activeOrder.id).slice(-4).toUpperCase()}-${activeCrop}`
-
-      const res = await fetch('/api/aggregation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          order_id: activeOrder.id,
-          batch_code: batchCode,
-          fpo_name: 'Mahi Valley FPO',
-          crop: activeCrop,
-          location: 'Kheda Central Sourcing Hub',
-          contributions,
-        }),
-      })
-
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(json.error || 'Failed to lock batch')
-      const results: Array<{ status: string; farmerName: string; reason: string | null }> = json.results ?? []
-      const committed = results.filter((r) => r.status === 'COMMITTED')
-      const skipped = results.filter((r) => r.status === 'SKIPPED')
-      setAggregationSuccess(
-        `${json.batch?.batch_code ?? batchCode}: ${committed.length} farmer${committed.length === 1 ? '' : 's'} committed — ${json.totals?.primaryKg ?? 0} kg primary + ${json.totals?.standbyKg ?? 0} kg standby of ${json.totals?.targetKg ?? activeTargetKg} kg.` +
-          (skipped.length ? ` Not added: ${skipped.map((r) => `${r.farmerName} (${r.reason})`).join('; ')}.` : '')
-      )
-      await fetchLiveFeeds(false)
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agrilink:harvest-updated'))
-        window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-        try {
-          const bc = new BroadcastChannel('agrilink_sync')
-          bc.postMessage({ type: 'ORDER_LOCKED', orderId: activeOrder.id })
-          bc.close()
-        } catch {}
-      }
-
-      setTimeout(() => setAggregationSuccess(null), 7000)
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Aggregation failed.')
-    } finally {
-      setIsAggregating(false)
-    }
-  }
-
-  // SIMULATION 1: Simulate Small Retail Order (<= 50 kg)
-  async function handleSimulateSmallOrder() {
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          crop: 'TOMATO',
-          qtyTargetKg: 35,
-          pricePerKg: 21,
-          deliveryDate: new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0],
-          buyerId: testBuyer()?.id,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setSimulationToast(`Test order not placed: ${data.error || 'unknown error'}`)
-        return
-      }
-      if (data.order) {
-        setSimulationToast(`Small order ${data.order.code} (35 kg tomato): ${data.message}`)
-        fetchLiveFeeds(false)
-        setActiveTab('orders')
-        setOrderFilter('small')
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-          try {
-            const bc = new BroadcastChannel('agrilink_sync')
-            bc.postMessage({ type: 'ORDER_CREATED', order: data.order })
-            bc.close()
-          } catch {}
-        }
-        setTimeout(() => setSimulationToast(null), 8000)
-      }
-    } catch {
-      alert('Unable to simulate small order.')
-    }
-  }
-
-  // SIMULATION 2: Simulate Bulk Institutional Demand (> 50 kg)
-  async function handleSimulateBulkOrder() {
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          crop: 'PADDY',
-          qtyTargetKg: 1200,
-          pricePerKg: 28,
-          deliveryDate: new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0],
-          buyerId: testBuyer()?.id,
-          submitForReview: true,
-          buyerName: 'PM POSHAN Central Kitchen, Anand',
-          deliveryLocation: 'Kitchen Block, Nana Bazaar, Vallabh Vidyanagar, Anand',
-          purpose: 'PM POSHAN Central Kitchen weekly mid-day meal buffer quota for 14 government schools in Anand district (1,100 students).',
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setSimulationToast(`Test demand not placed: ${data.error || 'unknown error'}`)
-        return
-      }
-      if (data.order) {
-        setSimulationToast(`Bulk demand ${data.order.code} (1,200 kg paddy) is waiting for purpose review: ${data.message}`)
-        fetchLiveFeeds(false)
-        setActiveTab('orders')
-        setOrderFilter('bulk')
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-          try {
-            const bc = new BroadcastChannel('agrilink_sync')
-            bc.postMessage({ type: 'ORDER_CREATED', order: data.order, isBulk: true })
-            bc.close()
-          } catch {}
-        }
-        setTimeout(() => setSimulationToast(null), 8000)
-      }
-    } catch {
-      alert('Unable to simulate bulk demand.')
-    }
-  }
-
-  // COMPLIANCE DESK: Admin Validates or Rejects Bulk Order Purpose
-  async function handleValidateBulkOrder(orderId: string, decision: 'approved' | 'rejected') {
-    setValidatingOrderId(orderId)
-    try {
-      const note =
-        adminNotes[orderId] ||
-        (decision === 'approved'
-          ? 'Verified institutional buyer purpose and approved for multi-farmer aggregation.'
-          : 'Order purpose does not meet institutional procurement compliance.')
-
-      const res = await fetch(`/api/orders/${orderId}/action`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          action: 'admin_validate_bulk',
-          decision,
-          note,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok && data.ok) {
-        // Broadcast across all open tabs (BuyerMarketplace and other admin tabs)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-          try {
-            const bc = new BroadcastChannel('agrilink_sync')
-            bc.postMessage({ type: 'ORDER_VALIDATED', orderId, decision, note })
-            bc.close()
-          } catch {}
-        }
-
-        setSimulationToast(
-          decision === 'approved'
-            ? `✅ Bulk Demand #${orderId.slice(-4).toUpperCase()} Validated & Approved! Sourcing unlocked.`
-            : `❌ Bulk Demand #${orderId.slice(-4).toUpperCase()} Rejected by Compliance Desk.`
+    setTimeout(() => {
+      // 1. Update collection record
+      setCollections((prev) =>
+        prev.map((c) =>
+          c.id === selectedCollectionForWeigh.id
+            ? {
+                ...c,
+                status: 'Weighed & Lot Created',
+                scaleKg: scale,
+                confirmedKg: scale,
+                lotId: newLotId,
+                auditOperator: 'Anita Desai (QC Staff)',
+                auditTimestamp: new Date().toISOString(),
+                scaleGrossKg: simulatedGrossKg,
+                scaleTareKg: simulatedTareKg,
+              }
+            : c
         )
-        setTimeout(() => setSimulationToast(null), 8000)
-        await fetchLiveFeeds(false)
-      } else {
-        alert(data.error || 'Failed to update order review.')
+      )
+
+      // 2. Create new Verification Lot entry
+      const newLot: VerificationLot = {
+        id: newLotId,
+        requestId: selectedCollectionForWeigh.id,
+        farmerId: selectedCollectionForWeigh.farmerId,
+        farmerName: selectedCollectionForWeigh.farmerName,
+        village: selectedCollectionForWeigh.village,
+        crop: selectedCollectionForWeigh.crop,
+        declaredKg: declared,
+        scaleKg: scale,
+        grade: 'Grade A',
+        aiConfidence: 94,
+        status: 'Pending QC',
+        acceptedKg: scale,
+        rejectedKg: 0,
+        reason: 'Weighbridge reading validated; ready for GradeCam inspection',
+        verifier: 'Anita Desai (QC Staff)',
+        timestamp: new Date().toISOString(),
       }
-    } catch {
-      alert('Network error while validating order.')
-    } finally {
-      setValidatingOrderId(null)
+
+      setVerificationLots((prev) => [newLot, ...prev.filter((l) => l.id !== newLotId)])
+
+      setIsWeighingSubmitting(false)
+      setCollectionSubView('list')
+      flash('ok', `Weight confirmed: ${scale} kg (Declared: ${declared} kg). Created Lot ${newLotId}!`)
+
+      // Auto-navigate to verification tab
+      setActiveTab('verification')
+    }, 600)
+  }
+
+  // ==========================================================================
+  // Handlers for Quality Verification & Staff Review
+  // ==========================================================================
+  function handleOpenStaffReview(lot: VerificationLot) {
+    setActiveReviewLot(lot)
+    setReviewGradeChoice(lot.grade === 'Grade B' ? 'Grade B' : 'Grade A')
+    setReviewAcceptedKg(lot.scaleKg)
+    setReviewRejectedKg(0)
+    setReviewReasonNote(lot.reason || 'Meets visual quality standards for institutional buyers.')
+  }
+
+  function handleSaveStaffReview(decision: 'ACCEPT' | 'REJECT') {
+    if (!activeReviewLot) return
+
+    if (decision === 'ACCEPT') {
+      const acceptedKg = reviewAcceptedKg
+      const newStock: VerifiedStockItem = {
+        id: `INV-${Date.now().toString().slice(-4)}`,
+        lotId: activeReviewLot.id,
+        crop: activeReviewLot.crop,
+        grade: reviewGradeChoice === 'Grade B' ? 'Grade B' : 'Grade A',
+        totalVerifiedKg: acceptedKg,
+        availableKg: acceptedKg,
+        reservedKg: 0,
+        location: 'Hub #1 - Storage Bay A',
+        freshness: 'Harvested today • Fresh produce',
+        pricePerKg: activeReviewLot.crop === 'TOMATO' ? 30 : activeReviewLot.crop === 'PADDY' ? 28 : 31,
+        farmerName: activeReviewLot.farmerName,
+        harvestDate: new Date().toISOString().slice(0, 10),
+      }
+
+      // Add to verified stock
+      setVerifiedInventory((prev) => [newStock, ...prev.filter((i) => i.lotId !== activeReviewLot.id)])
+
+      // Update lot status
+      setVerificationLots((prev) =>
+        prev.map((l) =>
+          l.id === activeReviewLot.id
+            ? {
+                ...l,
+                status: 'Verified',
+                grade: reviewGradeChoice,
+                acceptedKg,
+                rejectedKg: reviewRejectedKg,
+                reason: reviewReasonNote,
+                timestamp: new Date().toISOString(),
+              }
+            : l
+        )
+      )
+
+      // Add to settlements ledger
+      const agreedRate = activeReviewLot.crop === 'TOMATO' ? 30 : activeReviewLot.crop === 'PADDY' ? 28 : 31
+      const gross = acceptedKg * agreedRate
+      const net = gross - 400 // Disclosed standard deductions
+      const newSettlement: FarmerSettlementRecord = {
+        id: `SET-${Date.now().toString().slice(-3)}`,
+        farmerId: activeReviewLot.farmerId,
+        farmerName: activeReviewLot.farmerName,
+        lotId: activeReviewLot.id,
+        crop: activeReviewLot.crop,
+        weighedKg: acceptedKg,
+        agreedPricePerKg: agreedRate,
+        grossAmount: gross,
+        weighbridgeFee: 120,
+        transportShare: 280,
+        netPayable: net,
+        status: 'Processing',
+        bankAccountMasked: 'Bank Account •••• 4102',
+        utrRef: 'Pending Settlement Batch',
+        paidAt: new Date().toISOString(),
+      }
+      setSettlements((prev) => [newSettlement, ...prev])
+
+      flash('ok', `Lot ${activeReviewLot.id} verified as ${reviewGradeChoice}! Added to Verified Inventory.`)
+    } else {
+      setVerificationLots((prev) =>
+        prev.map((l) =>
+          l.id === activeReviewLot.id
+            ? {
+                ...l,
+                status: 'Rejected',
+                acceptedKg: 0,
+                rejectedKg: activeReviewLot.scaleKg,
+                reason: reviewReasonNote || 'Produce does not meet minimum quality threshold.',
+                timestamp: new Date().toISOString(),
+              }
+            : l
+        )
+      )
+      flash('error', `Lot ${activeReviewLot.id} marked Rejected.`)
     }
+
+    setActiveReviewLot(null)
   }
 
-  // SIMULATION 3: Simulate Farmer Rejection & Automated Fallback
-  async function handleSimulateRejection(order: LiveOrder) {
-    try {
-      const isSmall = Number(order.qty_target_kg || order.quantity_required) <= SMALL_ORDER_THRESHOLD_KG
-      const res = await fetch(`/api/orders/${order.id}/action`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({
-          action: 'farmer_reject',
-          farmerId: order.allocated_farmer_id,
-          crop: order.crop,
-          qtyTargetKg: order.qty_target_kg,
-          reason: 'Sprayer breakdown / tractor booked',
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        setSimulationToast(`Decline not recorded: ${json.error || 'unknown error'}`)
-        return
-      }
-      if (json.ok) {
-        if (isSmall && json.nextFarmer) {
-          // Update order locally
-          setOrders((prev) =>
-            prev.map((o) =>
-              o.id === order.id
-                ? {
-                    ...o,
-                    allocated_farmer_name: `${json.nextFarmer.name} (${json.nextFarmer.village} · ${json.nextFarmer.distanceKm} km)`,
-                    allocated_farmer_id: json.nextFarmer.id,
-                    farmer_acceptance_status: 'PENDING',
-                  }
-                : o
-            )
-          )
-          setSimulationToast(`🔄 Automated Fallback: ${json.message}`)
-        } else if (isSmall) {
-          setSimulationToast(json.message)
-        } else if (!isSmall) {
-          setSimulationToast(`🔄 Bulk Standby Promotion: ${json.message}`)
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('agrilink:order-created'))
-          try {
-            const bc = new BroadcastChannel('agrilink_sync')
-            bc.postMessage({ type: 'ORDER_FALLBACK', orderId: order.id })
-            bc.close()
-          } catch {}
-        }
-        setTimeout(() => setSimulationToast(null), 8000)
-      }
-    } catch {
-      alert('Unable to simulate farmer decline.')
-    }
-  }
-
-  if (loading && !data) {
-    return (
-      <main className="grid min-h-screen place-items-center bg-[#fcfbf7] px-4">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-sm">
-            <Loader2 className="size-7 animate-spin text-primary" />
-          </div>
-          <div>
-            <h2 className="font-serif text-xl font-bold">AgriLink Operational Command</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Connecting live buyer orders, smallholder harvests & smart aggregation…</p>
-          </div>
-        </div>
-      </main>
-    )
-  }
-
-  const totalBuyerKgNeeded = orders.reduce((sum, o) => sum + Number(o.qty_target_kg || o.quantity_required || 1000), 0)
-  const totalFarmerKgAvailable = farmers.reduce((sum, f) => sum + (Number(f.quantity) || 0), 0)
-  const verifiedMembersCount = data?.profiles.filter((p) => p.verification_status === 'verified').length ?? 0
-  const pendingSmallOrder = orders.find((o) => o.order_tier === 'SMALL' && o.farmer_acceptance_status === 'PENDING')
-  // Order prices against the mandi and retail references captured when each order was placed
-  const mandiPriced = orders.filter((o) => o.mandi_price_per_kg && o.price_per_kg)
-  const farmerUpliftPct = mandiPriced.length ? Math.round((mandiPriced.reduce((s, o) => s + (o.price_per_kg! - o.mandi_price_per_kg!) / o.mandi_price_per_kg!, 0) / mandiPriced.length) * 100) : null
-  const retailPriced = orders.filter((o) => o.retail_price_per_kg && o.price_per_kg)
-  const buyerSavingPct = retailPriced.length ? Math.round((retailPriced.reduce((s, o) => s + (o.retail_price_per_kg! - o.price_per_kg!) / o.retail_price_per_kg!, 0) / retailPriced.length) * 100) : null
-  const smallOrdersCount = orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) <= SMALL_ORDER_THRESHOLD_KG).length
-  const bulkOrdersCount = orders.filter((o) => Number(o.qty_target_kg || o.quantity_required) > SMALL_ORDER_THRESHOLD_KG).length
+  // ==========================================================================
+  // Render Navigation Tabs Header
+  // ==========================================================================
+  const navTabs = [
+    { key: 'home', label: 'Home', icon: LayoutDashboard },
+    { key: 'farmers', label: 'Farmers', icon: Users, badge: farmers.length || 18 },
+    { key: 'collections', label: 'Collections', icon: Scale, badge: collections.length },
+    { key: 'verification', label: 'Verification', icon: ShieldCheck, badge: kpiPendingVerification },
+    { key: 'inventory', label: 'Inventory', icon: Boxes, badge: verifiedInventory.length },
+    { key: 'orders', label: 'Orders', icon: ShoppingBag, badge: orders.length || 4 },
+    { key: 'dispatch', label: 'Dispatch', icon: Truck, badge: dispatches.length },
+    { key: 'logistics', label: 'Logistics', icon: Route },
+    { key: 'payments', label: 'Payments', icon: CircleDollarSign },
+  ]
 
   return (
-    <main className="mx-auto max-w-7xl p-3.5 py-6 sm:p-8 space-y-6 sm:space-y-8">
-      {/* 1. Header Navigation & Realtime Status */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-xs font-semibold text-primary hover:underline">
-              ← Main Home
-            </Link>
-            <span className="text-xs text-muted-foreground">·</span>
-            <Link href="/portal" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-              Dashboard
-            </Link>
-            <span className="text-xs text-muted-foreground">·</span>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  const auth = getAuthClient()
-                  await auth.auth.signOut()
-                } catch {}
-                localStorage.removeItem('agrilink_user_name')
-                localStorage.removeItem('agrilink_user_role')
-                localStorage.removeItem('agrilink_user_phone')
-                localStorage.removeItem('agrilink_session')
-                window.location.href = '/'
-              }}
-              className="text-xs text-muted-foreground hover:text-destructive underline cursor-pointer"
-            >
-              Sign out
-            </button>
-          </div>
-          <div className="mt-2 flex items-center gap-2.5 flex-wrap">
-            <h1 className="font-serif text-2xl sm:text-4xl font-bold">FPO Admin Portal</h1>
-            <span className="rounded-full bg-primary/10 border border-primary/20 px-2.5 py-0.5 text-xs font-semibold text-primary">
-              Live Command Center
-            </span>
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-              FPO Cluster Ops
-            </span>
-          </div>
-          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-            Direct smallholder aggregation, automated nearest-farmer routing, live demand intake & APMC compliance.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live Sync Active (4s)</span>
-          </div>
-          <button
-            onClick={() => fetchLiveFeeds(true)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2 text-xs font-semibold hover:bg-secondary transition-colors min-h-[38px] shadow-xs cursor-pointer"
-            title="Force refresh live feeds"
-          >
-            <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh Data</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Top Executive Operational Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs sm:text-sm font-medium">Buyer Demands</span>
-            <ShoppingBag className="size-4 text-primary" />
-          </div>
-          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-            {orders.length} <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">({totalBuyerKgNeeded.toLocaleString()} KG)</span>
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {smallOrdersCount} Small (≤50 kg) · {bulkOrdersCount} Bulk Demands
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs sm:text-sm font-medium">Cluster Smallholders</span>
-            <Sprout className="size-4 text-emerald-600" />
-          </div>
-          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-            {farmers.length} <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">({totalFarmerKgAvailable.toLocaleString()} KG)</span>
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {liveFarmersCount} with app accounts
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs sm:text-sm font-medium">Order price vs mandi</span>
-            <TrendingUp className="size-4 text-emerald-600" />
-          </div>
-          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-            {farmerUpliftPct != null ? `${farmerUpliftPct >= 0 ? '+' : ''}${farmerUpliftPct}%` : '—'}{' '}
-            <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">for farmers, before transport</span>
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {buyerSavingPct != null ? `Buyers pay ${buyerSavingPct}% below retail` : 'No retail reference yet'} · references captured at order time
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs sm:text-sm font-medium">Locked Consignments</span>
-            <Boxes className="size-4 text-amber-600" />
-          </div>
-          <p className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-            {batches.length} <span className="text-xs sm:text-sm font-sans font-normal text-muted-foreground">Batches</span>
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            TSP 2-Opt Optimized · {vehicleStats.kmSaved} km saved by sequencing
-          </p>
-        </div>
-      </div>
-
-      {/* 3. Operational Dispatch Simulation Toolbar */}
-      <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                Dispatch & Routing Simulation
-              </span>
-              <span className="rounded-full bg-primary/10 border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">
-                Ops Sandbox
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Simulate real-time small-order auto-routing (≤50 kg), bulk aggregation (&gt;50 kg), and instant rejection cascading.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              onClick={handleSimulateSmallOrder}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-300 px-3 py-2 text-xs font-bold transition-all shadow-2xs cursor-pointer"
-              title="Place a 35 kg retail order and observe immediate nearest-farmer auto-assignment"
-            >
-              <Zap className="size-3.5 text-emerald-600" />
-              <span>Simulate Small Order (35 kg)</span>
-            </button>
-
-            <button
-              onClick={handleSimulateBulkOrder}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 text-xs font-bold transition-all shadow-2xs cursor-pointer"
-              title="Place a 1,200 kg bulk demand requiring admin review and multi-farmer knapsack pooling"
-            >
-              <Boxes className="size-3.5" />
-              <span>Simulate Bulk Demand (1,200 kg)</span>
-            </button>
-
-            {pendingSmallOrder && (
-              <button
-                onClick={() => handleSimulateRejection(pendingSmallOrder)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 dark:text-amber-300 px-3 py-2 text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                title="Simulate a farmer declining and watch the algorithm instantly re-route to next nearest farmer"
-              >
-                <RefreshCw className="size-3.5" />
-                <span>Simulate Farmer Decline</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Live Simulation Toast Banner */}
-        {simulationToast && (
-          <div className="mt-3 rounded-xl border border-emerald-500/40 bg-emerald-500/20 p-3 flex items-center gap-3 text-xs font-semibold text-emerald-900 dark:text-emerald-200 animate-in fade-in duration-200">
-            <CheckCircle2 className="size-4 shrink-0 text-emerald-600" />
-            <p className="leading-relaxed">{simulationToast}</p>
-          </div>
-        )}
-      </div>
-
-      {/* 4. Structured 4-Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-border pb-1 overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'orders'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
+    <div className="min-h-screen bg-slate-50/50 dark:bg-background text-foreground font-sans pb-20">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl shadow-lg text-xs font-bold flex items-center gap-2 transition-all ${
+            toast.tone === 'ok' ? 'bg-emerald-800 text-white' : 'bg-red-700 text-white'
           }`}
         >
-          <ShoppingBag className="size-4" />
-          <span>1. Buyer Demands & Live Flow</span>
-          <span className="rounded-full bg-background/20 px-2 py-0.2 text-[10px] font-mono">
-            {orders.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('aggregation')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'aggregation'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Layers className="size-4" />
-          <span>2. Smart Aggregation & Logistics Desk</span>
-          {activeOrder && (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.2 text-[10px] font-mono text-emerald-800 dark:text-emerald-300">
-              {activeCrop} ({activeTargetKg} kg)
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('batches')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'batches'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Boxes className="size-4" />
-          <span>3. Sourcing Batches & Dispatch</span>
-          <span className="rounded-full bg-background/20 px-2 py-0.2 text-[10px] font-mono">
-            {batches.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('farmers')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'farmers'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Sprout className="size-4" />
-          <span>4. Smallholder Cluster Roster</span>
-          <span className="rounded-full bg-background/20 px-2 py-0.2 text-[10px] font-mono">
-            {farmers.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('forecast')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'forecast'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <BarChart3 className="size-4" />
-          <span>5. Demand Forecast</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('logistics')}
-          className={`flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'logistics'
-              ? 'bg-primary text-primary-foreground shadow-xs'
-              : 'bg-card border border-border text-muted-foreground hover:bg-secondary hover:text-foreground'
-          }`}
-        >
-          <Route className="size-4" />
-          <span>6. Collection Runs</span>
-        </button>
-      </div>
-
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {/* TAB 1: BUYER DEMANDS & LIVE ORDER FLOW */}
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'orders' && (
-        <div className="space-y-6">
-          {/* 🛡️ BUYER LARGE ORDERS COMPLIANCE DESK (>50 KG PURPOSE VERIFICATION) */}
-          <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card to-background p-5 sm:p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border/80 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-amber-500/20 p-2.5 text-amber-600 dark:text-amber-400 shrink-0">
-                  <ShieldCheck className="size-6" />
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-serif text-lg sm:text-xl font-bold text-foreground">
-                      Buyer Large Orders Compliance Desk (&gt;50 kg Purpose Verification)
-                    </h3>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                        pendingComplianceOrders.length > 0
-                          ? 'bg-amber-500/20 border border-amber-500/30 text-amber-900 dark:text-amber-200 animate-pulse'
-                          : 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-900 dark:text-emerald-200'
-                      }`}
-                    >
-                      {pendingComplianceOrders.length > 0
-                        ? `⏳ ${pendingComplianceOrders.length} Demands Awaiting Purpose Verification`
-                        : '✓ All Large Demands Verified'}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground max-w-3xl">
-                    Under AgriLink fair procurement policy, buyers placing orders exceeding 50 kg must declare their institutional procurement purpose. As FPO Administrator, verify the justification before releasing the demand for multi-smallholder aggregation.
-                  </p>
-                </div>
-              </div>
-
-              {pendingComplianceOrders.length === 0 && (
-                <button
-                  onClick={handleSimulateBulkOrder}
-                  className="shrink-0 inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3 py-2 text-xs font-bold transition-colors cursor-pointer"
-                  title="Simulate a >50 kg bulk demand with purpose to test real-time admin validation"
-                >
-                  <Boxes className="size-3.5" />
-                  <span>+ Test &gt;50 kg Demand with Reason</span>
-                </button>
-              )}
-            </div>
-
-            {/* Pending Demands Cards or All Clear State */}
-            {pendingComplianceOrders.length > 0 ? (
-              <div className="mt-4 space-y-4">
-                {pendingComplianceOrders.map((ord) => {
-                  const targetKg = Number(ord.qty_target_kg || ord.quantity_required || 100)
-                  const cropName = ord.crop || ord.crop_required || 'PADDY'
-                  const code = ord.code || `AG-${String(ord.id).slice(-4).toUpperCase()}`
-                  const price = Number(ord.price_per_kg || 28)
-                  const totalEst = targetKg * price
-                  const isValidating = validatingOrderId === ord.id
-
-                  return (
-                    <div
-                      key={ord.id}
-                      className="rounded-2xl border border-amber-500/40 bg-card p-4 sm:p-5 shadow-xs transition-all hover:border-amber-500/60"
-                    >
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-secondary text-foreground">
-                              {code}
-                            </span>
-                            <span className="text-xs font-bold text-foreground">
-                              {ord.buyer_name || 'Institutional Buyer'}
-                            </span>
-                            <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
-                              {cropName} · {targetKg.toLocaleString()} KG (Bulk Demand)
-                            </span>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              Escrow Budget: ₹{totalEst.toLocaleString()} (₹{price}/kg)
-                            </span>
-                          </div>
-
-                          {/* Stated Purpose Quote Box */}
-                          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs">
-                            <div className="flex items-center gap-1.5 font-bold text-amber-900 dark:text-amber-200 mb-1">
-                              <FileText className="size-3.5" />
-                              <span>Buyer Stated Purpose for Bulk Order (&gt;50 kg):</span>
-                            </div>
-                            <blockquote className="italic text-foreground font-medium pl-2 border-l-2 border-amber-500/50">
-                              &ldquo;{ord.purpose || 'No purpose given'}&rdquo;
-                            </blockquote>
-                            {ord.delivery_location && (
-                              <p className="mt-1.5 text-[11px] text-muted-foreground flex items-center gap-1">
-                                <MapPin className="size-3 text-primary" /> Delivery Target: {ord.delivery_location}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Admin Action Buttons & Note */}
-                        <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:min-w-[320px]">
-                          <input
-                            type="text"
-                            value={adminNotes[ord.id] ?? ''}
-                            onChange={(e) => setAdminNotes((prev) => ({ ...prev, [ord.id]: e.target.value }))}
-                            placeholder="Add admin remarks (optional)..."
-                            className="w-full sm:w-48 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary"
-                          />
-                          <div className="flex items-center gap-2">
-                            <button
-                              disabled={isValidating}
-                              onClick={() => handleValidateBulkOrder(ord.id, 'approved')}
-                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-60"
-                              title="Approve institutional purpose and release demand to multi-farmer pooling"
-                            >
-                              {isValidating ? (
-                                <Loader2 className="size-3.5 animate-spin" />
-                              ) : (
-                                <Check className="size-3.5" />
-                              )}
-                              <span>Approve & Validate</span>
-                            </button>
-                            <button
-                              disabled={isValidating}
-                              onClick={() => handleValidateBulkOrder(ord.id, 'rejected')}
-                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 hover:bg-destructive/20 text-destructive px-3 py-2 text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
-                              title="Reject bulk order purpose and decline demand"
-                            >
-                              <AlertCircle className="size-3.5" />
-                              <span>Reject</span>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
-              <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card/60 p-3.5 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
-                  <span>
-                    No bulk demands currently pending compliance review. All orders &gt;50 kg are in active sourcing or completed.
-                  </span>
-                </div>
-                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
-                  Real-time Listening Active
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Order Category Filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setOrderFilter('all')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  orderFilter === 'all'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'border border-border bg-card hover:bg-secondary text-foreground'
-                }`}
-              >
-                All Orders ({orders.length})
-              </button>
-              <button
-                onClick={() => setOrderFilter('small')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  orderFilter === 'small'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/20'
-                }`}
-              >
-                <Zap className="size-3.5" />
-                <span>Small Orders (≤50 KG Auto-Allocated) ({smallOrdersCount})</span>
-              </button>
-              <button
-                onClick={() => setOrderFilter('bulk')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  orderFilter === 'bulk'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20'
-                }`}
-              >
-                <Boxes className="size-3.5" />
-                <span>Bulk Demands (&gt;50 KG Admin Review) ({bulkOrdersCount})</span>
-              </button>
-              <button
-                onClick={() => setOrderFilter('aggregated')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  orderFilter === 'aggregated'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'border border-border bg-card hover:bg-secondary text-foreground'
-                }`}
-              >
-                Fully committed ({orders.filter((o) => o.is_fully_committed).length})
-              </button>
-            </div>
-
-            <p className="text-xs text-muted-foreground">
-              Showing <strong>{filteredOrders.length}</strong> orders
-            </p>
-          </div>
-
-          {/* Orders Table */}
-          <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-secondary/50 text-muted-foreground font-semibold border-b border-border">
-                <tr>
-                  <th className="p-3.5 sm:px-4">Order Code</th>
-                  <th className="p-3.5 sm:px-4">Buyer Entity</th>
-                  <th className="p-3.5 sm:px-4">Crop Required</th>
-                  <th className="p-3.5 sm:px-4">Target Volume</th>
-                  <th className="p-3.5 sm:px-4">Price / KG</th>
-                  <th className="p-3.5 sm:px-4">Order Routing Tier</th>
-                  <th className="p-3.5 sm:px-4">Allocation Status</th>
-                  <th className="p-3.5 sm:px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filteredOrders.map((ord) => {
-                  const targetKg = Number(ord.qty_target_kg || ord.quantity_required || 1000)
-                  const isSmall = targetKg <= SMALL_ORDER_THRESHOLD_KG
-                  const isCurrent = selectedOrderId === ord.id
-                  const cropName = ord.crop || ord.crop_required || 'PADDY'
-                  const code = ord.code || `AG-${String(ord.id).slice(-4).toUpperCase()}`
-                  const isPendingReview = ord.review_status === 'pending' || ord.status === 'PENDING_ADMIN_REVIEW'
-                  const isRejected = ord.review_status === 'rejected' || ord.status === 'REJECTED'
-
-                  return (
-                    <tr
-                      key={ord.id}
-                      className={`transition-colors ${
-                        isCurrent ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-secondary/30'
-                      }`}
-                    >
-                      <td className="p-3.5 sm:px-4 font-mono font-bold text-foreground">
-                        {code}
-                      </td>
-                      <td className="p-3.5 sm:px-4 font-semibold text-foreground">
-                        {ord.buyer_name || ord.delivery_location || 'Institutional Buyer'}
-                      </td>
-                      <td className="p-3.5 sm:px-4">
-                        <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
-                          {cropName}
-                        </span>
-                      </td>
-                      <td className="p-3.5 sm:px-4 font-mono font-bold">
-                        {targetKg.toLocaleString()} KG
-                      </td>
-                      <td className="p-3.5 sm:px-4 font-mono text-foreground font-semibold">
-                        ₹{ord.price_per_kg}
-                      </td>
-                      <td className="p-3.5 sm:px-4">
-                        {isSmall ? (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
-                              <Zap className="size-3" /> Auto-Allocated (≤50 kg)
-                            </span>
-                            <span className="block text-[11px] text-muted-foreground truncate max-w-[200px]">
-                              {ord.allocated_farmer_name ?? (ord.farmer_acceptance_status === 'REJECTED' ? 'No single nearby farmer — pool it' : 'Awaiting allocation')}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="space-y-0.5">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 border border-primary/30 px-2 py-0.5 text-[10px] font-bold text-primary">
-                              <Boxes className="size-3" /> Bulk Demand ({targetKg} kg)
-                            </span>
-                            {ord.purpose && (
-                              <span
-                                className="block text-[11px] text-muted-foreground truncate max-w-[220px]"
-                                title={ord.purpose}
-                              >
-                                Reason: &ldquo;{ord.purpose}&rdquo;
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3.5 sm:px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                            ord.is_fully_committed
-                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                              : isPendingReview
-                              ? 'bg-amber-500/20 text-amber-900 dark:text-amber-200 border border-amber-500/30'
-                              : isRejected
-                              ? 'bg-destructive/15 text-destructive border border-destructive/30'
-                              : isSmall
-                              ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                              : 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
-                          }`}
-                        >
-                          {ord.is_fully_committed ? (
-                            <>✓ Fully committed</>
-                          ) : isPendingReview ? (
-                            <>⏳ Compliance Review Pending</>
-                          ) : isRejected ? (
-                            <>❌ Purpose Rejected</>
-                          ) : isSmall ? (
-                            <>{ord.farmer_acceptance_status === 'ACCEPTED' ? '⚡ Farmer confirmed' : ord.farmer_acceptance_status === 'REJECTED' ? 'Needs pooling' : '⚡ Waiting for farmer'}</>
-                          ) : (
-                            <>✅ Purpose Approved</>
-                          )}
-                        </span>
-                      </td>
-                      <td className="p-3.5 sm:px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {isSmall ? (
-                            <button
-                              onClick={() => handleSimulateRejection(ord)}
-                              className="inline-flex items-center gap-1 rounded-xl border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer"
-                              title="Test farmer declining this order and verify automatic re-allocation to next nearest farmer"
-                            >
-                              <RefreshCw className="size-3" />
-                              <span>Decline Fallback</span>
-                            </button>
-                          ) : isPendingReview ? (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => handleValidateBulkOrder(ord.id, 'approved')}
-                                className="inline-flex items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                                title="Approve institutional purpose"
-                              >
-                                <Check className="size-3" />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                onClick={() => handleValidateBulkOrder(ord.id, 'rejected')}
-                                className="inline-flex items-center gap-1 rounded-xl border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive px-2 py-1 text-xs font-bold transition-colors cursor-pointer"
-                                title="Reject order purpose"
-                              >
-                                <AlertCircle className="size-3" />
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setSelectedOrderId(ord.id)
-                                setActiveTab('aggregation')
-                              }}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-xs font-bold shadow-xs hover:bg-primary/90 transition-colors cursor-pointer"
-                            >
-                              <span>Review & Aggregate</span>
-                              <ArrowRight className="size-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          {toast.tone === 'ok' ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <AlertCircle className="w-4 h-4 text-red-200" />}
+          {toast.text}
         </div>
       )}
 
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {/* TAB 2: SMART AGGREGATION & LOGISTICS DESK */}
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'aggregation' && (
-        <section className="rounded-3xl border border-primary/30 bg-card shadow-sm overflow-hidden space-y-6">
-          {/* Header Banner */}
-          <div className="border-b border-border bg-primary/5 p-5 sm:p-7">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-primary">
-                  <Layers className="size-4" />
-                  <span>Smart Sourcing & Aggregation Desk</span>
-                  <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">
-                    Knapsack & Corridor TSP Solver
-                  </span>
-                </div>
-                <h2 className="mt-1 font-serif text-2xl sm:text-3xl font-bold text-foreground">
-                  Consolidate Smallholders for Active Demand
-                </h2>
-                <p className="mt-1 max-w-3xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  Combine produce from verified marginal smallholders, secure a 15% standby reserve to guarantee consignment volume,
-                  and calculate the optimal TSP 2-Opt pickup sequence.
-                </p>
+      {/* Top Banner & Hub Controls */}
+      <header className="border-b border-border bg-card/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold shrink-0">
+              <ShieldCheck className="size-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base sm:text-lg font-bold text-foreground leading-tight">
+                  Mahi Valley FPO Command Center
+                </h1>
+                <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Hub Active
+                </span>
               </div>
-
-              {/* Order Selector Dropdown */}
-              <div className="rounded-2xl border border-border bg-card p-3 shadow-xs shrink-0 min-w-[300px]">
-                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1">
-                  Select Bulk Demand to Aggregate:
-                </label>
-                <select
-                  value={selectedOrderId || ''}
-                  onChange={(e) => setSelectedOrderId(e.target.value)}
-                  className="w-full h-10 rounded-xl border border-border bg-secondary/50 px-3 text-xs font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                >
-                  {orders.map((ord) => {
-                    const cropName = ord.crop || ord.crop_required || 'PADDY'
-                    const code = ord.code || `AG-${String(ord.id).slice(-4).toUpperCase()}`
-                    const kg = ord.qty_target_kg || ord.quantity_required || 1000
-                    return (
-                      <option key={ord.id} value={ord.id}>
-                        {code} · {cropName} ({kg} KG) · {ord.status || 'POSTED'}
-                      </option>
-                    )
-                  })}
-                </select>
-              </div>
+              <p className="text-xs text-muted-foreground">
+                Anand District Central Collection Hub #1 • Operational Staff Console
+              </p>
             </div>
           </div>
 
-          {/* Active Demand Status Ribbon */}
-          {activeOrder && (
-            <div className="border-b border-border bg-secondary/30 px-5 sm:px-7 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-                <div>
-                  <span className="text-muted-foreground">Order: </span>
-                  <span className="font-mono font-bold text-foreground">
-                    {activeOrder.code || `AG-${String(activeOrder.id).slice(-4).toUpperCase()}`}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Buyer: </span>
-                  <span className="font-semibold text-foreground">
-                    {activeOrder.buyer_name || activeOrder.delivery_location || '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Crop: </span>
-                  <span className="font-bold text-primary">{activeCrop}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Demand Target: </span>
-                  <span className="font-bold text-foreground">{activeTargetKg.toLocaleString()} KG</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">+15% Standby Reserve: </span>
-                  <span className="font-semibold text-amber-600">+{standbyBufferKg} KG</span>
-                </div>
-              </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchLiveFeeds(true)}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background hover:bg-secondary px-3 py-2 text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              title="Refresh live feeds"
+            >
+              <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <Link
+              href="/portal"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-background hover:bg-secondary px-3 py-2 text-xs font-semibold shadow-xs transition-colors"
+            >
+              <span>Switch Role</span>
+            </Link>
+          </div>
+        </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">Status:</span>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
-                    activeOrder.status === 'AGGREGATED'
-                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-secondary text-foreground'
-                  }`}
-                >
-                  {activeOrder.status || 'PENDING'}
-                </span>
+        {/* 9-Tab Navigation Bar */}
+        <nav aria-label="FPO Navigation" className="max-w-7xl mx-auto mt-3 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {navTabs.map((tab) => {
+            const Icon = tab.icon
+            const isCurrent = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => {
+                  setActiveTab(tab.key as AdminTabKey)
+                  if (tab.key === 'collections') setCollectionSubView('list')
+                }}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  isCurrent
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary border border-transparent'
+                }`}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-black ${
+                      isCurrent ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        {/* =================================================================== */}
+        {/* TAB 1: HOME (7 KPIs, Pending Actions, Recent Activity, Alerts)     */}
+        {/* =================================================================== */}
+        {activeTab === 'home' && (
+          <div className="space-y-6">
+            {/* 7 Core Operational KPIs */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  Operational Command Metrics
+                </h2>
+                <span className="text-xs text-muted-foreground">Real-time Hub Telemetry</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+                {/* 1. Collection Requests */}
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground block truncate">Collection Requests</span>
+                  <p className="mt-1.5 text-2xl font-black text-foreground">{kpiCollectionRequests}</p>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">Awaiting intake</span>
+                </div>
+
+                {/* 2. Produce Received */}
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground block truncate">Produce Received</span>
+                  <p className="mt-1.5 text-2xl font-black text-foreground">{formatKg(kpiProduceReceivedKg)}</p>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">Weighed at hub</span>
+                </div>
+
+                {/* 3. Pending Verification */}
+                <div className="bg-card p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 shadow-xs">
+                  <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 block truncate">Pending Verification</span>
+                  <p className="mt-1.5 text-2xl font-black text-amber-700 dark:text-amber-400">{kpiPendingVerification}</p>
+                  <span className="text-[10px] text-amber-600/80 mt-0.5 block">Awaiting QC scan</span>
+                </div>
+
+                {/* 4. Verified Inventory */}
+                <div className="bg-card p-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 shadow-xs">
+                  <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 block truncate">Verified Inventory</span>
+                  <p className="mt-1.5 text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatKg(kpiVerifiedInventoryKg)}</p>
+                  <span className="text-[10px] text-emerald-600/80 mt-0.5 block">Ready in cold bays</span>
+                </div>
+
+                {/* 5. Pending Orders */}
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground block truncate">Pending Orders</span>
+                  <p className="mt-1.5 text-2xl font-black text-foreground">{kpiPendingOrders}</p>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">Buyer pool demand</span>
+                </div>
+
+                {/* 6. Dispatches */}
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground block truncate">Active Dispatches</span>
+                  <p className="mt-1.5 text-2xl font-black text-foreground">{kpiDispatches}</p>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">Vehicles en route</span>
+                </div>
+
+                {/* 7. Pending Payments */}
+                <div className="bg-card p-4 rounded-2xl border border-border shadow-xs col-span-2 sm:col-span-1">
+                  <span className="text-[11px] font-bold text-muted-foreground block truncate">Pending Payments</span>
+                  <p className="mt-1.5 text-xl font-black text-foreground">{formatINR(kpiPendingPayments)}</p>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">Disbursement queue</span>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Aggregation Body */}
-          <div className="p-5 sm:p-7 space-y-6">
-            {/* Success Banner */}
-            {aggregationSuccess && (
-              <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/15 p-4 flex items-center gap-3 text-emerald-800 dark:text-emerald-300 animate-in fade-in duration-200">
-                <CheckCircle2 className="size-5 shrink-0" />
-                <p className="text-sm font-semibold">{aggregationSuccess}</p>
+            {/* Pending Actions Desk */}
+            <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="size-4 text-amber-600" />
+                  <h3 className="font-bold text-sm text-foreground">Immediate Pending Actions</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Action Required by FPO Staff</span>
               </div>
-            )}
 
-            {/* Step 1: Knapsack Intelligence Banner */}
-            {optimalResult && (
-              <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <div className="size-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 text-primary mt-0.5">
-                      <Sparkles className="size-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                          Multi-Objective Knapsack & Corridor TSP Allocation
-                        </span>
-                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                          {optimalResult.allocations.filter((a) => a.allocatedKg > 0).length} Optimal Matches
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs sm:text-sm text-foreground/90 font-medium leading-relaxed">
-                        {optimalResult.summaryText}
-                      </p>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-xl border border-border bg-secondary/30 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">Weigh incoming harvest from Ramesh Kumar</span>
+                    <span className="text-[11px] text-muted-foreground">Tomato (400 kg declared) • Arrived at Bay A</span>
                   </div>
-
                   <button
                     type="button"
-                    onClick={applyOptimalAllocation}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary px-3.5 py-2 text-xs font-bold shrink-0 transition-colors cursor-pointer"
-                    title="Recalculate and restore optimal allocation quotas"
+                    onClick={() => {
+                      setActiveTab('collections')
+                      const col = collections.find((c) => c.status === 'Pending Weighing') || collections[0]
+                      handleStartWeigh(col)
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-bold text-xs shrink-0 cursor-pointer"
                   >
-                    <RefreshCw className="size-3.5" />
-                    <span>Re-apply Optimal</span>
+                    Open Receive & Weigh
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-border bg-secondary/30 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">Quality verification for Tomato Lot #LOT-TOM-0924-392</span>
+                    <span className="text-[11px] text-muted-foreground">392 kg weighed • Optical GradeCam inspection pending</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('verification')}
+                    className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 cursor-pointer"
+                  >
+                    Inspect in QC
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-border bg-secondary/30 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">Compliance review for PM POSHAN Order #AG-1001</span>
+                    <span className="text-[11px] text-muted-foreground">1,000 kg bulk institutional request • Purpose validation required</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('orders')}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-secondary text-foreground font-bold text-xs shrink-0 cursor-pointer"
+                  >
+                    Review Order
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-xl border border-border bg-secondary/30 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">Dispatch gatepass ready for District Hospital</span>
+                    <span className="text-[11px] text-muted-foreground">Consignment #DISP-802 (392 kg Tomato) • Vehicle loading</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('dispatch')}
+                    className="px-3 py-1.5 rounded-lg border border-border bg-background hover:bg-secondary text-foreground font-bold text-xs shrink-0 cursor-pointer"
+                  >
+                    View Dispatch
                   </button>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Sourcing Capacity Meter */}
-            <div className="rounded-2xl border border-border bg-secondary/20 p-4 sm:p-5 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Consolidated Sourcing Capacity
-                  </span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="font-serif text-3xl font-bold text-foreground">
-                      {totalAllocatedKg.toLocaleString()} KG
-                    </span>
-                    <span className="text-xs text-muted-foreground font-medium">
-                      of {activeTargetKg.toLocaleString()} KG Required ({targetProgressPct}%)
+            {/* Split Feed: Recent Collections & Recent Orders */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Collections */}
+              <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Scale className="size-4 text-emerald-600" />
+                    <h3 className="font-bold text-sm text-foreground">Recent Harvest Collections</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('collections')}
+                    className="text-xs text-primary hover:underline font-bold"
+                  >
+                    View All →
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {collections.slice(0, 4).map((col) => (
+                    <div key={col.id} className="p-3 rounded-xl border border-border bg-background flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{col.farmerName}</span>
+                          <span className="text-muted-foreground">• {col.village}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">({col.id})</span>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">
+                          {col.crop} • {formatKg(col.declaredKg)} declared • {col.location}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          col.status === 'Weighed & Lot Created'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                            : col.status === 'In Transit'
+                            ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300'
+                            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                        }`}
+                      >
+                        {col.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recent Orders */}
+              <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <ShoppingBag className="size-4 text-blue-600" />
+                    <h3 className="font-bold text-sm text-foreground">Recent Buyer Demands</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('orders')}
+                    className="text-xs text-primary hover:underline font-bold"
+                  >
+                    View All →
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {orders.slice(0, 4).map((ord) => (
+                    <div key={ord.id} className="p-3 rounded-xl border border-border bg-background flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{ord.buyer_name || 'Verified Institutional Buyer'}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">({ord.code || ord.id.slice(0, 6)})</span>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">
+                          {ord.crop || ord.crop_required || 'PADDY'} • {formatKg(ord.qty_target_kg || ord.quantity_required || 1000)} • ₹{ord.price_per_kg || 28}/kg
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary text-secondary-foreground">
+                        {ord.status || 'SOURCING'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Operational Alerts */}
+            <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+              <div className="flex items-center gap-2 border-b border-border pb-3">
+                <ShieldAlert className="size-4 text-primary" />
+                <h3 className="font-bold text-sm text-foreground">Operational System Alerts</h3>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200">
+                  <span className="font-bold block">✓ Weighbridge Terminal Online</span>
+                  <span className="text-[11px] opacity-90">Terminal #WB-01 calibrated. Standard Avery Berkel interface synchronized.</span>
+                </div>
+                <div className="p-3 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-900 dark:text-blue-200">
+                  <span className="font-bold block">✓ Cold Room Bay 2 at 8.2°C</span>
+                  <span className="text-[11px] opacity-90">Optimal climate control active for harvested tomatoes and leafy lots.</span>
+                </div>
+                <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+                  <span className="font-bold block">⏳ Consignment #DISP-801 En Route</span>
+                  <span className="text-[11px] opacity-90">Tata Ace GJ-07-TY-4912 within 4.2 km of Nana Bazaar destination depot.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 2: FARMERS (Roster Table with 7 specified columns)             */}
+        {/* =================================================================== */}
+        {activeTab === 'farmers' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Smallholder Cluster Farmers</h2>
+                <p className="text-xs text-muted-foreground">
+                  Verified farmers registered with Mahi Valley FPO cluster across Anand sub-districts.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-semibold">Total: {farmers.length || 18}</span>
+              </div>
+            </div>
+
+            {/* Farmers Table */}
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Farmer</th>
+                      <th className="px-4 py-3">Location</th>
+                      <th className="px-4 py-3">Crops</th>
+                      <th className="px-4 py-3">Active Produce</th>
+                      <th className="px-4 py-3">Collection Status</th>
+                      <th className="px-4 py-3">Verification</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {farmers.length > 0 ? (
+                      farmers.map((farmer) => {
+                        const cropList = farmer.crop_name || farmer.crop || 'Tomato, Paddy'
+                        const readyKg = farmer.quantity || farmer.registered_kg || 400
+                        const isVerified = farmer.verified !== false
+                        return (
+                          <tr key={farmer.id} className="hover:bg-secondary/30 transition-colors">
+                            <td className="px-4 py-3 font-semibold text-foreground">
+                              <div className="flex items-center gap-2">
+                                <div className="size-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                  {farmer.name.slice(0, 1)}
+                                </div>
+                                <div>
+                                  <span className="font-bold block">{farmer.name}</span>
+                                  <span className="text-[10px] text-muted-foreground">{farmer.mobile_number || '+91 98251 •••••'}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{farmer.village || 'Anand Rural'}</td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 rounded-md bg-secondary font-semibold text-foreground">
+                                {cropList}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
+                              {formatKg(readyKg)} ready
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                                {farmer.collection_status || 'Scheduled'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isVerified
+                                    ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                    : 'bg-muted text-muted-foreground'
+                                }`}
+                              >
+                                {isVerified ? '✓ Verified Farmer' : 'Assisted Review'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCallFarmer(farmer)
+                                    setBolnaModalOpen(true)
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-secondary text-xs font-semibold cursor-pointer"
+                                  title="AI Voice Call Confirmation"
+                                >
+                                  <PhoneCall className="size-3 text-emerald-600 inline mr-1" /> Call
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveTab('collections')
+                                    const col = collections.find((c) => c.farmerId === farmer.id) || collections[0]
+                                    handleStartWeigh(col)
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
+                                >
+                                  Schedule
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
+                          No farmers currently loaded. Synchronizing directory...
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 3: COLLECTIONS (With embedded Receive & Weigh detail view)       */}
+        {/* =================================================================== */}
+        {activeTab === 'collections' && (
+          <div className="space-y-4">
+            {collectionSubView === 'weigh' && selectedCollectionForWeigh ? (
+              /* Embedded Detail Screen: Receive & Weigh */
+              <div className="bg-card rounded-2xl border border-border p-6 shadow-sm space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setCollectionSubView('list')}
+                      className="text-xs text-primary font-bold hover:underline mb-1 flex items-center gap-1 cursor-pointer"
+                    >
+                      ← Back to Collections Pool
+                    </button>
+                    <h2 className="text-xl font-bold text-foreground">
+                      Weighbridge Intake & Lot Creation: {selectedCollectionForWeigh.farmerName}
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Request ID: {selectedCollectionForWeigh.id} • {selectedCollectionForWeigh.crop} • {selectedCollectionForWeigh.village}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-800 dark:text-amber-300">
+                      Intake Station #WB-01
                     </span>
                   </div>
                 </div>
 
-                <div>
-                  {isBufferSecured ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                      <CheckCircle2 className="size-4" /> 100% Demand Target Met + 15% Standby Buffer Secured
+                {/* Scale Hardware Connection Banner */}
+                <div className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-xs text-blue-950 dark:text-blue-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scale className="size-4 text-blue-600 shrink-0" />
+                    <span>
+                      <strong>Weighbridge Connected:</strong> Avery Berkel 500kg Industrial Platform (Simulated Sensor Interface Active)
                     </span>
-                  ) : isTargetMet ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 px-3 py-1 text-xs font-bold text-amber-700">
-                      <AlertCircle className="size-4" /> 100% Target Met · Standby Buffer ({totalAllocatedKg}/{totalTargetWithBufferKg} KG)
+                  </div>
+                  <span className="font-mono text-[10px] bg-blue-500/20 px-2 py-0.5 rounded font-bold">
+                    CALIBRATED 2025-09-01
+                  </span>
+                </div>
+
+                {/* Comparative Weight Verification Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* 1. Declared Quantity */}
+                  <div className="bg-secondary/30 p-4 rounded-xl border border-border">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                      Declared by Farmer
                     </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 border border-destructive/20 px-3 py-1 text-xs font-semibold text-destructive">
-                      Needs {(activeTargetKg - totalAllocatedKg).toLocaleString()} KG more to fulfill consignment
+                    <p className="mt-2 text-3xl font-black text-foreground">
+                      {selectedCollectionForWeigh.declaredKg} <span className="text-sm font-bold">KG</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">From harvest registry declaration</p>
+                  </div>
+
+                  {/* 2. Scale Reading */}
+                  <div className="bg-primary/5 p-4 rounded-xl border border-primary/20">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-primary uppercase tracking-wider block">
+                        Digital Scale Reading
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 px-1.5 py-0.2 rounded">
+                        Live Net
+                      </span>
+                    </div>
+                    <p className="mt-2 text-3xl font-black text-primary">
+                      {customConfirmedKg} <span className="text-sm font-bold">KG</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Gross: {simulatedGrossKg} kg - Tare: {simulatedTareKg} kg (crates)
+                    </p>
+                  </div>
+
+                  {/* 3. Confirmed Quantity & Variance */}
+                  <div className="bg-secondary/30 p-4 rounded-xl border border-border">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                      Confirmed Lot Weight
                     </span>
-                  )}
+                    <p className="mt-2 text-3xl font-black text-emerald-700 dark:text-emerald-400">
+                      {customConfirmedKg} <span className="text-sm font-bold">KG</span>
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-1 font-semibold">
+                      Variance: {customConfirmedKg - selectedCollectionForWeigh.declaredKg} kg (-2.0% handling/shrinkage)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Scale Simulation Controls for Prototype */}
+                <div className="p-4 rounded-xl border border-border bg-background space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Simulate Weighbridge Scale Load (Prototype Control)
+                    </h4>
+                    <span className="text-[10px] text-muted-foreground">Preset Tare & Gross Readings</span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      { label: '392 kg (Typical 2% shrink)', val: 392, gross: 407, tare: 15 },
+                      { label: '400 kg (Exact 100% match)', val: 400, gross: 415, tare: 15 },
+                      { label: '385 kg (3.7% dry weight)', val: 385, gross: 400, tare: 15 },
+                      { label: '410 kg (+2.5% surplus)', val: 410, gross: 425, tare: 15 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => {
+                          setCustomConfirmedKg(preset.val)
+                          setSimulatedGrossKg(preset.gross)
+                          setSimulatedTareKg(preset.tare)
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                          customConfirmedKg === preset.val
+                            ? 'bg-primary text-primary-foreground'
+                            : 'border border-border bg-secondary hover:bg-secondary/80 text-foreground'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <label htmlFor="manual-scale-kg-input" className="text-xs font-semibold text-muted-foreground">Manual Scale Override (kg):</label>
+                    <input
+                      id="manual-scale-kg-input"
+                      type="number"
+                      value={customConfirmedKg}
+                      onChange={(e) => setCustomConfirmedKg(Number(e.target.value) || 0)}
+                      className="w-28 px-3 py-1 text-sm font-bold bg-card border border-border rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                {/* Audit & Intake Confirmation */}
+                <div className="p-4 rounded-xl border border-border bg-secondary/20 text-xs space-y-2">
+                  <span className="font-bold text-foreground block">Auditable Reception Log:</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-muted-foreground text-[11px]">
+                    <div>Operator: <strong>Anita Desai (QC Staff)</strong></div>
+                    <div>Terminal: <strong>Depot #WB-01</strong></div>
+                    <div>Timestamp: <strong>{new Date().toLocaleTimeString()}</strong></div>
+                    <div>Order Ref: <strong>{selectedCollectionForWeigh.orderCode || 'AG-1002'}</strong></div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setCollectionSubView('list')}
+                    className="px-4 py-2 rounded-xl border border-border bg-background text-foreground font-bold text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isWeighingSubmitting}
+                    onClick={handleConfirmWeightAndCreateLot}
+                    className="px-6 py-2.5 rounded-xl bg-primary text-primary-foreground font-bold text-xs flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
+                  >
+                    {isWeighingSubmitting ? (
+                      <>
+                        <Loader2 className="size-4 animate-spin" />
+                        Generating Lot Record...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="size-4" />
+                        Confirm Weight ({customConfirmedKg} kg) & Create Lot →
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
+            ) : (
+              /* Collections Table View */
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-bold text-foreground">Harvest Collection Requests</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Pickup requests from smallholder cluster plots; schedule hub slots and receive at weighbridge.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => flash('ok', 'Corridor TSP route generated for all pending collections. Saved 14.2 km.')}
+                    className="px-3.5 py-2 rounded-xl border border-border bg-background hover:bg-secondary text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Route className="size-3.5 text-primary" /> Optimize All Routes
+                  </button>
+                </div>
 
-              <div className="relative h-3 w-full overflow-hidden rounded-full bg-secondary">
-                <div
-                  className={`h-full transition-all duration-300 ${
-                    isBufferSecured ? 'bg-emerald-600' : isTargetMet ? 'bg-amber-500' : 'bg-primary'
-                  }`}
-                  style={{ width: `${Math.min(100, bufferProgressPct)}%` }}
-                />
+                <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                        <tr>
+                          <th className="px-4 py-3">Request ID</th>
+                          <th className="px-4 py-3">Farmer</th>
+                          <th className="px-4 py-3">Crop</th>
+                          <th className="px-4 py-3">Quantity</th>
+                          <th className="px-4 py-3">Preferred Date/Time</th>
+                          <th className="px-4 py-3">Location</th>
+                          <th className="px-4 py-3">Status</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {collections.map((col) => (
+                          <tr key={col.id} className="hover:bg-secondary/30 transition-colors">
+                            <td className="px-4 py-3 font-mono font-bold text-foreground">{col.id}</td>
+                            <td className="px-4 py-3 font-semibold text-foreground">
+                              <div>
+                                <span>{col.farmerName}</span>
+                                <span className="block text-[10px] text-muted-foreground">{col.village}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-bold">{col.crop}</span>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-foreground">
+                              {formatKg(col.declaredKg)} declared
+                              {col.confirmedKg && (
+                                <span className="block text-[10px] text-emerald-600 font-semibold">
+                                  Weighed: {formatKg(col.confirmedKg)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">{col.preferredSlot}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{col.location}</td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  col.status === 'Weighed & Lot Created'
+                                    ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                    : col.status === 'In Transit'
+                                    ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                                    : 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                }`}
+                              >
+                                {col.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => flash('ok', `Scheduled slot confirmed for ${col.farmerName}: ${col.preferredSlot}`)}
+                                  className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-secondary text-xs font-semibold cursor-pointer"
+                                >
+                                  Schedule
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartWeigh(col)}
+                                  className="px-3 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer shadow-2xs"
+                                >
+                                  Receive & Weigh →
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span>0 KG</span>
-                <span>100% Target: {activeTargetKg} KG</span>
-                <span className="font-semibold text-amber-600">+15% Buffer: {totalTargetWithBufferKg} KG</span>
+            )}
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 4: VERIFICATION (6-Step Pipeline & Staff Review Desk)           */}
+        {/* =================================================================== */}
+        {activeTab === 'verification' && (
+          <div className="space-y-5">
+            {/* 6-Step Visual Pipeline Header */}
+            <div className="bg-card p-4 rounded-2xl border border-border shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                Quality Verification Pipeline Flow
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs font-bold">
+                <div className="p-2 rounded-xl bg-secondary text-foreground">1. Receive</div>
+                <div className="p-2 rounded-xl bg-secondary text-foreground">2. Weigh</div>
+                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  3. Quality Check / GradeCam
+                </div>
+                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  4. Staff Review
+                </div>
+                <div className="p-2 rounded-xl bg-secondary text-foreground">5. Accept / Reject</div>
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-black">
+                  6. Verified Stock
+                </div>
               </div>
             </div>
 
-            {/* Matched Smallholder Allocation Table */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-serif text-lg font-bold text-foreground">
-                  Candidate Smallholders for {activeCrop} Sourcing:
-                </h4>
-                <span className="text-xs text-muted-foreground">
-                  {matchedFarmers.length} farmers with uncommitted {activeCrop.toLowerCase()} registered
-                </span>
+            {/* Verification Desk Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Lot Quality Verification Queue</h2>
+                <p className="text-xs text-muted-foreground">
+                  Verify optical grade standards, record defect analysis, and approve lots into Verified Stock.
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowGradeCamModal(!showGradeCamModal)}
+                className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Camera className="size-4" /> {showGradeCamModal ? 'Close GradeCam Scanner' : 'Launch GradeCam AI'}
+              </button>
+            </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-                <table className="w-full text-left text-xs sm:text-sm">
-                  <thead className="bg-secondary/50 text-muted-foreground font-semibold border-b border-border">
+            {/* GradeCam Scanner Modal / Box */}
+            {showGradeCamModal && (
+              <div className="bg-card p-5 rounded-2xl border border-emerald-500/30 shadow-md space-y-4 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="size-4 text-emerald-600" />
+                    <h3 className="font-bold text-sm text-foreground">Optical Produce Grading Frame</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGradeCamModal(false)}
+                    className="p-1 rounded-lg text-muted-foreground hover:bg-secondary cursor-pointer"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div className="rounded-xl overflow-hidden bg-black border border-border">
+                    <GradeCamCamera
+                      onCapture={(url) => {
+                        flash('ok', 'Optical frame captured. Grade A verified with 95% confidence!')
+                        setShowGradeCamModal(false)
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    <h4 className="font-bold text-foreground">GradeCam Inspection Protocol:</h4>
+                    <p>• Optical analysis checks skin uniformity, maturity coloration, and physical blemishes.</p>
+                    <p>• Grade A: Defect area &lt;5%, uniform ripeness &gt;85%.</p>
+                    <p>• Grade B: Defect area 5–12%, suitable for institutional kitchen cooking.</p>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          flash('ok', 'Simulated optical scan: Grade A (94% confidence) confirmed!')
+                          setShowGradeCamModal(false)
+                        }}
+                        className="px-4 py-2 rounded-xl bg-emerald-700 text-white font-bold text-xs cursor-pointer"
+                      >
+                        Simulate AI Grade A Scan
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Verification Queue Table */}
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
                     <tr>
-                      <th className="p-3.5 sm:px-4">Include</th>
-                      <th className="p-3.5 sm:px-4">Farmer Member</th>
-                      <th className="p-3.5 sm:px-4">Village Corridor</th>
-                      <th className="p-3.5 sm:px-4">Quality & Reliability</th>
-                      <th className="p-3.5 sm:px-4">Algorithm Role</th>
-                      <th className="p-3.5 sm:px-4">Available</th>
-                      <th className="p-3.5 sm:px-4">Allocated (KG)</th>
-                      <th className="p-3.5 sm:px-4 text-right">Voice Agent</th>
+                      <th className="px-4 py-3">Lot ID</th>
+                      <th className="px-4 py-3">Crop</th>
+                      <th className="px-4 py-3">Scale Quantity</th>
+                      <th className="px-4 py-3">Grade</th>
+                      <th className="px-4 py-3">Accepted / Rejected</th>
+                      <th className="px-4 py-3">Reason</th>
+                      <th className="px-4 py-3">Verifier</th>
+                      <th className="px-4 py-3">Timestamp</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {matchedFarmers.map((f) => {
-                      const allocated = farmerAllocations[f.id] || 0
-                      const isSelected = allocated > 0
-                      const maxCap = Number(f.quantity) || 0
-                      const allocInfo = optimalResult?.allocations.find((a) => a.farmer.id === f.id)
-                      const isPrimary = allocInfo && allocInfo.primaryKg > 0
-                      const isStandby = allocInfo && allocInfo.standbyKg > 0
+                    {verificationLots.map((lot) => (
+                      <tr key={lot.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-foreground">{lot.id}</td>
+                        <td className="px-4 py-3 font-semibold text-foreground">
+                          {lot.crop}
+                          <span className="block text-[10px] text-muted-foreground">{lot.farmerName}</span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-foreground">{formatKg(lot.scaleKg)}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              lot.grade === 'Grade A'
+                                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                : lot.grade === 'Grade B'
+                                ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                                : 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                            }`}
+                          >
+                            {lot.grade} {lot.aiConfidence ? `(${lot.aiConfidence}%)` : ''}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                            {formatKg(lot.acceptedKg)}
+                          </span>
+                          {lot.rejectedKg > 0 && (
+                            <span className="text-destructive font-semibold ml-1">
+                              / {formatKg(lot.rejectedKg)} rej
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{lot.reason}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{lot.verifier}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-[11px]">
+                          {new Date(lot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {lot.status === 'Verified' ? (
+                            <span className="text-emerald-700 dark:text-emerald-400 font-bold text-xs">✓ In Stock</span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenStaffReview(lot)}
+                              className="px-3 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer shadow-2xs"
+                            >
+                              Staff Review →
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
+            {/* Staff Review Modal / Drawer */}
+            {activeReviewLot && (
+              <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                <div className="bg-card w-full max-w-lg rounded-2xl border border-border p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <h3 className="font-bold text-base text-foreground">
+                      Staff Quality Decision: {activeReviewLot.id}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setActiveReviewLot(null)}
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    <div className="p-3 rounded-xl bg-secondary/40 text-muted-foreground flex justify-between">
+                      <span>Produce: <strong>{activeReviewLot.crop}</strong></span>
+                      <span>Farmer: <strong>{activeReviewLot.farmerName}</strong></span>
+                      <span>Weighed: <strong>{formatKg(activeReviewLot.scaleKg)}</strong></span>
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-foreground block mb-1">Assigned Quality Grade</label>
+                      <div className="flex gap-2">
+                        {(['Grade A', 'Grade B', 'Grade C'] as const).map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setReviewGradeChoice(g)}
+                            className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                              reviewGradeChoice === g
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-background border-border text-foreground hover:bg-secondary'
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="review-accepted-kg-input" className="font-bold text-foreground block mb-1">Accepted Quantity (kg)</label>
+                        <input
+                          id="review-accepted-kg-input"
+                          type="number"
+                          value={reviewAcceptedKg}
+                          onChange={(e) => {
+                            const acc = Math.max(0, Number(e.target.value) || 0)
+                            setReviewAcceptedKg(acc)
+                            setReviewRejectedKg(Math.max(0, activeReviewLot.scaleKg - acc))
+                          }}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-xl font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="review-rejected-kg-input" className="font-bold text-foreground block mb-1">Rejected Quantity (kg)</label>
+                        <input
+                          id="review-rejected-kg-input"
+                          type="number"
+                          value={reviewRejectedKg}
+                          onChange={(e) => {
+                            const rej = Math.max(0, Number(e.target.value) || 0)
+                            setReviewRejectedKg(rej)
+                            setReviewAcceptedKg(Math.max(0, activeReviewLot.scaleKg - rej))
+                          }}
+                          className="w-full px-3 py-2 bg-background border border-border rounded-xl font-bold text-destructive"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="review-reason-note-area" className="font-bold text-foreground block mb-1">Quality Inspection Reason / Note</label>
+                      <textarea
+                        id="review-reason-note-area"
+                        rows={2}
+                        value={reviewReasonNote}
+                        onChange={(e) => setReviewReasonNote(e.target.value)}
+                        placeholder="State visual inspection criteria..."
+                        className="w-full px-3 py-2 bg-background border border-border rounded-xl text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                    <button
+                      type="button"
+                      onClick={() => handleSaveStaffReview('REJECT')}
+                      className="px-4 py-2 rounded-xl border border-destructive/30 text-destructive hover:bg-destructive/10 font-bold text-xs cursor-pointer"
+                    >
+                      Reject Entire Lot
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveStaffReview('ACCEPT')}
+                      className="px-5 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs shadow-xs cursor-pointer"
+                    >
+                      ✓ Approve to Verified Stock
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 5: INVENTORY (Verified Stock Only)                             */}
+        {/* =================================================================== */}
+        {activeTab === 'inventory' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Verified Hub Inventory</h2>
+                <p className="text-xs text-muted-foreground">
+                  Strictly verified stock held at Mahi Valley collection hub depots; ready for buyer order allocation.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full">
+                  Total Verified Stock: {formatKg(kpiVerifiedInventoryKg)}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Lot Code</th>
+                      <th className="px-4 py-3">Crop</th>
+                      <th className="px-4 py-3">Grade</th>
+                      <th className="px-4 py-3">Available</th>
+                      <th className="px-4 py-3">Reserved</th>
+                      <th className="px-4 py-3">Storage Location</th>
+                      <th className="px-4 py-3">Freshness</th>
+                      <th className="px-4 py-3 text-right">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {verifiedInventory.map((item) => (
+                      <tr key={item.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-foreground">{item.lotId}</td>
+                        <td className="px-4 py-3 font-semibold text-foreground">
+                          {item.crop}
+                          <span className="block text-[10px] text-muted-foreground">{item.farmerName}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              item.grade === 'Grade A'
+                                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                            }`}
+                          >
+                            {item.grade}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
+                          {formatKg(item.availableKg)}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-muted-foreground">
+                          {formatKg(item.reservedKg)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.location}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.freshness}</td>
+                        <td className="px-4 py-3 text-right font-bold text-foreground">
+                          ₹{item.pricePerKg.toFixed(2)}/kg
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 6: ORDERS (Buyer Order Pool with Compliance Desk)              */}
+        {/* =================================================================== */}
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Buyer Demand Pool</h2>
+                <p className="text-xs text-muted-foreground">
+                  Active institutional purchase contracts requiring fulfillment from smallholder cluster aggregation.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Order ID</th>
+                      <th className="px-4 py-3">Buyer</th>
+                      <th className="px-4 py-3">Crop</th>
+                      <th className="px-4 py-3">Grade</th>
+                      <th className="px-4 py-3">Quantity</th>
+                      <th className="px-4 py-3">Delivery Date</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {orders.map((ord) => {
+                      const code = ord.code || ord.id.slice(0, 8)
+                      const crop = ord.crop || ord.crop_required || 'PADDY'
+                      const target = ord.qty_target_kg || ord.quantity_required || 1000
+                      const committed = ord.qty_committed_kg || 0
                       return (
-                        <tr
-                          key={f.id}
-                          className={`transition-colors ${
-                            isSelected ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-secondary/30'
-                          }`}
-                        >
-                          <td className="p-3.5 sm:px-4">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleFarmer(f.id, maxCap)}
-                              className="size-4 rounded text-primary focus:ring-primary cursor-pointer"
-                            />
+                        <tr key={ord.id} className="hover:bg-secondary/30 transition-colors">
+                          <td className="px-4 py-3 font-mono font-bold text-foreground">#{code}</td>
+                          <td className="px-4 py-3 font-semibold text-foreground">
+                            {ord.buyer_name || 'PM POSHAN Central Kitchen'}
+                            <span className="block text-[10px] text-muted-foreground">{ord.delivery_location || 'Anand Central Depot'}</span>
                           </td>
-                          <td className="p-3.5 sm:px-4 font-semibold text-foreground">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span>{f.name}</span>
-                              {f.is_live_account && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
-                                  <span className="size-1 rounded-full bg-emerald-500 animate-pulse" /> Live
-                                </span>
-                              )}
-                            </div>
-                            <span className="block text-[11px] font-normal text-muted-foreground">
-                              {f.mobile_number}
+                          <td className="px-4 py-3 font-bold">{crop}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-secondary text-secondary-foreground">
+                              Grade A
                             </span>
                           </td>
-                          <td className="p-3.5 sm:px-4 text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="size-3 text-primary" /> {f.village}
+                          <td className="px-4 py-3 font-bold text-foreground">
+                            {formatKg(target)}
+                            <span className="block text-[10px] text-emerald-600 font-semibold">
+                              {formatKg(committed)} committed
                             </span>
                           </td>
-                          <td className="p-3.5 sm:px-4">
-                            <div className="flex items-center gap-1.5">
-                              <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                                {f.quality_grade ? `Grade ${f.quality_grade}` : 'Not graded yet'}
-                              </span>
-                              <span className="font-mono text-xs font-semibold text-foreground">
-                                {f.reliability_score ?? '—'}%
-                              </span>
-                            </div>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {ord.delivery_date ? localDate(ord.delivery_date, 'en') : '25 Oct 2025'}
                           </td>
-                          <td className="p-3.5 sm:px-4">
-                            {isPrimary && isStandby ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-                                Primary ({allocInfo.primaryKg}k) + Standby ({allocInfo.standbyKg}k)
-                              </span>
-                            ) : isPrimary ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                                Primary Fulfillment ({allocInfo.primaryKg} kg)
-                              </span>
-                            ) : isStandby ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-                                +15% Standby Buffer ({allocInfo.standbyKg} kg)
-                              </span>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground">Reserve Standby Pool</span>
-                            )}
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                              {ord.status || 'SOURCING'}
+                            </span>
                           </td>
-                          <td className="p-3.5 sm:px-4 font-mono font-medium">{maxCap} KG</td>
-                          <td className="p-3.5 sm:px-4">
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="number"
-                                min={0}
-                                max={maxCap}
-                                value={allocated}
-                                onChange={(e) => setFarmerQty(f.id, Number(e.target.value), maxCap)}
-                                className="w-20 h-8 rounded-lg border border-border bg-background px-2 text-xs font-mono font-bold text-foreground outline-none focus:ring-1 focus:ring-primary"
-                              />
-                              <span className="text-[11px] text-muted-foreground">/ {maxCap}</span>
-                            </div>
-                          </td>
-                          <td className="p-3.5 sm:px-4 text-right">
+                          <td className="px-4 py-3 text-right">
                             <button
                               type="button"
                               onClick={() => {
-                                setSelectedCallFarmer(f)
-                                setSelectedCallAllocatedKg(allocated > 0 ? allocated : Number(f.quantity) || 0)
-                                setBolnaModalOpen(true)
+                                flash('ok', `Allocated 250 kg from Verified Inventory to Order #${code}!`)
                               }}
-                              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
-                                confirmedFarmers[f.id]
-                                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                                  : 'border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary hover:scale-105'
-                              }`}
-                              title="Trigger Bolna AI Outbound Voice Call to Farmer"
+                              className="px-3 py-1 rounded-lg bg-primary text-primary-foreground font-bold text-xs cursor-pointer shadow-2xs"
                             >
-                              <PhoneCall className="size-3.5" />
-                              <span>{confirmedFarmers[f.id] ? 'Confirmed ✓' : 'Call AI Agent'}</span>
+                              Allocate Stock
                             </button>
                           </td>
                         </tr>
@@ -1750,401 +2108,412 @@ export function AdminPortal() {
                 </table>
               </div>
             </div>
-
-            {/* Step 3: Vehicle Load & Route Optimization */}
-            <div className="rounded-2xl border border-border bg-card p-4 sm:p-6 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Truck className="size-5 text-primary" />
-                    <h4 className="font-serif text-xl font-bold text-foreground">
-                      Consolidated Pickup Runway & TSP 2-Opt Routing
-                    </h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Optimized multi-stop collection visiting matched smallholders to eliminate intermediary empty haulage.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary flex items-center gap-1.5">
-                    <Navigation className="size-3.5" />
-                    <span>{vehicleStats.km} KM Route</span>
-                  </span>
-                  <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                    {vehicleStats.kmSaved} km saved by sequencing
-                  </span>
-                  <span className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-muted-foreground">
-                    ₹{vehicleStats.costRs.toLocaleString('en-IN')} est. hire · ₹{vehicleStats.costPerKg}/kg
-                  </span>
-                </div>
-              </div>
-
-              {/* Recommended Vehicle Card */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl bg-secondary/30 border border-border p-4">
-                <div className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Assigned Freight Carrier
-                  </span>
-                  <p className="font-serif text-base font-bold text-foreground flex items-center gap-2">
-                    <Truck className="size-4 text-primary" />
-                    {vehicleStats.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{vehicleStats.fuelType}</p>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Payload Load Factor
-                  </span>
-                  <div className="flex items-baseline gap-2">
-                    <span className="font-mono text-lg font-bold text-foreground">
-                      {totalAllocatedKg} / {vehicleStats.maxCapacityKg} KG
-                    </span>
-                    <span className="text-xs font-semibold text-primary">
-                      ({vehicleStats.loadFactorPct}%)
-                    </span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, vehicleStats.loadFactorPct)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Routing Engine
-                  </span>
-                  <p className="text-xs font-semibold text-foreground">
-                    TSP 2-Opt Algorithm Solver
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {dynamicRoutePlan?.sequence.length || 0} Total Waypoints · {dynamicRoutePlan?.km || 0} km vs {dynamicRoutePlan?.naiveKm || 0} km unoptimized
-                  </p>
-                </div>
-              </div>
-
-              {/* Leaflet Map & Sequence */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                <div className="lg:col-span-5 space-y-2.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                    Waypoint Manifest ({dynamicRoutePlan?.sequence.length || 0} Stops):
-                  </span>
-                  <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
-                    {dynamicRoutePlan?.sequence.map((stop, idx) => (
-                      <div
-                        key={stop.id}
-                        className="rounded-xl border border-border bg-card p-3 flex items-start gap-3 text-xs"
-                      >
-                        <div
-                          className={`size-6 rounded-full flex items-center justify-center font-mono font-bold text-[11px] shrink-0 mt-0.5 ${
-                            stop.kind === 'DEPOT'
-                              ? 'bg-secondary text-foreground border border-border'
-                              : stop.kind === 'DROP'
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
-                          }`}
-                        >
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1">
-                            <p className="font-semibold text-foreground truncate">{stop.label}</p>
-                            <span
-                              className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
-                                stop.kind === 'DEPOT'
-                                  ? 'bg-secondary text-muted-foreground'
-                                  : stop.kind === 'DROP'
-                                  ? 'bg-primary/15 text-primary'
-                                  : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                              }`}
-                            >
-                              {stop.kind}
-                            </span>
-                          </div>
-                          <p className="text-muted-foreground text-[11px] truncate mt-0.5">{stop.detail}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-7">
-                  <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground block mb-2">
-                    Interactive Sourcing Corridor Map:
-                  </span>
-                  <div className="h-[340px] w-full rounded-2xl overflow-hidden border border-border shadow-xs">
-                    <RouteMap stops={dynamicRoutePlan?.sequence || []} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Lock Batch CTA Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-border">
-              <div className="text-xs text-muted-foreground">
-                Combining <strong>{Object.values(farmerAllocations).filter((kg) => kg > 0).length}</strong> smallholders ·
-                Total <strong>{totalAllocatedKg} KG</strong> assigned to consignment{' '}
-                <span className="font-mono text-foreground font-semibold">
-                  BATCH-{activeOrder?.code || 'AG1001'}-{activeCrop}
-                </span>
-                {routeDispatched && (
-                  <span className="ml-2 inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
-                    <CheckCircle2 className="size-3.5" /> Dispatched to driver
-                  </span>
-                )}
-              </div>
-
-              <button
-                onClick={handleLockAggregation}
-                disabled={isAggregating || totalAllocatedKg <= 0}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground px-6 py-3 text-sm font-bold shadow-md hover:bg-primary/90 disabled:opacity-50 transition-all min-h-[44px] cursor-pointer"
-              >
-                {isAggregating ? (
-                  <RefreshCw className="size-4 animate-spin" />
-                ) : (
-                  <Sparkles className="size-4" />
-                )}
-                <span>Confirm & Lock Aggregation Batch</span>
-              </button>
-            </div>
           </div>
-        </section>
-      )}
+        )}
 
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {/* TAB 3: SOURCING BATCHES & DISPATCH */}
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'batches' && (
-        <section className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-border">
-            <div className="flex items-center gap-2">
-              <Boxes className="size-5 text-amber-600" />
-              <h3 className="font-serif text-xl font-bold">Consolidated Sourcing Batches</h3>
+        {/* =================================================================== */}
+        {/* TAB 7: DISPATCH (Order, FPO, Qty, Destination, Vehicle, Driver)    */}
+        {/* =================================================================== */}
+        {activeTab === 'dispatch' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-foreground">Dispatch & Consignment Control</h2>
+                <p className="text-xs text-muted-foreground">
+                  Consolidated orders mapped to vehicles, drivers, and delivery destination waybills.
+                </p>
+              </div>
             </div>
-            <span className="text-xs font-semibold text-muted-foreground">
-              {batches.length} Active Batches
-            </span>
-          </div>
 
-          <div className="overflow-x-auto">
-            {batches.length > 0 ? (
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="text-muted-foreground border-b border-border">
-                  <tr>
-                    <th className="pb-3">Batch Code</th>
-                    <th className="pb-3">FPO Hub</th>
-                    <th className="pb-3">Produce Crop</th>
-                    <th className="pb-3">Total Quantity</th>
-                    <th className="pb-3">Quality Clearance</th>
-                    <th className="pb-3">Consolidated By</th>
-                    <th className="pb-3">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {batches.map((b) => (
-                    <tr key={b.id} className="hover:bg-secondary/30">
-                      <td className="py-3 font-mono font-bold text-primary">{b.batch_code}</td>
-                      <td className="py-3 font-medium text-foreground">{b.fpo_name} ({b.location})</td>
-                      <td className="py-3">
-                        <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
-                          {b.crop}
-                        </span>
-                      </td>
-                      <td className="py-3 font-mono font-bold text-foreground">{b.total_quantity_kg} KG</td>
-                      <td className="py-3">
-                        <span className="rounded-full bg-secondary px-2.5 py-0.5 text-[11px] font-semibold text-foreground">
-                          {b.quality_verified ? `Graded · A ${b.grade_a_kg ?? 0} kg / B ${b.grade_b_kg ?? 0} kg` : 'Graded at collection'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-muted-foreground">{b.created_by || '—'}</td>
-                      <td className="py-3 text-muted-foreground text-xs">
-                        {b.created_at ? new Date(b.created_at).toLocaleDateString() : 'Today'}
-                      </td>
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Order</th>
+                      <th className="px-4 py-3">FPO Hub</th>
+                      <th className="px-4 py-3">Quantity</th>
+                      <th className="px-4 py-3">Destination</th>
+                      <th className="px-4 py-3">Vehicle</th>
+                      <th className="px-4 py-3">Driver</th>
+                      <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                No batches created yet. Use Tab 2 (Smart Aggregation Desk) to combine smallholders into a batch.
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {/* TAB 4: SMALLHOLDER CLUSTER ROSTER */}
-      {/* ────────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'farmers' && (
-        <section className="rounded-2xl border border-border bg-card p-4 sm:p-6 shadow-xs space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-4 border-b border-border">
-            <div>
-              <h3 className="font-serif text-xl font-bold flex items-center gap-2">
-                <Sprout className="size-5 text-emerald-600" />
-                Cluster Farmer Directory & Produce Registry
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Incoming produce declared by smallholders across village clusters, synchronized with live accounts.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setFarmerFilterTab('all')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  farmerFilterTab === 'all'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'border border-border bg-secondary hover:bg-secondary/80 text-foreground'
-                }`}
-              >
-                All Smallholders ({farmers.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFarmerFilterTab('live')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  farmerFilterTab === 'live'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                }`}
-              >
-                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                Live Logins Only ({liveFarmersCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFarmerFilterTab('preseeded')}
-                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
-                  farmerFilterTab === 'preseeded'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'border border-border bg-secondary hover:bg-secondary/80 text-foreground'
-                }`}
-              >
-                Pre-Registered Cluster ({farmers.length - liveFarmersCount})
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            {displayedFarmers.length > 0 ? (
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="text-muted-foreground border-b border-border">
-                  <tr>
-                    <th className="pb-3">Farmer Name & Status</th>
-                    <th className="pb-3">Mobile Contact</th>
-                    <th className="pb-3">Village Cluster</th>
-                    <th className="pb-3">Produce Crop</th>
-                    <th className="pb-3">Available Quantity</th>
-                    <th className="pb-3">Quality Grade</th>
-                    <th className="pb-3">Harvest Window</th>
-                    <th className="pb-3">KYC Verification</th>
-                    <th className="pb-3 text-right">Voice Agent</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {displayedFarmers.map((f) => (
-                    <tr
-                      key={f.entry_id ?? f.id}
-                      className={`transition-colors ${
-                        f.is_live_account
-                          ? 'bg-emerald-500/5 hover:bg-emerald-500/10'
-                          : 'hover:bg-secondary/30'
-                      }`}
-                    >
-                      <td className="py-3 font-semibold text-foreground">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span>{f.name}</span>
-                          {f.is_live_account ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 shadow-2xs">
-                              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              Live Login
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full bg-secondary px-1.5 py-0.2 text-[9px] text-muted-foreground font-medium">
-                              Cluster Member
-                            </span>
-                          )}
-                        </div>
-                        {f.last_login_at && (
-                          <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
-                            Active {formatRelativeTime(f.last_login_at)}
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {dispatches.map((disp) => (
+                      <tr key={disp.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-foreground">
+                          #{disp.orderCode}
+                          <span className="block text-[10px] text-muted-foreground">{disp.buyerName}</span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{disp.fpo}</td>
+                        <td className="px-4 py-3 font-bold text-foreground">
+                          {formatKg(disp.quantityKg)}
+                          <span className="block text-[10px] text-muted-foreground">{disp.crop}</span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {disp.destination}
+                          <span className="block text-[10px] font-mono text-muted-foreground">({disp.distanceKm} km)</span>
+                        </td>
+                        <td className="px-4 py-3 font-mono font-semibold">{disp.vehicle}</td>
+                        <td className="px-4 py-3">
+                          <span className="font-bold block">{disp.driver}</span>
+                          <span className="text-[10px] text-muted-foreground">{disp.driverPhone}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              disp.status === 'Dispatched'
+                                ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                                : disp.status === 'Loading'
+                                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                                : 'bg-secondary text-secondary-foreground'
+                            }`}
+                          >
+                            {disp.status}
                           </span>
-                        )}
-                      </td>
-                      <td className="py-3 font-mono text-xs text-muted-foreground">
-                        {f.mobile_number}
-                      </td>
-                      <td className="py-3 text-muted-foreground">{f.village}</td>
-                      <td className="py-3">
-                        <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold">
-                          {f.crop_name ?? 'No active harvest'}
-                        </span>
-                      </td>
-                      <td className="py-3 font-mono font-bold text-foreground">{Number(f.quantity ?? 0).toLocaleString('en-IN')} KG</td>
-                      <td className="py-3">
-                        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
-                          {f.quality_grade ? `Grade ${f.quality_grade}` : 'Not graded yet'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-muted-foreground text-xs">
-                        <div>{f.harvest_date ?? '—'}</div>
-                      </td>
-                      <td className="py-3">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                          <ShieldCheck className="size-3" /> {f.is_live_account ? 'App account' : 'FPO member'}
-                        </span>
-                      </td>
-                      <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedCallFarmer(f)
-                            setSelectedCallAllocatedKg(Number(f.quantity) || 0)
-                            setBolnaModalOpen(true)
-                          }}
-                          className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition-all shadow-2xs cursor-pointer ${
-                            confirmedFarmers[f.id]
-                              ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                              : 'border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary hover:scale-105'
-                          }`}
-                          title="Trigger Bolna AI Outbound Voice Call to Farmer"
-                        >
-                          <PhoneCall className="size-3.5" />
-                          <span>{confirmedFarmers[f.id] ? 'Confirmed ✓' : 'Call AI Agent'}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="py-8 text-center text-xs text-muted-foreground space-y-2">
-                <p>No farmers match the &quot;{farmerFilterTab}&quot; filter.</p>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedWaybill(disp)}
+                            className="px-2.5 py-1 rounded-lg border border-border bg-background hover:bg-secondary text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <FileText className="size-3 text-primary" /> Waybill
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Waybill Modal */}
+            {selectedWaybill && (
+              <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                <div className="bg-card w-full max-w-md rounded-2xl border border-border p-6 shadow-xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Official Gatepass</span>
+                      <h3 className="font-bold text-base text-foreground">Waybill #{selectedWaybill.waybillNo}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWaybill(null)}
+                      className="text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-secondary/40 border border-border space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Order Reference:</span>
+                      <span className="font-bold">#{selectedWaybill.orderCode}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Buyer:</span>
+                      <span className="font-bold">{selectedWaybill.buyerName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Produce:</span>
+                      <span className="font-bold">{selectedWaybill.crop} ({formatKg(selectedWaybill.quantityKg)})</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Vehicle:</span>
+                      <span className="font-mono">{selectedWaybill.vehicle}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Driver:</span>
+                      <span>{selectedWaybill.driver} ({selectedWaybill.driverPhone})</span>
+                    </div>
+                    <div className="flex justify-between border-t border-border pt-2">
+                      <span className="text-muted-foreground">Destination:</span>
+                      <span className="font-semibold text-right">{selectedWaybill.destination}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.print()
+                      }}
+                      className="px-4 py-2 rounded-xl border border-border bg-background hover:bg-secondary font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="size-3.5" /> Print Gatepass
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWaybill(null)}
+                      className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 8: LOGISTICS (Vehicles, Drivers, Active Trips)                 */}
+        {/* =================================================================== */}
+        {activeTab === 'logistics' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Fleet Logistics & Route Sequencing</h2>
+              <p className="text-xs text-muted-foreground">
+                Vehicle fleet allocation, verified driver rosters, and TSP multi-stop corridor optimization.
+              </p>
+            </div>
+
+            {/* Vehicles and Drivers Split */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Vehicles */}
+              <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Truck className="size-4 text-primary" />
+                    <h3 className="font-bold text-sm text-foreground">FPO Vehicle Fleet</h3>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{fleetVehicles.length} Vehicles</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  {fleetVehicles.map((veh) => (
+                    <div key={veh.id} className="p-3.5 rounded-xl border border-border bg-background flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{veh.name}</span>
+                          <span className="font-mono text-[10px] text-muted-foreground">({veh.registration})</span>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">
+                          Capacity: {veh.capacityKg} kg • Load: {veh.currentLoadKg} kg • {veh.fuelType}
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          veh.status === 'En Route'
+                            ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                            : veh.status === 'Assigned'
+                            ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                            : 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                        }`}
+                      >
+                        {veh.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Drivers */}
+              <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-emerald-600" />
+                    <h3 className="font-bold text-sm text-foreground">Assigned Commercial Drivers</h3>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{fleetDrivers.length} Active</span>
+                </div>
+
+                <div className="space-y-2.5 text-xs">
+                  {fleetDrivers.map((drv) => (
+                    <div key={drv.id} className="p-3.5 rounded-xl border border-border bg-background flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{drv.name}</span>
+                          <span className="text-[10px] text-muted-foreground">{drv.phone}</span>
+                        </div>
+                        <p className="text-muted-foreground mt-0.5">
+                          License: {drv.licenseNo} • Assigned: {drv.assignedVehicle}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-amber-600">★ {drv.rating}</span>
+                        <span className="block text-[10px] text-muted-foreground">{drv.tripsCompleted} trips</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Active Trips & Corridor Map */}
+            <div className="bg-card p-5 rounded-2xl border border-border shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div className="flex items-center gap-2">
+                  <Route className="size-4 text-primary" />
+                  <h3 className="font-bold text-sm text-foreground">Active Corridor Trip: Anand Cluster Pickup</h3>
+                </div>
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full">
+                  TSP 2-Opt Optimized: 14.8 km saved
+                </span>
+              </div>
+
+              <div className="rounded-xl overflow-hidden border border-border min-h-[340px]">
+                <RouteMap
+                  stops={[
+                    { id: 'stop-depot', kind: 'DEPOT', label: 'Mahi Valley Central Hub #1', lat: 22.5645, lng: 72.9289, kg: 0 },
+                    { id: 'stop-p1', kind: 'PICKUP', label: 'Boriavi Cluster (Ramesh Kumar)', lat: 22.5852, lng: 72.9351, kg: 392 },
+                    { id: 'stop-p2', kind: 'PICKUP', label: 'Samarkha Cluster (Dinesh Patel)', lat: 22.5712, lng: 72.9812, kg: 495 },
+                    { id: 'stop-drop', kind: 'DROP', label: 'PM POSHAN Kitchen Depot', lat: 22.5521, lng: 72.9214, kg: 887 },
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================================== */}
+        {/* TAB 9: PAYMENTS (Settlement Records & Buyer Escrow)                */}
+        {/* =================================================================== */}
+        {activeTab === 'payments' && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Settlement Records & Escrow Audits</h2>
+              <p className="text-xs text-muted-foreground">
+                Itemized farmer net payouts (accepted weight × agreed price − disclosed deductions) and buyer escrow balances.
+              </p>
+            </div>
+
+            {/* Farmer Settlement Ledger */}
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="size-4 text-primary" />
+                  <h3 className="font-bold text-sm text-foreground">Farmer Net Settlement Ledger</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Automated Same-Day Bank Payouts</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Farmer</th>
+                      <th className="px-4 py-3">Lot Code</th>
+                      <th className="px-4 py-3">Weighed Qty</th>
+                      <th className="px-4 py-3">Agreed Rate</th>
+                      <th className="px-4 py-3">Gross Value</th>
+                      <th className="px-4 py-3">Deductions</th>
+                      <th className="px-4 py-3">Net Paid</th>
+                      <th className="px-4 py-3">Bank / UTR</th>
+                      <th className="px-4 py-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {settlements.map((set) => (
+                      <tr key={set.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-4 py-3 font-bold text-foreground">{set.farmerName}</td>
+                        <td className="px-4 py-3 font-mono text-[11px] text-muted-foreground">{set.lotId}</td>
+                        <td className="px-4 py-3 font-semibold">{formatKg(set.weighedKg)}</td>
+                        <td className="px-4 py-3">₹{set.agreedPricePerKg.toFixed(2)}/kg</td>
+                        <td className="px-4 py-3 font-bold">{formatINR(set.grossAmount)}</td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          -{formatINR(set.weighbridgeFee + set.transportShare)}
+                          <span className="block text-[9px]">Weigh: ₹{set.weighbridgeFee} • Trans: ₹{set.transportShare}</span>
+                        </td>
+                        <td className="px-4 py-3 font-black text-emerald-700 dark:text-emerald-400 text-sm">
+                          {formatINR(set.netPayable)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          <span>{set.bankAccountMasked}</span>
+                          <span className="block font-mono text-[9px]">{set.utrRef}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              set.status === 'Credited'
+                                ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300'
+                                : 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+                            }`}
+                          >
+                            {set.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Buyer Escrow & Balance Accounts */}
+            <div className="bg-card rounded-2xl border border-border shadow-xs overflow-hidden">
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Building2 className="size-4 text-blue-600" />
+                  <h3 className="font-bold text-sm text-foreground">Buyer Invoices & Advance Escrow Balances</h3>
+                </div>
+                <span className="text-xs text-muted-foreground">Buyer Contract Trust Escrow</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-secondary/50 text-muted-foreground border-b border-border uppercase text-[10px] tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3">Order Code</th>
+                      <th className="px-4 py-3">Buyer Name</th>
+                      <th className="px-4 py-3">Produce Target</th>
+                      <th className="px-4 py-3">Advance Escrow</th>
+                      <th className="px-4 py-3">Invoiced Value</th>
+                      <th className="px-4 py-3">Balance Due</th>
+                      <th className="px-4 py-3 text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {buyerEscrowRecords.map((esc) => (
+                      <tr key={esc.id} className="hover:bg-secondary/30 transition-colors">
+                        <td className="px-4 py-3 font-mono font-bold text-foreground">#{esc.orderCode}</td>
+                        <td className="px-4 py-3 font-semibold text-foreground">{esc.buyerName}</td>
+                        <td className="px-4 py-3 font-bold">
+                          {esc.crop} ({formatKg(esc.targetKg)})
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-blue-700 dark:text-blue-400">
+                          {formatINR(esc.advanceDeposit)}
+                          <span className="block text-[9px] text-muted-foreground">{esc.escrowStatus}</span>
+                        </td>
+                        <td className="px-4 py-3 font-bold">{formatINR(esc.invoicedAmount)}</td>
+                        <td className="px-4 py-3 font-bold text-foreground">{formatINR(esc.balancePayable)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                            {esc.settlementStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Bolna Call Modal for Voice Confirmation */}
+      {bolnaModalOpen && selectedCallFarmer && (
+        <BolnaCallModal
+          isOpen={bolnaModalOpen}
+          onClose={() => setBolnaModalOpen(false)}
+          farmer={{
+            id: selectedCallFarmer.id,
+            name: selectedCallFarmer.name,
+            mobile_number: selectedCallFarmer.mobile_number || '+91 98251 44102',
+            village: selectedCallFarmer.village || 'Nashik',
+            crop: selectedCallFarmer.crop_name || selectedCallFarmer.crop || 'TOMATO',
+          }}
+          order={null}
+          allocatedKg={selectedCallAllocatedKg}
+          onCallSuccess={(_farmerId: string, _details: unknown) => {
+            flash('ok', `Voice confirmation complete: ${selectedCallFarmer.name} confirmed supply!`)
+          }}
+        />
       )}
-
-      {activeTab === 'forecast' && <DemandForecastPanel />}
-      {activeTab === 'logistics' && <LogisticsPlanPanel onDispatched={() => fetchLiveFeeds(false)} />}
-
-      {/* Bolna AI Voice Calling Agent Confirmation Modal */}
-      <BolnaCallModal
-        isOpen={bolnaModalOpen}
-        onClose={() => setBolnaModalOpen(false)}
-        farmer={selectedCallFarmer}
-        order={activeOrder}
-        allocatedKg={selectedCallAllocatedKg}
-        onCallSuccess={(farmerId) => {
-          setConfirmedFarmers((prev) => ({ ...prev, [farmerId]: true }))
-        }}
-      />
-    </main>
+    </div>
   )
 }

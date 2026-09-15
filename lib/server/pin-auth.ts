@@ -10,7 +10,7 @@ export interface UserAccount {
   role: 'farmer' | 'buyer' | 'admin'
   salt: string
   pinHash: string
-  verificationStatus: 'verified' | 'pending' | 'pending_review' | 'rejected'
+  verificationStatus: 'verified' | 'pending' | 'under_review' | 'pending_review' | 'needs_correction' | 'rejected'
   onboardingComplete: boolean
   metadata?: Record<string, unknown>
   createdAt: string

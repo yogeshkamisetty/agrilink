@@ -14,6 +14,7 @@ export const TIER_CONFIG: Record<
     limitKg: number
     instantVerify: boolean
     limitLabel: string
+    procurementGuidance: string
   }
 > = {
   HOUSEHOLD: {
@@ -22,6 +23,7 @@ export const TIER_CONFIG: Record<
     limitKg: 20,
     instantVerify: true,
     limitLabel: '1 – 20 kg per order',
+    procurementGuidance: '1–20 kg/order',
   },
   RETAILER: {
     dbType: 'FAIR_PRICE_SHOP',
@@ -29,6 +31,7 @@ export const TIER_CONFIG: Record<
     limitKg: 500,
     instantVerify: false,
     limitLabel: 'Up to 500 kg per order',
+    procurementGuidance: '20–500 kg',
   },
   RESTAURANT: {
     dbType: 'RESIDENTIAL_SOCIETY',
@@ -36,13 +39,15 @@ export const TIER_CONFIG: Record<
     limitKg: 2000,
     instantVerify: false,
     limitLabel: '100 – 2,000 kg per order',
+    procurementGuidance: '100–2,000 kg',
   },
   INSTITUTIONAL: {
     dbType: 'INSTITUTIONAL',
-    label: 'Processor / Institutional',
+    label: 'Processor / Institution',
     limitKg: 10000,
     instantVerify: false,
     limitLabel: '500 kg+ per order',
+    procurementGuidance: '500 kg+',
   },
 }
 
@@ -60,7 +65,10 @@ export async function POST(request: Request) {
       state?: string
       pinCode?: string
       businessName?: string
+      organizationType?: string
+      authorizedPerson?: string
       gstin?: string
+      pan?: string
       fssai?: string
       documents?: Array<{ type: string; name: string; size?: number; url?: string }>
       useForDelivery?: boolean
@@ -108,6 +116,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Please enter your shop or business name.' }, { status: 400 })
     }
 
+    const authorizedPerson = (body.authorizedPerson || fullName).trim()
+    const organizationType = (body.organizationType || '').trim()
+    const pan = (body.pan || '').trim().toUpperCase()
+
     const verificationStatus = tierInfo.instantVerify ? 'verified' : 'pending_review'
     const fullAddress = `${address}, ${city}, ${state} - ${pinCode}`
     const buyerDisplayName = businessName || fullName
@@ -117,8 +129,12 @@ export async function POST(request: Request) {
       email,
       buyerType: buyerTier,
       buyerTypeLabel: tierInfo.label,
+      procurementGuidance: tierInfo.procurementGuidance,
       businessName: businessName || null,
-      gstin: (body.gstin || '').trim() || null,
+      organizationType: organizationType || null,
+      authorizedPerson: authorizedPerson || null,
+      gstin: (body.gstin || '').trim().toUpperCase() || null,
+      pan: pan || null,
       fssai: (body.fssai || '').trim() || null,
       address,
       city,
@@ -126,7 +142,7 @@ export async function POST(request: Request) {
       pinCode,
       purchaseLimitKg: tierInfo.limitKg,
       purchaseLimitLabel: tierInfo.limitLabel,
-      documents: body.documents || [],
+      documents: buyerTier === 'HOUSEHOLD' ? [] : (body.documents || []),
       useForDelivery: body.useForDelivery !== false,
       registeredAt: new Date().toISOString(),
     }
@@ -204,10 +220,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       status: verificationStatus,
+      verificationState: verificationStatus === 'verified' ? 'Verified' : 'Under Review',
       buyerType: buyerTier,
       buyerTypeLabel: tierInfo.label,
       purchaseLimitKg: tierInfo.limitKg,
       purchaseLimitLabel: tierInfo.limitLabel,
+      procurementGuidance: tierInfo.procurementGuidance,
+      authorizedPerson,
       message:
         verificationStatus === 'verified'
           ? 'Account verified instantly! Welcome to AgriLink.'
